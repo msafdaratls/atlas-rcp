@@ -53,6 +53,47 @@ prisma/schema.prisma
 prisma/seed.ts
 ```
 
+## Deployment (DigitalOcean droplet)
+
+The app ships a `Dockerfile` (built on the Playwright image so Chromium for PDF
+generation and the Prisma engine platform match) and a `docker-compose.yml`
+(PostgreSQL + app, notification worker running in-process).
+
+```bash
+cp .env.example .env      # set AUTH_SECRET, AUTH_URL (https), SMTP_*, SPACES_*
+docker compose up -d --build
+```
+
+Compose runs `prisma migrate deploy` on start. Put a TLS-terminating reverse
+proxy in front (see `deploy/nginx.conf.example`, or use Caddy / a DO load
+balancer). Health probe: `GET /api/health` (200 when the DB is reachable).
+
+**Production checklist**
+
+- **Storage** — set `STORAGE_DRIVER=spaces` + `SPACES_*` so uploaded regulatory
+  documents live in a *private* DigitalOcean Space, not the ephemeral droplet
+  disk. Local disk is dev-only and not durable. Downloads stay behind the
+  auth-gated `/api/storage` route in both modes.
+- **Database** — prefer DigitalOcean Managed Postgres (backups + pooling) over
+  the bundled container. Never run `npm run db:seed` in production (demo data).
+- **Email** — set `SMTP_*` to a real ESP (SES / Postmark / Resend) and configure
+  SPF/DKIM/DMARC.
+- **Secrets** — `AUTH_SECRET` via `openssl rand -base64 48`; `.env` is gitignored.
+- **Antivirus** — set `AV_DRIVER=clamav` + `CLAMD_HOST/PORT` to scan every
+  upload; a clamd outage fails closed (upload rejected). Default `none` accepts
+  uploads unscanned (dev only).
+- **Rate limiting** — in-process by default. For >1 web instance set
+  `RATE_LIMIT_DRIVER=redis` + `REDIS_URL` so login/verify limits are shared
+  (fail-open on a Redis outage).
+- **Logs** — structured JSON in production (`src/lib/logger.ts`), ready for a
+  log drain; add the Sentry SDK in `logger.error` to ship errors.
+- **Scaling** — the notification worker runs in-process. To run more than one
+  web instance, set `NOTIFICATIONS_WORKER=0` and run the worker separately, or
+  SLA scans and emails will fire multiple times.
+
+Security headers (CSP, HSTS, X-Frame-Options, …) are applied in `next.config.ts`.
+CI (`.github/workflows/ci.yml`) runs typecheck + lint + test on every PR.
+
 ## Notes
 
 - No git commits until you explicitly ask.

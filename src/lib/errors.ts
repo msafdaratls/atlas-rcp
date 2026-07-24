@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
+import { log } from "@/lib/logger";
+
 export type UserFacingError = {
   /** Stable key for next-intl `errors.*` lookup */
   code: string;
@@ -62,6 +64,6 @@ export const KNOWN_ACTION_CODES = [
 
 /** Server-side only — never surface raw detail to the client. */
 export function logServerError(scope: string, detail: string): void {
-  // Structured single-line log for operators; no PII beyond what the action already held.
-  process.stderr.write(`[atlas:${scope}] ${detail}\n`);
+  // Delegate to the structured logger; no PII beyond what the action held.
+  log.error(scope, detail);
 }

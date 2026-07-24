@@ -779,6 +779,16 @@ export async function uploadRequestDocument(formData: FormData): Promise<
       };
     }
     const mimeType = sniffed;
+
+    // Scan before persisting — an infected file is never written to storage.
+    // With AV_DRIVER=none this is a no-op (returns CLEAN); a clamd outage fails
+    // closed (AV_UNAVAILABLE) rather than accepting an unscanned upload.
+    const { getAvScanner } = await import("@/lib/av");
+    const verdict = await getAvScanner().scan(buffer);
+    if (verdict === "INFECTED") {
+      return { ok: false, error: "INFECTED_FILE" };
+    }
+
     const sha256 = createHash("sha256").update(buffer).digest("hex");
     const stored = await storage.put({
       keyPrefix: `orgs/${orgId}/requests/${requestId}`,
@@ -819,7 +829,7 @@ export async function uploadRequestDocument(formData: FormData): Promise<
           storageKey: stored.key,
           sha256,
           uploadedByUserId: session.id,
-          // No AV scanner wired yet — mark CLEAN so downloads are not blocked.
+          // Scanned above (getAvScanner) — an INFECTED file never reaches here.
           avStatus: "CLEAN",
         },
       });
@@ -861,6 +871,9 @@ export async function uploadRequestDocument(formData: FormData): Promise<
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
       return { ok: false, error: message };
+    }
+    if (message === "AV_UNAVAILABLE") {
+      return { ok: false, error: "AV_UNAVAILABLE" };
     }
     return { ok: false, error: "SAVE_FAILED" };
   }

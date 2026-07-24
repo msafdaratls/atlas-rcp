@@ -2,6 +2,8 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
+import { SpacesStorage, readSpacesConfig } from "@/lib/storage/spaces";
+
 export type StoredObject = {
   key: string;
   sizeBytes: number;
@@ -106,9 +108,36 @@ export class LocalFilesystemStorage implements StorageAdapter {
 }
 
 /**
- * Active adapter. Local filesystem only for now.
- * To add S3 later: implement StorageAdapter, select via STORAGE_DRIVER, and
- * fail closed if STORAGE_DRIVER=s3 without credentials (never fall through
- * silently to a different backend).
+ * Selects the storage backend from STORAGE_DRIVER:
+ *   - "local"  (default) → LocalFilesystemStorage
+ *   - "spaces"/"s3"       → SpacesStorage (DigitalOcean Spaces, S3-compatible)
+ * Fails closed: an unknown driver, or "spaces" without credentials, throws
+ * rather than silently writing to the wrong backend.
  */
-export const storage: StorageAdapter = new LocalFilesystemStorage();
+function selectStorage(): StorageAdapter {
+  const driver = (process.env.STORAGE_DRIVER ?? "local").toLowerCase();
+  if (driver === "local") return new LocalFilesystemStorage();
+  if (driver === "spaces" || driver === "s3") {
+    return new SpacesStorage(readSpacesConfig());
+  }
+  throw new Error(`Unknown STORAGE_DRIVER: ${driver}`);
+}
+
+let cachedStorage: StorageAdapter | null = null;
+
+/** Memoised active adapter; config errors surface on first use, not at boot. */
+export function getStorage(): StorageAdapter {
+  if (!cachedStorage) cachedStorage = selectStorage();
+  return cachedStorage;
+}
+
+/**
+ * Stable facade used across the app. Delegates to the selected adapter so all
+ * existing `import { storage }` call sites keep working after the driver swap.
+ */
+export const storage: StorageAdapter = {
+  put: (input) => getStorage().put(input),
+  get: (key) => getStorage().get(key),
+  delete: (key) => getStorage().delete(key),
+  publicUrl: (key) => getStorage().publicUrl(key),
+};
