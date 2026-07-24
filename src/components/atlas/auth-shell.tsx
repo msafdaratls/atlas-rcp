@@ -31,17 +31,17 @@ export async function AuthShell({
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-6 py-12">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/brand/atlas-mark.svg"
-            alt=""
-            width={40}
-            height={40}
-            className="size-10 rounded-lg"
+            alt={tCommon("appName")}
+            width={64}
+            height={64}
+            className="size-16 rounded-xl"
           />
-          <span className="text-sm font-semibold text-[var(--ink-900)]">
+          <span className="text-xl font-bold tracking-tight text-[var(--ink-900)]">
             {tCommon("appName")}
           </span>
         </div>

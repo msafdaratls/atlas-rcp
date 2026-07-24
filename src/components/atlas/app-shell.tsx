@@ -93,7 +93,15 @@ export function AppShell({
                 ? tShell("clientWorkspace")
                 : tShell("adminConsole")}
             </SheetTitle>
-            <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink-900">
+            <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-base font-bold tracking-tight text-ink-900">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/brand/atlas-mark.svg"
+                alt={t("appName")}
+                width={36}
+                height={36}
+                className="size-9"
+              />
               {t("appName")}
             </div>
             <AppSidebar

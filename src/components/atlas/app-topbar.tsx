@@ -57,17 +57,17 @@ function AtlasWordmark({ className }: { className?: string }) {
     <Link
       href="/"
       className={cn(
-        "inline-flex items-center gap-2 font-bold tracking-tight text-ink-900",
+        "inline-flex items-center gap-2 text-lg font-bold tracking-tight text-ink-900",
         className,
       )}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/brand/atlas-mark.svg"
-        alt=""
-        width={32}
-        height={32}
-        className="size-8"
+        alt={t("appName")}
+        width={44}
+        height={44}
+        className="size-11"
       />
       <span>{t("appName")}</span>
     </Link>
