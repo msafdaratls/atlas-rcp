@@ -1,0 +1,45 @@
+export const NOTIFICATION_EVENTS = [
+  { type: "REQUEST_SUBMITTED", legalFinancial: false },
+  { type: "REQUEST_RETURNED", legalFinancial: false },
+  { type: "REQUEST_RESUBMITTED", legalFinancial: false },
+  { type: "REQUEST_ACCEPTED", legalFinancial: false },
+  { type: "REQUEST_ASSIGNED", legalFinancial: false },
+  { type: "REPORT_ISSUED", legalFinancial: false },
+  { type: "INVOICE_ISSUED", legalFinancial: true },
+  { type: "PAYMENT_RECEIVED", legalFinancial: true },
+  { type: "PAYMENT_REJECTED", legalFinancial: true },
+  { type: "SLA_AT_RISK", legalFinancial: false },
+  { type: "SLA_BREACHED", legalFinancial: false },
+  { type: "COMMENT_ADDED", legalFinancial: false },
+  { type: "STATEMENT_OVERDUE", legalFinancial: true },
+  { type: "CREDIT_LIMIT", legalFinancial: true },
+] as const;
+
+export type NotificationEventType =
+  (typeof NOTIFICATION_EVENTS)[number]["type"];
+
+export function isNotificationEventType(
+  value: string,
+): value is NotificationEventType {
+  return NOTIFICATION_EVENTS.some((e) => e.type === value);
+}
+
+export function isLegalFinancialEvent(type: string): boolean {
+  return NOTIFICATION_EVENTS.some(
+    (e) => e.type === type && e.legalFinancial,
+  );
+}
+
+/** Events shown on the company notification preferences grid. */
+export const PREFERENCE_EVENTS = NOTIFICATION_EVENTS.filter((e) =>
+  [
+    "REQUEST_RETURNED",
+    "REPORT_ISSUED",
+    "SLA_AT_RISK",
+    "INVOICE_ISSUED",
+    "PAYMENT_RECEIVED",
+    "PAYMENT_REJECTED",
+    "STATEMENT_OVERDUE",
+    "CREDIT_LIMIT",
+  ].includes(e.type),
+);

@@ -1,0 +1,1127 @@
+{
+  "common": {
+    "appName": "أطلس COC",
+    "search": "بحث",
+    "commandPalette": "لوحة الأوامر",
+    "notifications": "الإشعارات",
+    "unreadCount": "{count} غير مقروء",
+    "localeAr": "ع",
+    "localeEn": "EN",
+    "userMenu": "قائمة المستخدم",
+    "signOut": "تسجيل الخروج",
+    "profile": "الملف الشخصي",
+    "openMenu": "فتح القائمة",
+    "closeMenu": "إغلاق القائمة",
+    "collapseSidebar": "طي الشريط الجانبي",
+    "expandSidebar": "توسيع الشريط الجانبي",
+    "copied": "تم النسخ",
+    "copyFailed": "تعذر النسخ. حاول مرة أخرى.",
+    "loading": "جارٍ التحميل…",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "exportCsv": "تصدير CSV",
+    "columns": "الأعمدة",
+    "filters": "عوامل التصفية",
+    "clearFilters": "مسح عوامل التصفية",
+    "noResults": "لا توجد نتائج",
+    "retry": "حاول مرة أخرى",
+    "rowsSelected": "{count} صف محدد",
+    "pageOf": "صفحة {page} من {pageCount}",
+    "previous": "السابق",
+    "next": "التالي",
+    "preview": "معاينة",
+    "download": "تحميل",
+    "version": "الإصدار {version}",
+    "versionHistory": "سجل الإصدارات",
+    "uploadedBy": "رفع بواسطة {name}",
+    "fileSize": "{size}",
+    "paused": "متوقف",
+    "remaining": "متبقي {time}",
+    "overdue": "متأخر {time}",
+    "slaUnits": {
+      "d": "ي",
+      "h": "س",
+      "m": "د",
+      "dayHour": "{days}ي {hours}س"
+    },
+    "queueDepth": "{count} في الانتظار",
+    "breadcrumbs": "مسار التنقل",
+    "actions": "إجراءات"
+  },
+  "nav": {
+    "client": {
+      "dashboard": "لوحة التحكم",
+      "newRequest": "طلب جديد",
+      "myRequests": "طلباتي",
+      "reports": "التقارير",
+      "statement": "كشف الحساب",
+      "company": "ملف الشركة",
+      "support": "الدعم"
+    },
+    "admin": {
+      "dashboard": "لوحة التحكم",
+      "workQueues": "طوابير العمل",
+      "requests": "الطلبات",
+      "clients": "العملاء",
+      "catalogue": "الكتالوج",
+      "coupons": "القسائم",
+      "finance": "المالية",
+      "quality": "الجودة",
+      "analytics": "التحليلات",
+      "settings": "الإعدادات"
+    }
+  },
+  "states": {
+    "DRAFT": "مسودة",
+    "SUBMITTED": "مُقدَّم",
+    "UNDER_INTAKE_REVIEW": "مراجعة الاستلام",
+    "RETURNED_TO_CLIENT": "مُعاد للعميل",
+    "ACCEPTED": "مقبول",
+    "ASSESSMENT_QUEUED": "بانتظار التقييم",
+    "ASSESSMENT_RUNNING": "التقييم جارٍ",
+    "TECHNICAL_REVIEW": "المراجعة الفنية",
+    "DECISION": "القرار",
+    "REPORT_ISSUED": "صدر التقرير",
+    "CLOSED": "مغلق",
+    "CANCELLED": "ملغى",
+    "ON_HOLD": "معلّق"
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "bellLabel": "الإشعارات",
+    "pageDescription": "تنبيهات داخل التطبيق للطلبات والفواتير ومستوى الخدمة.",
+    "empty": "لا إشعارات بعد.",
+    "markAllRead": "تعليم الكل كمقروء",
+    "viewAll": "عرض كل الإشعارات",
+    "openLink": "فتح",
+    "unreadCount": "{count} غير مقروء"
+  },
+  "statusRail": {
+    "title": "مسار الحالة",
+    "empty": "لا أحداث بعد. سيظهر المسار عند أول انتقال للحالة.",
+    "by": "بواسطة {name}",
+    "reason": "سبب الإعادة",
+    "fault": "إسناد الخطأ",
+    "CLIENT_FAULT": "خطأ العميل",
+    "ATLAS_FAULT": "خطأ أطلس",
+    "REGULATORY_CHANGE": "تغيير تنظيمي"
+  },
+  "empty": {
+    "defaultTitle": "لا يوجد شيء هنا بعد",
+    "defaultDescription": "ابدأ بالإجراء أدناه لإنشاء أول عنصر.",
+    "noOpenRequestsTitle": "لا توجد طلبات مفتوحة",
+    "noOpenRequestsDescription": "ابدأ بطلب تقييم مطابقة جديد."
+  },
+  "command": {
+    "placeholder": "ابحث عن طلب أو عميل أو نفّذ إجراءً…",
+    "noResults": "لا نتائج مطابقة",
+    "groupRequests": "الطلبات",
+    "groupClients": "العملاء",
+    "groupActions": "إجراءات",
+    "jumpToRequest": "الانتقال إلى الطلب {number}",
+    "jumpToClient": "الانتقال إلى العميل {name}",
+    "actionNewRequest": "إنشاء طلب جديد",
+    "actionOpenStatement": "فتح كشف الحساب"
+  },
+  "shell": {
+    "clientWorkspace": "مساحة عمل العميل",
+    "adminConsole": "وحدة تحكم أطلس",
+    "globalSearchPlaceholder": "ابحث في الطلبات والتقارير…"
+  },
+  "landing": {
+    "headline": "شهادة المطابقة",
+    "body": "بوابة أطلس لتقييم المطابقة — عربية أولاً، معتمدة ISO/IEC 17020 و17065.",
+    "signIn": "تسجيل الدخول",
+    "verifyCta": "تحقق من الشهادة",
+    "clientPortal": "بوابة العميل",
+    "adminConsole": "وحدة الإدارة",
+    "signInPending": "سجّل الدخول بحساب أطلس أو حساب العميل.",
+    "verifyTitle": "تحقق من التقرير",
+    "verifySubtitle": "أدخل رمز التحقق الظاهر على التقرير أو امسح رمز QR.",
+    "verifyPlaceholder": "ATL-FS-2026-000000",
+    "verifySubmit": "تحقق",
+    "verifyEmpty": "أدخل رمزاً للتحقق من حالة التقرير.",
+    "verifyNotFound": "لم يُعثر على تقرير بهذا الرمز. تأكد من الرمز وحاول مرة أخرى.",
+    "verifiedTitle": "تم التحقق — التقرير أصلي",
+    "verifiedRequestNo": "رقم الطلب",
+    "verifiedProduct": "المنتج",
+    "verifiedOrg": "صادر لـ",
+    "verifiedService": "الخدمة",
+    "verifiedIssuedAt": "تاريخ الإصدار"
+  },
+  "company": {
+    "pageDescription": "تُطبع هذه البيانات على التقارير والفواتير التنظيمية. احفظ صراحةً — لا يوجد حفظ تلقائي.",
+    "unavailableTitle": "ملف الشركة غير متاح",
+    "unavailableDescription": "اربط PostgreSQL ونفّذ الترحيل والبذر ثم أعد فتح الصفحة.",
+    "wrongPortalTitle": "ملف شركة العميل",
+    "wrongPortalDescription": "أنت مسجّل كموظف أطلس. افتح بوابة الإدارة للمتابعة، أو سجّل الدخول بحساب مؤسسة عميل.",
+    "forbiddenDescription": "ليس لديك صلاحية لعرض ملف هذه الشركة.",
+    "saveChanges": "حفظ التغييرات",
+    "cancel": "إلغاء",
+    "tabs": {
+      "identity": "الهوية",
+      "contact": "التواصل والعنوان",
+      "users": "المستخدمون",
+      "preferences": "التفضيلات"
+    },
+    "fields": {
+      "nameEn": "اسم الشركة (إنجليزي)",
+      "nameAr": "اسم الشركة (عربي)",
+      "crNumber": "رقم السجل التجاري",
+      "vatNumber": "الرقم الضريبي",
+      "website": "الموقع الإلكتروني",
+      "email": "البريد الأساسي",
+      "phone": "الهاتف الأساسي",
+      "addressLine1": "العنوان سطر 1",
+      "addressLine2": "العنوان سطر 2",
+      "city": "المدينة",
+      "region": "المنطقة",
+      "postalCode": "الرمز البريدي",
+      "country": "الدولة",
+      "nationalAddress": "العنوان الوطني",
+      "logo": "الشعار",
+      "locale": "اللغة",
+      "notifications": "الإشعارات",
+      "users": "المستخدمون",
+      "role": "الدور",
+      "status": "الحالة"
+    },
+    "logo": {
+      "dropTitle": "أسقط شعار شركتك هنا",
+      "dropHint": "PNG أو JPG · بحد أقصى 2 ميجابايت · يُقص مربعاً",
+      "browse": "اختر ملفاً",
+      "previewLight": "معاينة الشريط العلوي (فاتح)",
+      "previewGreen": "معاينة الشريط العلوي (أخضر أطلس)",
+      "topbarSample": "مساحة عملك",
+      "cropTitle": "قص الشعار مربعاً",
+      "zoom": "تكبير",
+      "applyCrop": "تطبيق القص",
+      "invalidType": "استخدم PNG أو JPG فقط.",
+      "tooLarge": "يجب ألا يتجاوز الشعار 2 ميجابايت.",
+      "cropFailed": "تعذر قص الصورة. جرّب ملفاً آخر."
+    },
+    "address": {
+      "previewTitle": "معاينة العنوان في التقارير",
+      "saudiArabia": "المملكة العربية السعودية",
+      "nationalAddress": "العنوان الوطني"
+    },
+    "users": {
+      "help": "المالك يدير الفوترة والمستخدمين. مستخدم الطلبات ينشئ ويتابع الطلبات. المالية ترى الفواتير وكشف الحساب فقط.",
+      "invite": "دعوة مستخدم",
+      "sendInvite": "إرسال الدعوة",
+      "colName": "المستخدم",
+      "role": "الدور",
+      "status": "الحالة",
+      "lastLogin": "آخر دخول",
+      "deactivate": "إيقاف"
+    },
+    "roles": {
+      "CLIENT_OWNER": "المالك — يدير الفوترة والمستخدمين",
+      "CLIENT_USER": "الطلبات — ينشئ ويتابع الطلبات",
+      "CLIENT_FINANCE": "المالية — ترى الفواتير وكشف الحساب فقط"
+    },
+    "status": {
+      "ACTIVE": "نشط",
+      "SUSPENDED": "موقوف",
+      "DISABLED": "معطّل"
+    },
+    "preferences": {
+      "language": "لغة الواجهة",
+      "langAr": "العربية",
+      "langEn": "الإنجليزية",
+      "event": "الحدث",
+      "email": "البريد",
+      "inApp": "داخل التطبيق",
+      "legalLockedHint": "تبقى إشعارات الشؤون القانونية والمالية مفعّلة دائماً حتى لا تفوت أحداث الفواتير وكشف الحساب.",
+      "events": {
+        "REQUEST_RETURNED": "إعادة الطلب إلى العميل",
+        "REPORT_ISSUED": "صدور التقرير",
+        "SLA_AT_RISK": "تنبيه مستوى الخدمة (80٪ من النافذة)",
+        "INVOICE_ISSUED": "إصدار فاتورة",
+        "PAYMENT_RECEIVED": "استلام دفعة",
+        "STATEMENT_OVERDUE": "تأخر كشف الحساب",
+        "CREDIT_LIMIT": "بلوغ حد الائتمان"
+      }
+    },
+    "toast": {
+      "savedDiff": "تم الحفظ. تم تحديث: {fields}.",
+      "savedNoChanges": "تم الحفظ. لم تتغير أي حقول.",
+      "userInvited": "أُرسلت الدعوة. تم إرسال بيانات الدخول بالبريد.",
+      "userInvitedWithPassword": "تم إنشاء الدعوة. كلمة المرور المؤقتة: {password}",
+      "inviteSent": "أُرسلت الدعوة. تم إرسال بيانات الدخول بالبريد."
+    },
+    "errors": {
+      "generic": "راجع الحقول المميزة وحاول مرة أخرى.",
+      "VALIDATION": "بعض الحقول تحتاج تصحيحاً قبل الحفظ.",
+      "UNAUTHORIZED": "سجّل الدخول مرة أخرى للمتابعة.",
+      "FORBIDDEN": "ليس لديك صلاحية لهذا الإجراء.",
+      "NOT_FOUND": "تعذر العثور على السجل.",
+      "SAVE_FAILED": "تعذر حفظ التغييرات. حاول مرة أخرى.",
+      "NO_FILE": "اختر ملف الشعار أولاً.",
+      "INVALID_LOGO": "الشعار يجب أن يكون PNG أو JPG وبحد أقصى 2 ميجابايت.",
+      "EMAIL_TAKEN": "هذا البريد مستخدم مسبقاً.",
+      "EMAIL_UNAVAILABLE": "لا يمكن استخدام هذا البريد.",
+      "LAST_OWNER": "هذا آخر مالك — عيّن ملكية لشخص آخر أولاً.",
+      "CANNOT_DEMOTE_SELF": "لا يمكنك إزالة دور المالك عن نفسك.",
+      "CANNOT_DEACTIVATE_SELF": "لا يمكنك إيقاف حسابك بنفسك.",
+      "INVALID_SAUDI_PHONE": "استخدم رقم سعودي مثل ‎+9665XXXXXXXX‎.",
+      "INVALID_VAT": "الرقم الضريبي 15 خانة يبدأ بـ 3.",
+      "INVALID_POSTAL": "الرمز البريدي 5 أرقام.",
+      "INVALID_NATIONAL_ADDRESS": "العنوان الوطني بصيغة ABCD1234.",
+      "INVALID_URL": "أدخل رابطاً كاملاً يبدأ بـ https://"
+    }
+  },
+  "newRequest": {
+    "pageDescription": "اختر الخدمة، وصف المنتج، ارفع المستندات، ثم قدّم الطلب. تُحفظ المسودة تلقائياً.",
+    "unavailableTitle": "الكتالوج غير متاح",
+    "unavailableDescription": "اربط PostgreSQL ونفّذ الترحيل والبذر ثم افتح طلب جديد مرة أخرى.",
+    "continue": "متابعة",
+    "back": "رجوع",
+    "submitted": "تم تقديم {number}. جارٍ فتح الطلب…",
+    "detailHint": "نظرة عامة على الطلب",
+    "detailBody": "سيظهر المسار الزمني والمستندات وتحميل التقارير هنا مع تقدم الطلب.",
+    "steps": {
+      "1": "١ · الخدمة",
+      "2": "٢ · المنتج",
+      "3": "٣ · المستندات",
+      "4": "٤ · المراجعة"
+    },
+    "step1": {
+      "title": "اختر الخدمة",
+      "vatLine": "ضريبة {vat}",
+      "slaLine": "مستوى الخدمة {hours} ساعة",
+      "docsLine": "{count} مستندات مطلوبة",
+      "whatWeCheck": "ماذا نتحقق منه"
+    },
+    "step2": {
+      "title": "تفاصيل المنتج"
+    },
+    "step3": {
+      "title": "رفع المستندات",
+      "counter": "{filled} من {total} مستندات مطلوبة",
+      "optional": "اختياري",
+      "additional": "مستندات إضافية",
+      "drop": "أسقط ملفاً أو انقر للرفع",
+      "remove": "إزالة الملف"
+    },
+    "step4": {
+      "title": "مراجعة وتقديم",
+      "finalArtwork": "أؤكد أن التصميم المرفوع هو النسخة النهائية المعدة للسوق.",
+      "submit": "تقديم الطلب"
+    },
+    "fields": {
+      "productNameEn": "اسم المنتج (إنجليزي)",
+      "productNameAr": "اسم المنتج (عربي)",
+      "brand": "العلامة التجارية",
+      "select": "اختر",
+      "yes": "نعم",
+      "no": "لا"
+    },
+    "enums": {
+      "capsule": "كبسولة",
+      "tablet": "قرص",
+      "chewable": "قابل للمضغ",
+      "powder": "مسحوق",
+      "liquid": "سائل",
+      "softgel": "سوفتجل",
+      "gummy": "حلوى هلامية",
+      "sachet": "كيس",
+      "adult": "بالغ",
+      "child": "طفل",
+      "pregnant": "حامل",
+      "athlete": "رياضي",
+      "elderly": "كبار السن",
+      "leave-on": "يُترك على الجلد",
+      "rinse-off": "يُشطف",
+      "oral-care": "العناية بالفم",
+      "hair": "الشعر",
+      "nail": "الأظافر",
+      "perfume": "عطر",
+      "general": "عام",
+      "children": "أطفال",
+      "professional": "مهني"
+    },
+    "summary": {
+      "title": "ملخص الطلب",
+      "category": "الفئة",
+      "service": "الخدمة",
+      "product": "المنتج",
+      "docs": "المستندات",
+      "draft": "رقم المسودة",
+      "subtotal": "المجموع الفرعي",
+      "discount": "الخصم",
+      "vat": "ضريبة القيمة المضافة 15٪",
+      "total": "الإجمالي"
+    },
+    "coupon": {
+      "label": "رمز القسيمة",
+      "apply": "تطبيق القسيمة",
+      "remove": "إزالة القسيمة",
+      "applied": "تم تطبيق القسيمة",
+      "NOT_FOUND": "لا توجد قسيمة بهذا الرمز.",
+      "INACTIVE": "هذه القسيمة غير نشطة.",
+      "EXPIRED": "انتهت صلاحية هذه القسيمة في {date}.",
+      "NOT_YET_VALID": "هذه القسيمة غير سارية بعد.",
+      "MIN_ORDER": "هذه القسيمة تتطلب مبلغ طلب أعلى.",
+      "USAGE_EXHAUSTED": "بلغت هذه القسيمة حد الاستخدام.",
+      "PER_CLIENT_LIMIT": "استخدمت مؤسستك هذه القسيمة بالحد الأقصى.",
+      "APPLIES_COSMETICS_ONLY": "هذه القسيمة تنطبق على خدمات مستحضرات التجميل فقط.",
+      "APPLIES_FOOD_ONLY": "هذه القسيمة تنطبق على خدمات الغذاء والدواء فقط.",
+      "APPLIES_CATEGORY": "هذه القسيمة لا تنطبق على الفئة المحددة.",
+      "APPLIES_SERVICE": "هذه القسيمة لا تنطبق على الخدمة المحددة.",
+      "NEW_CLIENTS_ONLY": "هذه القسيمة للعملاء الجدد فقط.",
+      "CLIENT_NOT_ELIGIBLE": "هذه القسيمة غير متاحة لمؤسستك.",
+      "EXCLUDES_RESUBMISSION": "لا يمكن استخدام هذه القسيمة على إعادة التقديم."
+    },
+    "errors": {
+      "SELECT_SERVICE": "اختر بند خدمة للمتابعة.",
+      "PRODUCT_NAME": "أدخل اسم المنتج بالعربية والإنجليزية.",
+      "ATTRS_REQUIRED": "أكمل كل خصائص المنتج المطلوبة.",
+      "ATTR_REQUIRED": "أكمل كل خصائص المنتج المطلوبة.",
+      "ATTR_INVALID": "واحدة أو أكثر من خصائص المنتج غير صالحة.",
+      "VALIDATION": "راجع النموذج وحاول مرة أخرى.",
+      "UNAUTHORIZED": "سجّل الدخول مرة أخرى للمتابعة.",
+      "FORBIDDEN": "ليس لديك صلاحية لهذا الإجراء.",
+      "NOT_FOUND": "تعذر العثور على السجل.",
+      "SAVE_FAILED": "تعذر الحفظ. حاول مرة أخرى.",
+      "SERVICE_NOT_FOUND": "هذه الخدمة لم تعد متاحة.",
+      "NO_FILE": "اختر ملفاً للرفع.",
+      "DOC_SLOT_NOT_FOUND": "خانة المستند غير صالحة.",
+      "mimeRejected": "{accepted} فقط — رفعت {uploaded}",
+      "FILE_TOO_LARGE": "الملف يتجاوز الحد الأقصى للحجم.",
+      "MANDATORY_DOCS_MISSING": "ارفع كل المستندات المطلوبة قبل التقديم.",
+      "CREDIT_OVER_LIMIT": "بلغت مؤسستك الحد الائتماني. تواصل مع الشؤون المالية في أطلس لمواصلة تقديم الطلبات.",
+      "MAX_RESUBMISSIONS": "وصل هذا الطلب إلى الحد الأقصى لإعادة التقديم.",
+      "FAULT_MISSING": "تعذّر إعادة التقديم — سبب الإرجاع ناقص. تواصل مع أطلس.",
+      "NON_STACKABLE": "أزل القسيمة الحالية قبل تطبيق قسيمة أخرى.",
+      "INFECTED_FILE": "مستند لم يجتز فحص الأمان. احذفه وارفعه من جديد.",
+      "MIME_REJECTED": "نوع الملف غير مسموح."
+    }
+  },
+  "finance": {
+    "clientDescription": "رصيد مؤسستك والفواتير وسجلات الدفع. دفتر داخلي فقط — بلا بوابة دفع في هذه المرحلة.",
+    "adminDescription": "تحقق من دفعات العملاء، وأدر حدود الائتمان، وسجّل التسويات. قيود الدفتر للإضافة فقط.",
+    "unavailableTitle": "كشف الحساب غير متاح",
+    "unavailableDescription": "سجّل الدخول كمالك عميل أو مستخدم مالية مع قاعدة بيانات متصلة.",
+    "adminUnavailableDescription": "سجّل الدخول بحساب مالية أطلس أو مسؤول نظام لفتح هذه الصفحة.",
+    "balance": {
+      "title": "الرصيد الحالي",
+      "youOwe": "أنت مدين لأطلس بهذا المبلغ.",
+      "inCredit": "حسابك دائن.",
+      "settled": "الرصيد مسوّى.",
+      "creditLimit": "استخدام حد الائتمان"
+    },
+    "aging": {
+      "current": "حالي",
+      "d1_30": "١–٣٠",
+      "d31_60": "٣١–٦٠",
+      "d61_90": "٦١–٩٠",
+      "d90_plus": "٩٠+"
+    },
+    "tabs": {
+      "ledger": "دفتر القيود",
+      "invoices": "الفواتير",
+      "payment": "تسجيل دفعة"
+    },
+    "filters": {
+      "from": "من",
+      "to": "إلى"
+    },
+    "downloadStatement": "تحميل كشف الحساب (PDF)",
+    "ledger": {
+      "date": "التاريخ",
+      "description": "الوصف",
+      "reference": "المرجع",
+      "debit": "مدين",
+      "credit": "دائن",
+      "balance": "الرصيد",
+      "empty": "لا قيود في هذا النطاق."
+    },
+    "invoices": {
+      "empty": "لا فواتير بعد.",
+      "download": "PDF"
+    },
+    "invoiceStatus": {
+      "DRAFT": "مسودة",
+      "ISSUED": "صادرة",
+      "PAID": "مدفوعة",
+      "PARTIALLY_PAID": "مدفوعة جزئياً",
+      "VOID": "ملغاة"
+    },
+    "payment": {
+      "amount": "المبلغ (ر.س)",
+      "method": "الطريقة",
+      "reference": "مرجع التحويل البنكي",
+      "proof": "إثبات الدفع",
+      "submit": "تسجيل الدفعة",
+      "hint": "تم التسجيل. سيؤكدها فريق مالية أطلس عادة خلال يوم عمل واحد.",
+      "recorded": "تم التسجيل. سيؤكدها فريق مالية أطلس عادة خلال يوم عمل واحد.",
+      "methods": {
+        "BANK_TRANSFER": "تحويل بنكي",
+        "CARD": "بطاقة",
+        "CASH": "نقداً",
+        "CREDIT_NOTE": "إشعار دائن"
+      }
+    },
+    "admin": {
+      "tabs": {
+        "queue": "دفعات بانتظار التحقق",
+        "balances": "أرصدة العملاء",
+        "adjust": "تسويات"
+      },
+      "queueEmpty": "لا دفعات بانتظار التحقق.",
+      "viewProof": "عرض الإثبات",
+      "confirm": "تأكيد الدفعة",
+      "reject": "رفض",
+      "rejectReason": "سبب الرفض",
+      "confirmed": "تم تأكيد الدفعة وتوزيعها.",
+      "rejected": "تم رفض الدفعة.",
+      "fifoHint": "التأكيد يوزع FIFO على الفواتير المفتوحة افتراضياً. التوزيع الجزئي مسموح.",
+      "sortBy": "ترتيب حسب",
+      "sortOverdue": "أيام التأخير",
+      "sortBalance": "الرصيد",
+      "client": "العميل",
+      "balance": "الرصيد",
+      "daysOverdue": "أيام التأخير",
+      "creditLimit": "حد الائتمان",
+      "autoHold": "إيقاف تلقائي عند تجاوز الحد",
+      "saveLimit": "حفظ",
+      "limitSaved": "تم حفظ حد الائتمان.",
+      "entryType": "نوع القيد",
+      "entryTypes": {
+        "CREDIT_NOTE": "إشعار دائن",
+        "ADJUSTMENT": "تسوية",
+        "REFUND": "استرداد",
+        "WRITE_OFF": "شطب"
+      },
+      "side": "الجانب",
+      "sideCredit": "دائن (يخفض المستحق)",
+      "sideDebit": "مدين (يزيد المستحق)",
+      "reasonEn": "السبب (إنجليزي) — مطلوب",
+      "reasonAr": "السبب (عربي) — مطلوب",
+      "postEntry": "ترحيل قيد",
+      "adjustmentPosted": "تم ترحيل القيد."
+    },
+    "errors": {
+      "VALIDATION": "راجع النموذج وحاول مرة أخرى.",
+      "UNAUTHORIZED": "سجّل الدخول مرة أخرى للمتابعة.",
+      "FORBIDDEN": "ليس لديك صلاحية لهذا الإجراء.",
+      "NOT_FOUND": "تعذر العثور على السجل.",
+      "SAVE_FAILED": "تعذر الحفظ. حاول مرة أخرى.",
+      "INVALID_PROOF": "الإثبات يجب أن يكون PDF أو PNG أو JPG.",
+      "FILE_TOO_LARGE": "الملف يتجاوز الحد الأقصى للحجم.",
+      "ALLOCATION_EXCEEDS_PAYMENT": "التوزيع يتجاوز مبلغ الدفعة.",
+      "UNEXPECTED": "حدث خطأ. المرجع {reference}. حاول مرة أخرى أو تواصل مع الدعم."
+    }
+  },
+  "returnReasons": {
+    "MISSING_ARTWORK": "تصميم ناقص",
+    "ILLEGIBLE_SCAN": "مسح غير مقروء",
+    "LOW_RESOLUTION": "دقة تصميم منخفضة",
+    "WRONG_PRODUCT_TYPE": "نوع منتج خاطئ",
+    "MISSING_COA": "شهادة تحليل ناقصة",
+    "MISSING_FORMULA": "تركيبة ناقصة",
+    "INCOMPLETE_FORMULA": "تركيبة غير مكتملة",
+    "EXPIRED_DOCUMENT": "مستند منتهي",
+    "WRONG_LANGUAGE": "لغة غير صحيحة",
+    "MISMATCHED_PRODUCT": "منتج غير مطابق",
+    "OTHER": "أخرى"
+  },
+  "dashboard": {
+    "client": {
+      "pageDescription": "تابع الإرجاعات والعمل المفتوح وابدأ طلب مطابقة جديداً.",
+      "financePageDescription": "الرصيد المفتوح والفواتير المتأخرة ونشاط الفوترة الأخير.",
+      "unavailableTitle": "لوحة التحكم غير متاحة",
+      "unavailableDescription": "اربط قاعدة البيانات وسجّل الدخول كمستخدم عميل.",
+      "accessDenied": {
+        "title": "تم رفض الوصول",
+        "body": "ليس لديك صلاحية لفتح تلك الصفحة. اختر عنصراً آخر من القائمة، أو اطلب من مالك المؤسسة إذا كنت تحتاج صلاحية."
+      },
+      "attentionTitle": "يحتاج انتباهك",
+      "attentionFallback": "أُعيد للتصحيح",
+      "resubmit": "افتح وأعد التقديم",
+      "stats": {
+        "open": "طلبات مفتوحة",
+        "inReview": "قيد المراجعة",
+        "reports": "تقارير هذا العام",
+        "balance": "الرصيد الحالي"
+      },
+      "financeStats": {
+        "balance": "الرصيد المفتوح",
+        "openInvoices": "فواتير مفتوحة",
+        "overdue": "مبلغ متأخر"
+      },
+      "financeInvoicesTitle": "الفواتير الأخيرة",
+      "financeInvoicesEmpty": "لا فواتير بعد.",
+      "viewStatement": "عرض كشف الحساب",
+      "openInvoice": "فتح",
+      "dueAt": "الاستحقاق",
+      "invoiceStatus": {
+        "DRAFT": "مسودة",
+        "ISSUED": "صادرة",
+        "PARTIALLY_PAID": "مدفوعة جزئياً",
+        "PAID": "مدفوعة",
+        "VOID": "ملغاة"
+      },
+      "startTitle": "ابدأ طلباً جديداً",
+      "startCta": "طلب جديد",
+      "activityTitle": "النشاط الأخير",
+      "activityEmpty": "لا نشاط بعد. قدّم طلباً لتظهر التغذية."
+    },
+    "admin": {
+      "title": "لوحة العمليات",
+      "pageDescription": "صحة الطوابير وجودة الاستلام والإيراد — آخر ٣٠–٩٠ يوماً.",
+      "unavailableTitle": "لوحة التحكم غير متاحة",
+      "unavailableDescription": "سجّل الدخول كموظف أطلس مع قاعدة بيانات (مثل admin@atlas.com).",
+      "queues": {
+        "intake": "الاستلام",
+        "assessment": "التقييم",
+        "technical": "المراجعة الفنية",
+        "decision": "القرار",
+        "returned": "مُعاد",
+        "onHold": "معلّق"
+      },
+      "atRisk": "{count} مستوى خدمة في خطر",
+      "atRiskNone": "لا مخاطر مستوى خدمة",
+      "chartTitle": "المستلم مقابل المغلق · ٣٠ يوماً",
+      "received": "مستلم",
+      "closed": "مغلق",
+      "returnReasonsTitle": "أبرز أسباب الإرجاع · ٩٠ يوماً",
+      "returnReasonsHint": "مؤشر جودة الاستلام — أصلح النموذج حيث تتجمع هذه الأسباب.",
+      "returnReasonsEmpty": "لا إرجاعات برموز أسباب في آخر ٩٠ يوماً.",
+      "revenueTitle": "الإيراد · {month}",
+      "revenueOriginal": "تقديمات أصلية",
+      "revenueResubmission": "إعادة تقديم",
+      "revenueTotal": "الإجمالي",
+      "overLimitTitle": "عملاء تجاوزوا حد الائتمان",
+      "overLimitEmpty": "لا عملاء فوق حد الائتمان."
+    }
+  },
+  "adminOps": {
+    "unavailableTitle": "عرض الإدارة غير متاح",
+    "unavailableDescription": "سجّل الدخول كموظف أطلس (مثل admin@atlas.com).",
+    "accessDenied": {
+      "title": "تم رفض الوصول",
+      "body": "ليس لديك صلاحية لفتح تلك الصفحة. اختر عنصراً آخر من القائمة، أو اطلب من المسؤول منحك الصلاحية."
+    },
+    "queues": {
+      "pageDescription": "العمل حسب المرحلة. افتح طلباً لتقديمه أو إرجاعه.",
+      "empty": "لا طلبات في هذا الطابور."
+    },
+    "requests": {
+      "pageDescription": "كل طلبات المطابقة عبر مؤسسات العملاء.",
+      "empty": "لا طلبات تطابق هذه المرشحات.",
+      "open": "فتح",
+      "allStates": "كل الحالات",
+      "filterState": "الحالة",
+      "columns": {
+        "requestNo": "الطلب",
+        "client": "العميل",
+        "product": "المنتج",
+        "state": "الحالة",
+        "sla": "مستوى الخدمة",
+        "updated": "آخر تحديث",
+        "actions": "إجراءات"
+      }
+    },
+    "requestDetail": {
+      "pageDescription": "قدّم دورة الحياة أو أرجع للعميل أو علّق الطلب.",
+      "client": "العميل",
+      "service": "الخدمة",
+      "assign": "المُسند",
+      "unassigned": "غير مُسند",
+      "actionsTitle": "إجراءات دورة الحياة",
+      "advance": "تقديم إلى {state}",
+      "returnTitle": "إرجاع للعميل",
+      "returnReason": "السبب",
+      "returnFault": "المسؤولية",
+      "returnNote": "ملاحظة",
+      "returnSubmit": "إرجاع للعميل",
+      "hold": "تعليق",
+      "resume": "استئناف الاستلام",
+      "issueReport": "إصدار التقرير",
+      "close": "إغلاق الطلب",
+      "cancel": "إلغاء الطلب",
+      "comment": "ملاحظة داخلية",
+      "commentPlaceholder": "تظهر لموظفي أطلس فقط.",
+      "commentSubmit": "إضافة ملاحظة",
+      "success": "تم تحديث الطلب",
+      "documents": "المستندات",
+      "documentsEmpty": "لا مستندات.",
+      "timeline": "المسار الزمني",
+      "submission": "التقديم #{n}",
+      "clientComments": "التواصل مع العميل",
+      "internalComments": "ملاحظات داخلية",
+      "commentsEmpty": "لا رسائل مع العميل بعد.",
+      "internalCommentsEmpty": "لا ملاحظات داخلية بعد.",
+      "sendToClient": "إرسال إلى العميل",
+      "messagePlaceholder": "اكتب رسالة سيراها العميل...",
+      "messageSent": "تم إرسال الرسالة",
+      "errors": {
+        "FORBIDDEN": "ليس لديك صلاحية.",
+        "UNAUTHORIZED": "سجّل الدخول مجدداً للاستمرار.",
+        "NOT_FOUND": "الطلب غير موجود.",
+        "INVALID_TRANSITION": "هذا الانتقال غير مسموح من الحالة الحالية.",
+        "RETURN_REASON_REQUIRED": "اختر السبب والمسؤولية لإرجاع الطلب.",
+        "VALIDATION": "راجع النموذج وحاول مجدداً.",
+        "SAVE_FAILED": "تعذّر الحفظ. حاول مرة أخرى.",
+        "INVALID_STATE": "لا يمكنك إرسال رسائل على هذا الطلب حالياً.",
+        "CONFLICT": "تغيّر هذا الطلب أثناء عملك. حدّث الصفحة وحاول مجدداً."
+      }
+    },
+    "clients": {
+      "pageDescription": "مؤسسات العملاء ووضع الائتمان والعمل المفتوح.",
+      "empty": "لا مؤسسات عملاء بعد.",
+      "open": "فتح",
+      "columns": {
+        "name": "المؤسسة",
+        "balance": "الرصيد",
+        "creditLimit": "حد الائتمان",
+        "openRequests": "طلبات مفتوحة",
+        "actions": "إجراءات"
+      }
+    },
+    "clientDetail": {
+      "pageDescription": "عرض ٣٦٠° — الملف والطلبات ولقطة دفتر الأستاذ.",
+      "profile": "الملف",
+      "requests": "الطلبات",
+      "finance": "لقطة المالية",
+      "email": "البريد",
+      "phone": "الهاتف",
+      "cr": "السجل",
+      "vat": "الضريبة",
+      "balance": "الرصيد",
+      "creditLimit": "حد الائتمان",
+      "users": "المستخدمون"
+    },
+    "catalogue": {
+      "pageDescription": "كتالوج الخدمات المستخدم في معالج طلب العميل.",
+      "empty": "لا عناصر في الكتالوج.",
+      "toggle": "تبديل التفعيل",
+      "active": "نشط",
+      "inactive": "غير نشط",
+      "columns": {
+        "code": "الرمز",
+        "name": "الاسم",
+        "price": "السعر الأساسي",
+        "sla": "مستوى الخدمة (س)",
+        "status": "الحالة",
+        "actions": "إجراءات"
+      },
+      "success": "تم تحديث الكتالوج",
+      "errors": {
+        "VALIDATION": "راجع النموذج وحاول مرة أخرى.",
+        "UNAUTHORIZED": "سجّل الدخول مرة أخرى للمتابعة.",
+        "FORBIDDEN": "ليس لديك صلاحية لهذا الإجراء.",
+        "NOT_FOUND": "تعذر العثور على السجل.",
+        "SAVE_FAILED": "تعذر الحفظ. حاول مرة أخرى."
+      },
+      "create": {
+        "button": "إنشاء خدمة",
+        "dialogTitle": "إنشاء خدمة",
+        "steps": {
+          "1": "١ · الفئة",
+          "2": "٢ · تفاصيل الخدمة",
+          "3": "٣ · السمات",
+          "4": "٤ · المستندات المطلوبة",
+          "5": "٥ · المراجعة"
+        },
+        "back": "رجوع",
+        "continue": "استمرار",
+        "submit": "إنشاء الخدمة",
+        "step1": {
+          "mainCategory": "الفئة الرئيسية",
+          "subCategory": "الفئة الفرعية",
+          "selectMain": "اختر فئة رئيسية",
+          "selectSub": "اختر فئة فرعية"
+        },
+        "step2": {
+          "code": "الرمز",
+          "nameEn": "الاسم (إنجليزي)",
+          "nameAr": "الاسم (عربي)",
+          "descEn": "الوصف (إنجليزي)",
+          "descAr": "الوصف (عربي)",
+          "basePrice": "السعر الأساسي (ريال)",
+          "slaHours": "مستوى الخدمة (ساعات)",
+          "vatRate": "نسبة ضريبة القيمة المضافة",
+          "resubmissionPricePct": "نسبة سعر إعادة التقديم",
+          "freeResubmissions": "عدد إعادات التقديم المجانية",
+          "maxResubmissions": "الحد الأقصى لإعادات التقديم",
+          "active": "نشط"
+        },
+        "step3": {
+          "attributesTitle": "سمات المنتج",
+          "attributesHint": "حقول اختيارية تُجمع في كل طلب (اسم المنتج منفصل).",
+          "attributesEmpty": "لا سمات بعد. أضف مفاتيح أدناه أو استمر بدون أي سمة.",
+          "addAttr": "إضافة سمة",
+          "removeAttr": "إزالة السمة",
+          "attrKey": "المفتاح",
+          "attrKeyPlaceholder": "netWeight",
+          "attrType": "النوع",
+          "attrTypes": {
+            "string": "نص",
+            "number": "رقم",
+            "boolean": "نعم / لا"
+          },
+          "attrTitleEn": "التسمية (إنجليزي)",
+          "attrTitleAr": "التسمية (عربي)",
+          "attrRequired": "إلزامي",
+          "checkSetsTitle": "مجموعات الفحص",
+          "checkSetsHint": "مجموعات فحص اختيارية تُخزَّن مع الخدمة.",
+          "checkSetsEmpty": "لا مجموعات فحص بعد. أضف واحدةً أدناه أو استمر بدونها.",
+          "addCheckSet": "إضافة مجموعة فحص",
+          "removeCheckSet": "إزالة مجموعة الفحص",
+          "checkCode": "الرمز",
+          "checkTitleEn": "العنوان (إنجليزي)",
+          "checkTitleAr": "العنوان (عربي)"
+        },
+        "step4": {
+          "empty": "لا توجد مستندات مطلوبة بعد. أضف واحدًا أدناه أو استمر بدون أي مستند.",
+          "add": "إضافة مستند",
+          "remove": "إزالة المستند",
+          "code": "الرمز",
+          "nameEn": "الاسم (إنجليزي)",
+          "nameAr": "الاسم (عربي)",
+          "mandatory": "إلزامي",
+          "acceptedMimeTypes": "أنواع الملفات المقبولة",
+          "maxSizeMb": "الحجم الأقصى (ميجابايت)",
+          "mimeTypes": {
+            "pdf": "PDF",
+            "png": "PNG",
+            "jpeg": "JPG"
+          }
+        },
+        "step5": {
+          "category": "الفئة",
+          "service": "الخدمة",
+          "price": "السعر الأساسي",
+          "sla": "مستوى الخدمة",
+          "attributes": "السمات",
+          "checkSets": "مجموعات الفحص",
+          "documents": "المستندات المطلوبة"
+        },
+        "success": "تم إنشاء الخدمة",
+        "errors": {
+          "VALIDATION": "راجع النموذج وحاول مرة أخرى.",
+          "UNAUTHORIZED": "سجّل الدخول مرة أخرى للمتابعة.",
+          "FORBIDDEN": "ليس لديك صلاحية لهذا الإجراء.",
+          "NOT_FOUND": "تعذر العثور على هذه الفئة الفرعية.",
+          "CODE_TAKEN": "هذا الرمز مستخدم مسبقًا في هذه الفئة الفرعية.",
+          "SAVE_FAILED": "تعذر الحفظ. حاول مرة أخرى."
+        }
+      }
+    },
+    "coupons": {
+      "pageDescription": "أكواد الخصم وحدود الاستخدام.",
+      "empty": "لا كوبونات.",
+      "pause": "إيقاف",
+      "activate": "تفعيل",
+      "columns": {
+        "code": "الرمز",
+        "name": "الاسم",
+        "value": "القيمة",
+        "appliesTo": "ينطبق على",
+        "clientScope": "نطاق العملاء",
+        "usage": "الاستخدام",
+        "valid": "الصلاحية",
+        "status": "الحالة",
+        "actions": "إجراءات"
+      },
+      "success": "تم تحديث الكوبون",
+      "statusLabels": {
+        "ACTIVE": "نشط",
+        "PAUSED": "متوقف",
+        "EXPIRED": "منتهي"
+      },
+      "percentValue": "{value}%",
+      "usageWithLimit": "{used} / {limit}",
+      "usageUnlimited": "{used} (بدون حد)",
+      "errors": {
+        "VALIDATION": "راجع النموذج وحاول مرة أخرى.",
+        "UNAUTHORIZED": "سجّل الدخول مرة أخرى للمتابعة.",
+        "FORBIDDEN": "ليس لديك صلاحية لهذا الإجراء.",
+        "NOT_FOUND": "تعذر العثور على السجل.",
+        "SAVE_FAILED": "تعذر الحفظ. حاول مرة أخرى."
+      },
+      "create": {
+        "button": "إنشاء كوبون",
+        "dialogTitle": "إنشاء كوبون",
+        "code": "الرمز",
+        "nameEn": "الاسم (إنجليزي)",
+        "nameAr": "الاسم (عربي)",
+        "discountType": "نوع الخصم",
+        "discountTypes": {
+          "PERCENT": "نسبة مئوية",
+          "FIXED": "مبلغ ثابت"
+        },
+        "value": "القيمة",
+        "maxDiscountAmount": "الحد الأقصى لمبلغ الخصم",
+        "minOrderAmount": "الحد الأدنى لقيمة الطلب",
+        "appliesTo": "ينطبق على",
+        "appliesToOptions": {
+          "ALL": "كامل الكتالوج",
+          "MAIN_CATEGORY": "فئات رئيسية",
+          "SUB_CATEGORY": "فئات فرعية",
+          "SERVICE_ITEM": "خدمات"
+        },
+        "appliesToIds": "اختر أهداف الكتالوج",
+        "appliesToIdsEmpty": "لا أهداف كتالوج متاحة.",
+        "clientScope": "نطاق العملاء",
+        "clientScopeOptions": {
+          "ALL": "كل العملاء",
+          "SPECIFIC": "عملاء محددون",
+          "NEW_CLIENTS_ONLY": "العملاء الجدد فقط"
+        },
+        "clientIds": "اختر العملاء",
+        "clientIdsEmpty": "لا عملاء نشطين متاحين.",
+        "validFrom": "صالح من",
+        "validTo": "صالح إلى",
+        "totalUsageLimit": "الحد الأقصى للاستخدام الكلي",
+        "perClientLimit": "الحد الأقصى للعميل الواحد",
+        "stackable": "يمكن دمجه مع كوبونات أخرى",
+        "excludesResubmissions": "لا يشمل إعادات التقديم",
+        "cancel": "إلغاء",
+        "submit": "إنشاء الكوبون",
+        "success": "تم إنشاء الكوبون",
+        "errors": {
+          "VALIDATION": "راجع النموذج وحاول مرة أخرى.",
+          "UNAUTHORIZED": "سجّل الدخول مرة أخرى للمتابعة.",
+          "FORBIDDEN": "ليس لديك صلاحية لهذا الإجراء.",
+          "CODE_TAKEN": "رمز الكوبون هذا مستخدم مسبقًا.",
+          "INVALID_DATE_RANGE": "يجب أن يكون تاريخ الانتهاء بعد تاريخ البدء.",
+          "SAVE_FAILED": "تعذر الحفظ. حاول مرة أخرى."
+        }
+      }
+    },
+    "quality": {
+      "pageDescription": "إشارات جودة الإرجاع ونشاط التدقيق الأخير.",
+      "returnsTitle": "الإرجاعات · ٩٠ يوماً",
+      "auditTitle": "سجل التدقيق الأخير",
+      "emptyReturns": "لا إرجاعات برموز أسباب.",
+      "emptyAudit": "لا إدخالات تدقيق بعد.",
+      "systemActor": "النظام",
+      "columns": {
+        "reason": "السبب",
+        "count": "العدد"
+      },
+      "auditColumns": {
+        "when": "الوقت",
+        "actor": "المستخدم",
+        "action": "الإجراء",
+        "entity": "الكائن"
+      }
+    },
+    "analytics": {
+      "pageDescription": "توزيع الطوابير وتعرّض مستوى الخدمة ومزيج الإنتاجية.",
+      "hint": "عرض تحليلي لنفس إشارات لوحة العمليات.",
+      "queueDistribution": "توزيع الطوابير",
+      "slaSummary": "تعرّض مستوى الخدمة",
+      "slaAtRiskTotal": "في خطر عبر الطوابير",
+      "slaAtRiskNone": "لا مخاطر مستوى خدمة في الطوابير النشطة",
+      "depthLabel": "العمق",
+      "atRiskLabel": "في خطر",
+      "throughputTitle": "الإنتاجية · ٣٠ يوماً",
+      "received": "مستلم",
+      "closed": "مغلق",
+      "returnMixTitle": "مزيج أسباب الإرجاع · ٩٠ يوماً",
+      "returnMixEmpty": "لا أسباب إرجاع في آخر ٩٠ يوماً.",
+      "revenueMixTitle": "مزيج الإيراد · {month}",
+      "revenueOriginal": "التقديمات الأصلية",
+      "revenueResubmission": "إعادة التقديم",
+      "revenueTotal": "الإجمالي"
+    },
+    "settings": {
+      "pageDescription": "ملف مؤسسة أطلس وإعدادات المنصة.",
+      "orgTitle": "مؤسسة أطلس",
+      "save": "حفظ المؤسسة",
+      "success": "تم حفظ الإعدادات",
+      "nameEn": "الاسم (إنجليزي)",
+      "nameAr": "الاسم (عربي)",
+      "email": "البريد",
+      "phone": "الهاتف",
+      "website": "الموقع",
+      "tabs": {
+        "organisation": "المؤسسة",
+        "staff": "الموظفون"
+      },
+      "staff": {
+        "help": "مسؤولو النظام يديرون حسابات الموظفين وأدوارهم. أدوار أطلس الأخرى يمكنها فقط عرض قائمة الموظفين.",
+        "invite": "دعوة موظف",
+        "sendInvite": "إرسال الدعوة",
+        "colName": "الموظف",
+        "status": "الحالة",
+        "lastLogin": "آخر دخول",
+        "deactivate": "إيقاف",
+        "confirmDeactivate": "إيقاف حساب هذا الموظف؟ لن يتمكن بعد ذلك من تسجيل الدخول.",
+        "roleUpdated": "تم تحديث الدور.",
+        "deactivated": "تم إيقاف حساب الموظف.",
+        "invitedWithPassword": "تم إنشاء الدعوة. كلمة المرور المؤقتة: {password}",
+        "inviteSent": "أُرسلت الدعوة. تم إرسال بيانات الدخول إلى الموظف بالبريد.",
+        "fields": {
+          "email": "البريد",
+          "role": "الدور",
+          "fullNameEn": "الاسم الكامل (إنجليزي)",
+          "fullNameAr": "الاسم الكامل (عربي)"
+        },
+        "roles": {
+          "INTAKE_OFFICER": "مسؤول الاستلام",
+          "TECHNICAL_REVIEWER": "المراجع التقني",
+          "DECISION_MAKER": "متخذ القرار",
+          "FINANCE": "المالية",
+          "CATALOGUE_MANAGER": "مدير الكتالوج",
+          "QUALITY_MANAGER": "مدير الجودة",
+          "SYSTEM_ADMIN": "مسؤول النظام"
+        },
+        "statusValues": {
+          "ACTIVE": "نشط",
+          "SUSPENDED": "موقوف",
+          "DISABLED": "معطّل"
+        },
+        "errors": {
+          "VALIDATION": "راجع النموذج وحاول مرة أخرى.",
+          "UNAUTHORIZED": "سجّل الدخول مرة أخرى للمتابعة.",
+          "FORBIDDEN": "ليس لديك صلاحية لهذا الإجراء.",
+          "NOT_FOUND": "تعذر العثور على هذا الموظف.",
+          "SAVE_FAILED": "تعذر الحفظ. حاول مرة أخرى.",
+          "EMAIL_TAKEN": "هذا البريد مستخدم مسبقاً.",
+          "EMAIL_UNAVAILABLE": "لا يمكن استخدام هذا البريد.",
+          "CANNOT_DEACTIVATE_SELF": "لا يمكنك إيقاف حسابك بنفسك.",
+          "LAST_ADMIN": "هذا آخر مسؤول نظام — عيّن الدور لموظف آخر أولاً."
+        }
+      },
+      "errors": {
+        "VALIDATION": "راجع النموذج وحاول مرة أخرى.",
+        "UNAUTHORIZED": "سجّل الدخول مرة أخرى للمتابعة.",
+        "FORBIDDEN": "ليس لديك صلاحية لهذا الإجراء.",
+        "NOT_FOUND": "تعذر العثور على السجل.",
+        "SAVE_FAILED": "تعذر الحفظ. حاول مرة أخرى."
+      }
+    },
+    "company": {
+      "pageDescription": "بطاقة مؤسسة أطلس للمساندة والخدمات.",
+      "redirectHint": "إعدادات المؤسسة موجودة تحت الإعدادات."
+    }
+  },
+  "myRequests": {
+    "pageDescription": "ابحث وصفِّ كل طلبات المطابقة لمؤسستك.",
+    "unavailableTitle": "الطلبات غير متاحة",
+    "unavailableDescription": "اربط قاعدة البيانات وسجّل الدخول كمستخدم عميل.",
+    "filterState": "الحالة",
+    "allStates": "كل الحالات",
+    "empty": "لا طلبات تطابق هذه المرشحات. ابدأ طلباً جديداً أو امسح المرشحات.",
+    "open": "فتح",
+    "columns": {
+      "requestNo": "الطلب",
+      "product": "المنتج",
+      "state": "الحالة",
+      "submission": "التقديم",
+      "updated": "آخر تحديث",
+      "actions": "إجراءات"
+    }
+  },
+  "requestDetail": {
+    "pageDescription": "المسار الزمني والمستندات والإجراءات لهذا الطلب.",
+    "service": "الخدمة",
+    "submission": "تقديم رقم {n}",
+    "returnTitle": "أُرجع للتصحيح",
+    "returnFallback": "أرجع أطلس هذا الطلب للتصحيح.",
+    "resubmit": "إعادة تقديم الطلب",
+    "resubmitSuccess": "أُعيد تقديم الطلب",
+    "uploadSuccess": "تم رفع المستند",
+    "replaceFile": "استبدال الملف",
+    "noFileYet": "لم يُرفع ملف بعد",
+    "noteLabel": "ملاحظة لأطلس (اختياري)",
+    "notePlaceholder": "صف ما صحّحته",
+    "maxResubmissions": "وصل هذا الطلب إلى الحد الأقصى لإعادة التقديم.",
+    "documents": "المستندات",
+    "documentsEmpty": "لا مستندات مرفوعة بعد.",
+    "comments": "الرسائل",
+    "commentsEmpty": "لا رسائل بعد.",
+    "sendMessage": "إرسال الرسالة",
+    "messagePlaceholder": "اكتب رسالة إلى أطلس...",
+    "messageSent": "تم إرسال الرسالة",
+    "downloadReport": "تحميل تقرير PDF",
+    "verify": "تحقق علناً",
+    "draft": {
+      "title": "هذا الطلب لا يزال مسودة",
+      "body": "أكمل تعبئته، أو تجاهله إن لم تعد بحاجة إليه.",
+      "continue": "إكمال المسودة",
+      "discard": "تجاهل المسودة",
+      "discardCancel": "الاحتفاظ بالمسودة",
+      "discardConfirmTitle": "تجاهل هذه المسودة؟",
+      "discardConfirmBody": "لا يمكن التراجع عن هذا الإجراء. ستُلغى المسودة وتُزال من طلباتك المفتوحة.",
+      "discardConfirmAction": "تجاهل المسودة",
+      "discarded": "تم تجاهل المسودة"
+    },
+    "payment": {
+      "title": "دفعة مستحقة",
+      "body": "{count, plural, one {فاتورة واحدة} other {# فواتير}} بانتظار الدفع",
+      "viewStatement": "عرض كشف الحساب"
+    },
+    "edit": {
+      "title": "تحديث تفاصيل المنتج",
+      "save": "حفظ التغييرات",
+      "saved": "تم تحديث تفاصيل المنتج"
+    },
+    "errors": {
+      "SAVE_FAILED": "تعذّر الحفظ. حاول مرة أخرى.",
+      "NOT_FOUND": "الطلب غير موجود.",
+      "FORBIDDEN": "ليس لديك صلاحية.",
+      "UNAUTHORIZED": "سجّل الدخول مجدداً.",
+      "VALIDATION": "راجع النموذج وحاول مجدداً.",
+      "MANDATORY_DOCS_MISSING": "ارفع كل المستندات الإلزامية قبل إعادة التقديم.",
+      "MAX_RESUBMISSIONS": "تم بلوغ الحد الأقصى لإعادة التقديم.",
+      "NO_FILE": "اختر ملفاً أولاً.",
+      "MIME_REJECTED": "نوع الملف غير مقبول.",
+      "FILE_TOO_LARGE": "الملف أكبر من الحد المسموح.",
+      "DOC_SLOT_NOT_FOUND": "خانة المستند غير موجودة.",
+      "CREDIT_OVER_LIMIT": "بلغت مؤسستك الحد الائتماني. تواصل مع الشؤون المالية في أطلس للمتابعة.",
+      "INVALID_STATE": "لا يمكنك إرسال رسائل على هذا الطلب حالياً.",
+      "ATTR_REQUIRED": "أكمل كل خصائص المنتج الإلزامية.",
+      "ATTR_INVALID": "واحدة أو أكثر من خصائص المنتج غير صالحة.",
+      "FAULT_MISSING": "تعذّر إعادة التقديم — سبب الإرجاع ناقص. تواصل مع أطلس.",
+      "NON_STACKABLE": "أزل القسيمة الحالية قبل تطبيق قسيمة أخرى.",
+      "INFECTED_FILE": "مستند لم يجتز فحص الأمان. احذفه وارفعه من جديد."
+    }
+  },
+  "reports": {
+    "pageDescription": "تقارير المطابقة الصادرة والمغلقة لمؤسستك.",
+    "unavailableTitle": "التقارير غير متاحة",
+    "unavailableDescription": "اربط قاعدة البيانات وسجّل الدخول كمستخدم عميل.",
+    "year": "السنة",
+    "empty": "لا تقارير صادرة في هذه السنة بعد.",
+    "download": "PDF",
+    "open": "فتح",
+    "verify": "تحقق",
+    "columns": {
+      "requestNo": "الطلب",
+      "product": "المنتج",
+      "issuedAt": "الإصدار",
+      "state": "الحالة",
+      "actions": "إجراءات"
+    }
+  },
+  "support": {
+    "pageDescription": "تواصل مع أطلس أو انتقل إلى الأدوات التي تزيل العوائق عادةً.",
+    "contactTitle": "تواصل مع أطلس",
+    "contactBody": "دعم الاستلام التنظيمي والمالية لمساحة عملك.",
+    "org": "الجهة",
+    "hours": "ساعات العمل",
+    "hoursValue": "الأحد–الخميس · ٠٩:٠٠–١٧:٠٠ بتوقيت السعودية",
+    "emailCta": "مراسلة الدعم",
+    "mailSubject": "دعم أطلس COC",
+    "helpTitle": "روابط سريعة",
+    "helpReturned": "الطلبات المُرجَعة",
+    "helpReturnedBody": "صحّح الأعمال الفنية أو النواقص وأعد التقديم.",
+    "helpStatement": "كشف الحساب",
+    "helpStatementBody": "الفواتير والمدفوعات وتحميل PDF.",
+    "helpCompany": "ملف الشركة",
+    "helpCompanyBody": "أبقِ السجل والضريبة والعنوان جاهزين للطباعة."
+  },
+  "auth": {
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "loginFailed": "تعذر تسجيل الدخول. تحقق من بياناتك وحاول مرة أخرى.",
+    "signedInAs": "مسجّل كـ"
+  }
+}

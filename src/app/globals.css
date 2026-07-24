@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --atlas-green: #519e53;
+  --atlas-green-600: #3e7c40;
+  --atlas-green-300: #6bb56d;
+  --atlas-green-tint: #eef5f0;
+  --ink-900: #1c2229;
+  --ink-800: #252821;
+  --ink-500: #4d4d4d;
+  --line: #dddddd;
+  --surface: #ffffff;
+  --surface-alt: #f7f9f7;
+  --state-ok: #1f7a4d;
+  --state-bad: #b3261e;
+  --state-warn: #b45309;
+  --state-neutral: #6b7280;
+  --state-info: #2563eb;
+  --state-gap: #7c3aed;
+  --elevation: 0 1px 2px rgb(28 34 41 / 0.06);
+  --radius: 8px;
+  --radius-card: 12px;
+  --background: var(--surface);
+  --foreground: var(--ink-800);
+  --primary: var(--atlas-green);
+  --primary-foreground: #ffffff;
+  --muted: var(--surface-alt);
+  --muted-foreground: var(--ink-500);
+  --border: var(--line);
+  --ring: var(--atlas-green-300);
+  --card: var(--surface);
+  --card-foreground: var(--ink-800);
+  --accent: var(--atlas-green-tint);
+  --accent-foreground: var(--ink-900);
+  --destructive: var(--state-bad);
+  --destructive-foreground: #ffffff;
+  --input: var(--line);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink-800);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-input: var(--input);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-atlas-green: var(--atlas-green);
+  --color-atlas-green-600: var(--atlas-green-600);
+  --color-atlas-green-300: var(--atlas-green-300);
+  --color-atlas-green-tint: var(--atlas-green-tint);
+  --color-ink-900: var(--ink-900);
+  --color-ink-800: var(--ink-800);
+  --color-ink-500: var(--ink-500);
+  --color-line: var(--line);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-state-ok: var(--state-ok);
+  --color-state-bad: var(--state-bad);
+  --color-state-warn: var(--state-warn);
+  --color-state-neutral: var(--state-neutral);
+  --color-state-info: var(--state-info);
+  --color-state-gap: var(--state-gap);
+  --font-sans: var(--font-montserrat-arabic), var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  --radius-sm: 6px;
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-card);
+  --shadow-elevation: var(--elevation);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-surface text-ink-800 font-sans;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-atlas-green;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .font-data {
+    font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  }
+
+  .sla-hatch {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 4px,
+      color-mix(in srgb, var(--state-neutral) 25%, transparent) 4px,
+      color-mix(in srgb, var(--state-neutral) 25%, transparent) 8px
+    );
+  }
+
+  .atlas-pulse {
+    animation: atlas-pulse 2s ease-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .atlas-pulse {
+      animation: none;
+    }
+  }
+}
+
+@keyframes atlas-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--atlas-green) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--atlas-green) 0%, transparent);
+  }
+}

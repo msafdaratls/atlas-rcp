@@ -1,0 +1,1127 @@
+{
+  "common": {
+    "appName": "Atlas COC",
+    "search": "Search",
+    "commandPalette": "Command palette",
+    "notifications": "Notifications",
+    "unreadCount": "{count} unread",
+    "localeAr": "ع",
+    "localeEn": "EN",
+    "userMenu": "User menu",
+    "signOut": "Sign out",
+    "profile": "Profile",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "copied": "Copied",
+    "copyFailed": "Could not copy. Try again.",
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "exportCsv": "Export CSV",
+    "columns": "Columns",
+    "filters": "Filters",
+    "clearFilters": "Clear filters",
+    "noResults": "No results",
+    "retry": "Try again",
+    "rowsSelected": "{count} row(s) selected",
+    "pageOf": "Page {page} of {pageCount}",
+    "previous": "Previous",
+    "next": "Next",
+    "preview": "Preview",
+    "download": "Download",
+    "version": "v{version}",
+    "versionHistory": "Version history",
+    "uploadedBy": "Uploaded by {name}",
+    "fileSize": "{size}",
+    "paused": "Paused",
+    "remaining": "{time} remaining",
+    "overdue": "{time} overdue",
+    "slaUnits": {
+      "d": "d",
+      "h": "h",
+      "m": "m",
+      "dayHour": "{days}d {hours}h"
+    },
+    "queueDepth": "{count} waiting",
+    "breadcrumbs": "Breadcrumbs",
+    "actions": "Actions"
+  },
+  "nav": {
+    "client": {
+      "dashboard": "Dashboard",
+      "newRequest": "New request",
+      "myRequests": "My requests",
+      "reports": "Reports",
+      "statement": "Statement",
+      "company": "Company profile",
+      "support": "Support"
+    },
+    "admin": {
+      "dashboard": "Dashboard",
+      "workQueues": "Work queues",
+      "requests": "Requests",
+      "clients": "Clients",
+      "catalogue": "Catalogue",
+      "coupons": "Coupons",
+      "finance": "Finance",
+      "quality": "Quality",
+      "analytics": "Analytics",
+      "settings": "Settings"
+    }
+  },
+  "states": {
+    "DRAFT": "Draft",
+    "SUBMITTED": "Submitted",
+    "UNDER_INTAKE_REVIEW": "Under intake review",
+    "RETURNED_TO_CLIENT": "Returned to client",
+    "ACCEPTED": "Accepted",
+    "ASSESSMENT_QUEUED": "Assessment queued",
+    "ASSESSMENT_RUNNING": "Assessment running",
+    "TECHNICAL_REVIEW": "Technical review",
+    "DECISION": "Decision",
+    "REPORT_ISSUED": "Report issued",
+    "CLOSED": "Closed",
+    "CANCELLED": "Cancelled",
+    "ON_HOLD": "On hold"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "bellLabel": "Notifications",
+    "pageDescription": "In-app alerts for requests, invoices, and SLA events.",
+    "empty": "No notifications yet.",
+    "markAllRead": "Mark all read",
+    "viewAll": "View all notifications",
+    "openLink": "Open",
+    "unreadCount": "{count} unread"
+  },
+  "statusRail": {
+    "title": "Status rail",
+    "empty": "No events yet. The rail appears after the first state transition.",
+    "by": "by {name}",
+    "reason": "Return reason",
+    "fault": "Fault attribution",
+    "CLIENT_FAULT": "Client fault",
+    "ATLAS_FAULT": "Atlas fault",
+    "REGULATORY_CHANGE": "Regulatory change"
+  },
+  "empty": {
+    "defaultTitle": "Nothing here yet",
+    "defaultDescription": "Use the action below to create the first item.",
+    "noOpenRequestsTitle": "No open requests",
+    "noOpenRequestsDescription": "Start a new conformity assessment request."
+  },
+  "command": {
+    "placeholder": "Jump to a request, client, or run an action…",
+    "noResults": "No matching results",
+    "groupRequests": "Requests",
+    "groupClients": "Clients",
+    "groupActions": "Actions",
+    "jumpToRequest": "Go to request {number}",
+    "jumpToClient": "Go to client {name}",
+    "actionNewRequest": "Create new request",
+    "actionOpenStatement": "Open statement of account"
+  },
+  "shell": {
+    "clientWorkspace": "Client workspace",
+    "adminConsole": "Atlas console",
+    "globalSearchPlaceholder": "Search requests and reports…"
+  },
+  "landing": {
+    "headline": "Certificate of Conformity",
+    "body": "Atlas conformity assessment portal — Arabic-first, ISO/IEC 17020 & 17065 aligned.",
+    "signIn": "Sign in",
+    "verifyCta": "Verify certificate",
+    "clientPortal": "Client portal",
+    "adminConsole": "Admin console",
+    "signInPending": "Sign in with your Atlas or client account.",
+    "verifyTitle": "Verify report",
+    "verifySubtitle": "Enter the verification code on the report or scan the QR code.",
+    "verifyPlaceholder": "ATL-FS-2026-000000",
+    "verifySubmit": "Verify",
+    "verifyEmpty": "Enter a code to check report status.",
+    "verifyNotFound": "No report found for this code. Check the code and try again.",
+    "verifiedTitle": "Verified — report is genuine",
+    "verifiedRequestNo": "Request number",
+    "verifiedProduct": "Product",
+    "verifiedOrg": "Issued to",
+    "verifiedService": "Service",
+    "verifiedIssuedAt": "Issued on"
+  },
+  "company": {
+    "pageDescription": "These details print on regulatory reports and invoices. Save explicitly — nothing autosaves.",
+    "unavailableTitle": "Company profile unavailable",
+    "unavailableDescription": "Connect PostgreSQL, run migrations and seed, then reopen this page.",
+    "wrongPortalTitle": "Client company profile",
+    "wrongPortalDescription": "You are signed in as Atlas staff. Open the admin portal to continue, or sign in with a client organisation account.",
+    "forbiddenDescription": "You do not have permission to view this company profile.",
+    "saveChanges": "Save changes",
+    "cancel": "Cancel",
+    "tabs": {
+      "identity": "Identity",
+      "contact": "Contact & address",
+      "users": "Users",
+      "preferences": "Preferences"
+    },
+    "fields": {
+      "nameEn": "Company name (English)",
+      "nameAr": "Company name (Arabic)",
+      "crNumber": "CR number",
+      "vatNumber": "VAT number",
+      "website": "Website",
+      "email": "Primary email",
+      "phone": "Primary phone",
+      "addressLine1": "Address line 1",
+      "addressLine2": "Address line 2",
+      "city": "City",
+      "region": "Region",
+      "postalCode": "Postal code",
+      "country": "Country",
+      "nationalAddress": "National Address",
+      "logo": "Logo",
+      "locale": "Language",
+      "notifications": "Notifications",
+      "users": "Users",
+      "role": "Role",
+      "status": "Status"
+    },
+    "logo": {
+      "dropTitle": "Drop your company logo here",
+      "dropHint": "PNG or JPG · max 2 MB · cropped to square",
+      "browse": "Choose file",
+      "previewLight": "Topbar preview (light)",
+      "previewGreen": "Topbar preview (Atlas green)",
+      "topbarSample": "Your workspace",
+      "cropTitle": "Crop logo to square",
+      "zoom": "Zoom",
+      "applyCrop": "Apply crop",
+      "invalidType": "Use PNG or JPG only.",
+      "tooLarge": "Logo must be 2 MB or smaller.",
+      "cropFailed": "Could not crop the image. Try another file."
+    },
+    "address": {
+      "previewTitle": "Report address preview",
+      "saudiArabia": "Kingdom of Saudi Arabia",
+      "nationalAddress": "National Address"
+    },
+    "users": {
+      "help": "Owners manage billing and users. Request users create and track requests. Finance sees invoices and the statement only.",
+      "invite": "Invite user",
+      "sendInvite": "Send invite",
+      "colName": "User",
+      "role": "Role",
+      "status": "Status",
+      "lastLogin": "Last login",
+      "deactivate": "Deactivate"
+    },
+    "roles": {
+      "CLIENT_OWNER": "Owner — manages billing and users",
+      "CLIENT_USER": "Requests — creates and tracks requests",
+      "CLIENT_FINANCE": "Finance — sees invoices and statement only"
+    },
+    "status": {
+      "ACTIVE": "Active",
+      "SUSPENDED": "Suspended",
+      "DISABLED": "Deactivated"
+    },
+    "preferences": {
+      "language": "Interface language",
+      "langAr": "Arabic",
+      "langEn": "English",
+      "event": "Event",
+      "email": "Email",
+      "inApp": "In-app",
+      "legalLockedHint": "Legal and financial notices stay on so invoice and statement events are never missed.",
+      "events": {
+        "REQUEST_RETURNED": "Request returned to client",
+        "REPORT_ISSUED": "Report issued",
+        "SLA_AT_RISK": "SLA at risk (80% elapsed)",
+        "INVOICE_ISSUED": "Invoice issued",
+        "PAYMENT_RECEIVED": "Payment received",
+        "STATEMENT_OVERDUE": "Statement overdue",
+        "CREDIT_LIMIT": "Credit limit reached"
+      }
+    },
+    "toast": {
+      "savedDiff": "Saved. Updated: {fields}.",
+      "savedNoChanges": "Saved. No fields changed.",
+      "userInvited": "Invite sent. Credentials were emailed to the user.",
+      "userInvitedWithPassword": "Invite created. Temporary password: {password}",
+      "inviteSent": "Invite sent. Credentials were emailed to the user."
+    },
+    "errors": {
+      "generic": "Check the highlighted fields and try again.",
+      "VALIDATION": "Some fields need attention before saving.",
+      "UNAUTHORIZED": "Sign in again to continue.",
+      "FORBIDDEN": "You do not have permission for this action.",
+      "NOT_FOUND": "We could not find that record.",
+      "SAVE_FAILED": "Could not save changes. Try again.",
+      "NO_FILE": "Choose a logo file first.",
+      "INVALID_LOGO": "Logo must be PNG or JPG and at most 2 MB.",
+      "EMAIL_TAKEN": "That email already belongs to a user.",
+      "EMAIL_UNAVAILABLE": "That email cannot be used.",
+      "LAST_OWNER": "This is the last owner — assign ownership elsewhere first.",
+      "CANNOT_DEMOTE_SELF": "You cannot remove your own owner role.",
+      "CANNOT_DEACTIVATE_SELF": "You cannot deactivate your own account.",
+      "INVALID_SAUDI_PHONE": "Use a Saudi number like +9665XXXXXXXX.",
+      "INVALID_VAT": "VAT must be 15 digits starting with 3.",
+      "INVALID_POSTAL": "Postal code must be 5 digits.",
+      "INVALID_NATIONAL_ADDRESS": "National Address must look like ABCD1234.",
+      "INVALID_URL": "Enter a full website URL starting with https://"
+    }
+  },
+  "newRequest": {
+    "pageDescription": "Choose a service, describe the product, upload documents, then submit. Your draft is saved automatically.",
+    "unavailableTitle": "Catalogue unavailable",
+    "unavailableDescription": "Connect PostgreSQL, migrate and seed, then open New request again.",
+    "continue": "Continue",
+    "back": "Back",
+    "submitted": "Submitted {number}. Opening the request…",
+    "detailHint": "Request overview",
+    "detailBody": "Full timeline, documents and report downloads will appear here as the request advances.",
+    "steps": {
+      "1": "1 · Service",
+      "2": "2 · Product",
+      "3": "3 · Documents",
+      "4": "4 · Review"
+    },
+    "step1": {
+      "title": "Choose a service",
+      "vatLine": "VAT {vat}",
+      "slaLine": "SLA {hours}h",
+      "docsLine": "{count} required documents",
+      "whatWeCheck": "What we check"
+    },
+    "step2": {
+      "title": "Product details"
+    },
+    "step3": {
+      "title": "Upload documents",
+      "counter": "{filled} of {total} required documents",
+      "optional": "optional",
+      "additional": "Additional documents",
+      "drop": "Drop a file or click to upload",
+      "remove": "Remove file"
+    },
+    "step4": {
+      "title": "Review & submit",
+      "finalArtwork": "I confirm the artwork submitted is the final version intended for market.",
+      "submit": "Submit request"
+    },
+    "fields": {
+      "productNameEn": "Product name (English)",
+      "productNameAr": "Product name (Arabic)",
+      "brand": "Brand",
+      "select": "Select",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "enums": {
+      "capsule": "Capsule",
+      "tablet": "Tablet",
+      "chewable": "Chewable",
+      "powder": "Powder",
+      "liquid": "Liquid",
+      "softgel": "Softgel",
+      "gummy": "Gummy",
+      "sachet": "Sachet",
+      "adult": "Adult",
+      "child": "Child",
+      "pregnant": "Pregnant",
+      "athlete": "Athlete",
+      "elderly": "Elderly",
+      "leave-on": "Leave-on",
+      "rinse-off": "Rinse-off",
+      "oral-care": "Oral care",
+      "hair": "Hair",
+      "nail": "Nail",
+      "perfume": "Perfume",
+      "general": "General",
+      "children": "Children",
+      "professional": "Professional"
+    },
+    "summary": {
+      "title": "Order summary",
+      "category": "Category",
+      "service": "Service",
+      "product": "Product",
+      "docs": "Documents",
+      "draft": "Draft no.",
+      "subtotal": "Subtotal",
+      "discount": "Discount",
+      "vat": "VAT 15%",
+      "total": "Total"
+    },
+    "coupon": {
+      "label": "Coupon code",
+      "apply": "Apply coupon",
+      "remove": "Remove coupon",
+      "applied": "Coupon applied",
+      "NOT_FOUND": "No coupon matches that code.",
+      "INACTIVE": "This coupon is not active.",
+      "EXPIRED": "This coupon expired on {date}.",
+      "NOT_YET_VALID": "This coupon is not valid yet.",
+      "MIN_ORDER": "This coupon needs a higher order amount.",
+      "USAGE_EXHAUSTED": "This coupon has reached its usage limit.",
+      "PER_CLIENT_LIMIT": "Your organisation already used this coupon the maximum times.",
+      "APPLIES_COSMETICS_ONLY": "This coupon applies to cosmetics services only.",
+      "APPLIES_FOOD_ONLY": "This coupon applies to food & drugs services only.",
+      "APPLIES_CATEGORY": "This coupon does not apply to the selected category.",
+      "APPLIES_SERVICE": "This coupon does not apply to the selected service.",
+      "NEW_CLIENTS_ONLY": "This coupon is for new clients only.",
+      "CLIENT_NOT_ELIGIBLE": "This coupon is not available for your organisation.",
+      "EXCLUDES_RESUBMISSION": "This coupon cannot be used on resubmissions."
+    },
+    "errors": {
+      "SELECT_SERVICE": "Select a service item to continue.",
+      "PRODUCT_NAME": "Enter the product name in Arabic and English.",
+      "ATTRS_REQUIRED": "Complete every required product attribute.",
+      "ATTR_REQUIRED": "Complete every required product attribute.",
+      "ATTR_INVALID": "One or more product attributes are invalid.",
+      "VALIDATION": "Check the form and try again.",
+      "UNAUTHORIZED": "Sign in again to continue.",
+      "FORBIDDEN": "You do not have permission for this action.",
+      "NOT_FOUND": "We could not find that record.",
+      "SAVE_FAILED": "Could not save. Try again.",
+      "SERVICE_NOT_FOUND": "That service is no longer available.",
+      "NO_FILE": "Choose a file to upload.",
+      "DOC_SLOT_NOT_FOUND": "That document slot is invalid.",
+      "mimeRejected": "{accepted} only — you uploaded a {uploaded}",
+      "FILE_TOO_LARGE": "That file exceeds the size limit.",
+      "MANDATORY_DOCS_MISSING": "Upload every required document before submitting.",
+      "CREDIT_OVER_LIMIT": "Your organisation has reached its credit limit. Contact Atlas finance to continue submitting requests.",
+      "MAX_RESUBMISSIONS": "This request has reached the maximum number of resubmissions.",
+      "FAULT_MISSING": "Cannot resubmit — the return is missing fault attribution. Contact Atlas.",
+      "NON_STACKABLE": "Remove the existing coupon before applying another.",
+      "INFECTED_FILE": "A document failed security scanning. Remove it and upload again.",
+      "MIME_REJECTED": "That file type is not allowed."
+    }
+  },
+  "finance": {
+    "clientDescription": "Your organisation balance, invoices, and payment records. Internal ledger only — no online card checkout in this phase.",
+    "adminDescription": "Verify client payments, manage credit limits, and post adjustments. Ledger rows are append-only.",
+    "unavailableTitle": "Statement unavailable",
+    "unavailableDescription": "Sign in as a client owner or finance user with a connected database.",
+    "adminUnavailableDescription": "Sign in with an Atlas finance or system admin account to open this page.",
+    "balance": {
+      "title": "Current balance",
+      "youOwe": "You owe Atlas this amount.",
+      "inCredit": "Your account is in credit.",
+      "settled": "Balance is settled.",
+      "creditLimit": "Credit limit usage"
+    },
+    "aging": {
+      "current": "Current",
+      "d1_30": "1–30",
+      "d31_60": "31–60",
+      "d61_90": "61–90",
+      "d90_plus": "90+"
+    },
+    "tabs": {
+      "ledger": "Ledger",
+      "invoices": "Invoices",
+      "payment": "Record a payment"
+    },
+    "filters": {
+      "from": "From",
+      "to": "To"
+    },
+    "downloadStatement": "Download statement (PDF)",
+    "ledger": {
+      "date": "Date",
+      "description": "Description",
+      "reference": "Reference",
+      "debit": "Debit",
+      "credit": "Credit",
+      "balance": "Balance",
+      "empty": "No ledger entries in this range."
+    },
+    "invoices": {
+      "empty": "No invoices yet.",
+      "download": "PDF"
+    },
+    "invoiceStatus": {
+      "DRAFT": "Draft",
+      "ISSUED": "Issued",
+      "PAID": "Paid",
+      "PARTIALLY_PAID": "Partially paid",
+      "VOID": "Void"
+    },
+    "payment": {
+      "amount": "Amount (SAR)",
+      "method": "Method",
+      "reference": "Bank / transfer reference",
+      "proof": "Proof of payment",
+      "submit": "Record payment",
+      "hint": "Recorded. Atlas finance will confirm it, usually within one business day.",
+      "recorded": "Recorded. Atlas finance will confirm it, usually within one business day.",
+      "methods": {
+        "BANK_TRANSFER": "Bank transfer",
+        "CARD": "Card",
+        "CASH": "Cash",
+        "CREDIT_NOTE": "Credit note"
+      }
+    },
+    "admin": {
+      "tabs": {
+        "queue": "Payments to verify",
+        "balances": "Client balances",
+        "adjust": "Adjustments"
+      },
+      "queueEmpty": "No payments awaiting verification.",
+      "viewProof": "View proof",
+      "confirm": "Confirm payment",
+      "reject": "Reject",
+      "rejectReason": "Rejection reason",
+      "confirmed": "Payment confirmed and allocated.",
+      "rejected": "Payment rejected.",
+      "fifoHint": "Confirm uses FIFO allocation against open invoices by default. Partial allocation is allowed.",
+      "sortBy": "Sort by",
+      "sortOverdue": "Days overdue",
+      "sortBalance": "Balance",
+      "client": "Client",
+      "balance": "Balance",
+      "daysOverdue": "Days overdue",
+      "creditLimit": "Credit limit",
+      "autoHold": "Auto-hold over limit",
+      "saveLimit": "Save",
+      "limitSaved": "Credit limit saved.",
+      "entryType": "Entry type",
+      "entryTypes": {
+        "CREDIT_NOTE": "Credit note",
+        "ADJUSTMENT": "Adjustment",
+        "REFUND": "Refund",
+        "WRITE_OFF": "Write-off"
+      },
+      "side": "Side",
+      "sideCredit": "Credit (reduces balance owed)",
+      "sideDebit": "Debit (increases balance owed)",
+      "reasonEn": "Reason (English) — required",
+      "reasonAr": "Reason (Arabic) — required",
+      "postEntry": "Post ledger entry",
+      "adjustmentPosted": "Ledger entry posted."
+    },
+    "errors": {
+      "VALIDATION": "Check the form and try again.",
+      "UNAUTHORIZED": "Sign in again to continue.",
+      "FORBIDDEN": "You do not have permission for this action.",
+      "NOT_FOUND": "We could not find that record.",
+      "SAVE_FAILED": "Could not save. Try again.",
+      "INVALID_PROOF": "Proof must be PDF, PNG or JPG.",
+      "FILE_TOO_LARGE": "That file exceeds the size limit.",
+      "ALLOCATION_EXCEEDS_PAYMENT": "Allocations exceed the payment amount.",
+      "UNEXPECTED": "Something went wrong. Reference {reference}. Try again or contact support."
+    }
+  },
+  "returnReasons": {
+    "MISSING_ARTWORK": "Missing artwork",
+    "ILLEGIBLE_SCAN": "Illegible scan",
+    "LOW_RESOLUTION": "Low resolution artwork",
+    "WRONG_PRODUCT_TYPE": "Wrong product type",
+    "MISSING_COA": "Missing CoA",
+    "MISSING_FORMULA": "Missing formula",
+    "INCOMPLETE_FORMULA": "Incomplete formula",
+    "EXPIRED_DOCUMENT": "Expired document",
+    "WRONG_LANGUAGE": "Wrong language",
+    "MISMATCHED_PRODUCT": "Mismatched product",
+    "OTHER": "Other"
+  },
+  "dashboard": {
+    "client": {
+      "pageDescription": "Track returns, open work, and start a new conformity request.",
+      "financePageDescription": "Open balance, overdue invoices, and recent billing activity.",
+      "unavailableTitle": "Dashboard unavailable",
+      "unavailableDescription": "Connect the database and sign in as a client user.",
+      "accessDenied": {
+        "title": "Access denied",
+        "body": "You do not have permission to open that page. Choose another item from the navigation, or ask your organisation owner if you need access."
+      },
+      "attentionTitle": "Needs your attention",
+      "attentionFallback": "Returned for corrections",
+      "resubmit": "Open & resubmit",
+      "stats": {
+        "open": "Open requests",
+        "inReview": "In review",
+        "reports": "Reports this year",
+        "balance": "Current balance"
+      },
+      "financeStats": {
+        "balance": "Open balance",
+        "openInvoices": "Open invoices",
+        "overdue": "Overdue amount"
+      },
+      "financeInvoicesTitle": "Recent invoices",
+      "financeInvoicesEmpty": "No invoices yet.",
+      "viewStatement": "View statement",
+      "openInvoice": "Open",
+      "dueAt": "Due",
+      "invoiceStatus": {
+        "DRAFT": "Draft",
+        "ISSUED": "Issued",
+        "PARTIALLY_PAID": "Partially paid",
+        "PAID": "Paid",
+        "VOID": "Void"
+      },
+      "startTitle": "Start a new request",
+      "startCta": "New request",
+      "activityTitle": "Recent activity",
+      "activityEmpty": "No activity yet. Submit a request to see the feed."
+    },
+    "admin": {
+      "title": "Operations dashboard",
+      "pageDescription": "Queue health, intake quality, and revenue — last 30–90 days.",
+      "unavailableTitle": "Dashboard unavailable",
+      "unavailableDescription": "Sign in as Atlas staff with a connected database (e.g. admin@atlas.com).",
+      "queues": {
+        "intake": "Intake",
+        "assessment": "Assessment",
+        "technical": "Technical review",
+        "decision": "Decision",
+        "returned": "Returned",
+        "onHold": "On hold"
+      },
+      "atRisk": "{count} SLA at risk",
+      "atRiskNone": "No SLA at risk",
+      "chartTitle": "Received vs closed · 30 days",
+      "received": "Received",
+      "closed": "Closed",
+      "returnReasonsTitle": "Top return reasons · 90 days",
+      "returnReasonsHint": "Intake-quality signal — fix the form where these cluster.",
+      "returnReasonsEmpty": "No returns with reason codes in the last 90 days.",
+      "revenueTitle": "Revenue · {month}",
+      "revenueOriginal": "Original submissions",
+      "revenueResubmission": "Resubmissions",
+      "revenueTotal": "Total",
+      "overLimitTitle": "Clients over credit limit",
+      "overLimitEmpty": "No clients over their credit limit."
+    }
+  },
+  "adminOps": {
+    "unavailableTitle": "Admin view unavailable",
+    "unavailableDescription": "Sign in as Atlas staff (e.g. admin@atlas.com).",
+    "accessDenied": {
+      "title": "Access denied",
+      "body": "You do not have permission to open that page. Choose another item from the navigation, or ask an administrator if you need access."
+    },
+    "queues": {
+      "pageDescription": "Work by stage. Open a request to advance or return it.",
+      "empty": "No requests in this queue."
+    },
+    "requests": {
+      "pageDescription": "All conformity requests across client organisations.",
+      "empty": "No requests match these filters.",
+      "open": "Open",
+      "allStates": "All states",
+      "filterState": "State",
+      "columns": {
+        "requestNo": "Request",
+        "client": "Client",
+        "product": "Product",
+        "state": "State",
+        "sla": "SLA",
+        "updated": "Updated",
+        "actions": "Actions"
+      }
+    },
+    "requestDetail": {
+      "pageDescription": "Advance the lifecycle, return to client, or put on hold.",
+      "client": "Client",
+      "service": "Service",
+      "assign": "Assignee",
+      "unassigned": "Unassigned",
+      "actionsTitle": "Lifecycle actions",
+      "advance": "Advance to {state}",
+      "returnTitle": "Return to client",
+      "returnReason": "Reason",
+      "returnFault": "Fault",
+      "returnNote": "Note",
+      "returnSubmit": "Return to client",
+      "hold": "Put on hold",
+      "resume": "Resume intake",
+      "issueReport": "Issue report",
+      "close": "Close request",
+      "cancel": "Cancel request",
+      "comment": "Internal note",
+      "commentPlaceholder": "Visible to Atlas staff only.",
+      "commentSubmit": "Add note",
+      "success": "Request updated",
+      "documents": "Documents",
+      "documentsEmpty": "No documents.",
+      "timeline": "Timeline",
+      "submission": "Submission #{n}",
+      "clientComments": "Client communication",
+      "internalComments": "Internal notes",
+      "commentsEmpty": "No messages with the client yet.",
+      "internalCommentsEmpty": "No internal notes yet.",
+      "sendToClient": "Send to client",
+      "messagePlaceholder": "Write a message the client will see...",
+      "messageSent": "Message sent",
+      "errors": {
+        "FORBIDDEN": "You do not have permission.",
+        "UNAUTHORIZED": "Sign in again to continue.",
+        "NOT_FOUND": "Request not found.",
+        "INVALID_TRANSITION": "That transition is not allowed from the current state.",
+        "RETURN_REASON_REQUIRED": "Choose a reason and fault attribution to return the request.",
+        "VALIDATION": "Check the form and try again.",
+        "SAVE_FAILED": "Could not save. Try again.",
+        "INVALID_STATE": "You can't message on this request yet.",
+        "CONFLICT": "This request changed while you were working. Refresh and try again."
+      }
+    },
+    "clients": {
+      "pageDescription": "Client organisations, credit posture, and open work.",
+      "empty": "No client organisations yet.",
+      "open": "Open",
+      "columns": {
+        "name": "Organisation",
+        "balance": "Balance",
+        "creditLimit": "Credit limit",
+        "openRequests": "Open requests",
+        "actions": "Actions"
+      }
+    },
+    "clientDetail": {
+      "pageDescription": "360° view — profile, requests, and ledger snapshot.",
+      "profile": "Profile",
+      "requests": "Requests",
+      "finance": "Finance snapshot",
+      "email": "Email",
+      "phone": "Phone",
+      "cr": "CR",
+      "vat": "VAT",
+      "balance": "Balance",
+      "creditLimit": "Credit limit",
+      "users": "Users"
+    },
+    "catalogue": {
+      "pageDescription": "Service catalogue used by the client new-request wizard.",
+      "empty": "No catalogue items.",
+      "toggle": "Toggle active",
+      "active": "Active",
+      "inactive": "Inactive",
+      "columns": {
+        "code": "Code",
+        "name": "Name",
+        "price": "Base price",
+        "sla": "SLA (h)",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "success": "Catalogue updated",
+      "errors": {
+        "VALIDATION": "Check the form and try again.",
+        "UNAUTHORIZED": "Sign in again to continue.",
+        "FORBIDDEN": "You do not have permission for this action.",
+        "NOT_FOUND": "We could not find that record.",
+        "SAVE_FAILED": "Could not save. Try again."
+      },
+      "create": {
+        "button": "Create service",
+        "dialogTitle": "Create service",
+        "steps": {
+          "1": "1 · Category",
+          "2": "2 · Service details",
+          "3": "3 · Attributes",
+          "4": "4 · Required documents",
+          "5": "5 · Review"
+        },
+        "back": "Back",
+        "continue": "Continue",
+        "submit": "Create service",
+        "step1": {
+          "mainCategory": "Main category",
+          "subCategory": "Subcategory",
+          "selectMain": "Select a main category",
+          "selectSub": "Select a subcategory"
+        },
+        "step2": {
+          "code": "Code",
+          "nameEn": "Name (English)",
+          "nameAr": "Name (Arabic)",
+          "descEn": "Description (English)",
+          "descAr": "Description (Arabic)",
+          "basePrice": "Base price (SAR)",
+          "slaHours": "SLA (hours)",
+          "vatRate": "VAT rate",
+          "resubmissionPricePct": "Resubmission price %",
+          "freeResubmissions": "Free resubmissions",
+          "maxResubmissions": "Max resubmissions",
+          "active": "Active"
+        },
+        "step3": {
+          "attributesTitle": "Product attributes",
+          "attributesHint": "Optional fields collected on each request (product name is separate).",
+          "attributesEmpty": "No attributes yet. Add keys below, or continue with none.",
+          "addAttr": "Add attribute",
+          "removeAttr": "Remove attribute",
+          "attrKey": "Key",
+          "attrKeyPlaceholder": "netWeight",
+          "attrType": "Type",
+          "attrTypes": {
+            "string": "Text",
+            "number": "Number",
+            "boolean": "Yes / No"
+          },
+          "attrTitleEn": "Label (English)",
+          "attrTitleAr": "Label (Arabic)",
+          "attrRequired": "Required",
+          "checkSetsTitle": "Check sets",
+          "checkSetsHint": "Optional assessment check groups stored on the service.",
+          "checkSetsEmpty": "No check sets yet. Add one below, or continue with none.",
+          "addCheckSet": "Add check set",
+          "removeCheckSet": "Remove check set",
+          "checkCode": "Code",
+          "checkTitleEn": "Title (English)",
+          "checkTitleAr": "Title (Arabic)"
+        },
+        "step4": {
+          "empty": "No required documents yet. Add one below, or continue with none.",
+          "add": "Add document",
+          "remove": "Remove document",
+          "code": "Code",
+          "nameEn": "Name (English)",
+          "nameAr": "Name (Arabic)",
+          "mandatory": "Mandatory",
+          "acceptedMimeTypes": "Accepted file types",
+          "maxSizeMb": "Max size (MB)",
+          "mimeTypes": {
+            "pdf": "PDF",
+            "png": "PNG",
+            "jpeg": "JPG"
+          }
+        },
+        "step5": {
+          "category": "Category",
+          "service": "Service",
+          "price": "Base price",
+          "sla": "SLA",
+          "attributes": "Attributes",
+          "checkSets": "Check sets",
+          "documents": "Required documents"
+        },
+        "success": "Service created",
+        "errors": {
+          "VALIDATION": "Check the form and try again.",
+          "UNAUTHORIZED": "Sign in again to continue.",
+          "FORBIDDEN": "You do not have permission for this action.",
+          "NOT_FOUND": "That subcategory could not be found.",
+          "CODE_TAKEN": "That code is already used in this subcategory.",
+          "SAVE_FAILED": "Could not save. Try again."
+        }
+      }
+    },
+    "coupons": {
+      "pageDescription": "Discount codes and usage caps.",
+      "empty": "No coupons.",
+      "pause": "Pause",
+      "activate": "Activate",
+      "columns": {
+        "code": "Code",
+        "name": "Name",
+        "value": "Value",
+        "appliesTo": "Applies to",
+        "clientScope": "Client scope",
+        "usage": "Usage",
+        "valid": "Valid",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "success": "Coupon updated",
+      "statusLabels": {
+        "ACTIVE": "Active",
+        "PAUSED": "Paused",
+        "EXPIRED": "Expired"
+      },
+      "percentValue": "{value}%",
+      "usageWithLimit": "{used} / {limit}",
+      "usageUnlimited": "{used} (no limit)",
+      "errors": {
+        "VALIDATION": "Check the form and try again.",
+        "UNAUTHORIZED": "Sign in again to continue.",
+        "FORBIDDEN": "You do not have permission for this action.",
+        "NOT_FOUND": "We could not find that record.",
+        "SAVE_FAILED": "Could not save. Try again."
+      },
+      "create": {
+        "button": "Create coupon",
+        "dialogTitle": "Create coupon",
+        "code": "Code",
+        "nameEn": "Name (English)",
+        "nameAr": "Name (Arabic)",
+        "discountType": "Discount type",
+        "discountTypes": {
+          "PERCENT": "Percentage",
+          "FIXED": "Fixed amount"
+        },
+        "value": "Value",
+        "maxDiscountAmount": "Max discount amount",
+        "minOrderAmount": "Min order amount",
+        "appliesTo": "Applies to",
+        "appliesToOptions": {
+          "ALL": "All catalogue",
+          "MAIN_CATEGORY": "Main categories",
+          "SUB_CATEGORY": "Subcategories",
+          "SERVICE_ITEM": "Service items"
+        },
+        "appliesToIds": "Select catalogue targets",
+        "appliesToIdsEmpty": "No catalogue targets available.",
+        "clientScope": "Client scope",
+        "clientScopeOptions": {
+          "ALL": "All clients",
+          "SPECIFIC": "Specific clients",
+          "NEW_CLIENTS_ONLY": "New clients only"
+        },
+        "clientIds": "Select clients",
+        "clientIdsEmpty": "No active clients available.",
+        "validFrom": "Valid from",
+        "validTo": "Valid to",
+        "totalUsageLimit": "Total usage limit",
+        "perClientLimit": "Per-client limit",
+        "stackable": "Stackable with other coupons",
+        "excludesResubmissions": "Excludes resubmissions",
+        "cancel": "Cancel",
+        "submit": "Create coupon",
+        "success": "Coupon created",
+        "errors": {
+          "VALIDATION": "Check the form and try again.",
+          "UNAUTHORIZED": "Sign in again to continue.",
+          "FORBIDDEN": "You do not have permission for this action.",
+          "CODE_TAKEN": "That coupon code is already in use.",
+          "INVALID_DATE_RANGE": "Valid-to date must be after valid-from date.",
+          "SAVE_FAILED": "Could not save. Try again."
+        }
+      }
+    },
+    "quality": {
+      "pageDescription": "Return-quality signals and recent audit activity.",
+      "returnsTitle": "Returns · 90 days",
+      "auditTitle": "Recent audit log",
+      "emptyReturns": "No returns with reason codes.",
+      "emptyAudit": "No audit entries yet.",
+      "systemActor": "System",
+      "columns": {
+        "reason": "Reason",
+        "count": "Count"
+      },
+      "auditColumns": {
+        "when": "When",
+        "actor": "Actor",
+        "action": "Action",
+        "entity": "Entity"
+      }
+    },
+    "analytics": {
+      "pageDescription": "Queue distribution, SLA exposure, and throughput mix.",
+      "hint": "Analytics view of the same operational signals as the dashboard.",
+      "queueDistribution": "Queue distribution",
+      "slaSummary": "SLA exposure",
+      "slaAtRiskTotal": "At risk across queues",
+      "slaAtRiskNone": "No SLA risk in active queues",
+      "depthLabel": "Depth",
+      "atRiskLabel": "At risk",
+      "throughputTitle": "Throughput · 30 days",
+      "received": "Received",
+      "closed": "Closed",
+      "returnMixTitle": "Return reason mix · 90 days",
+      "returnMixEmpty": "No return reasons in the last 90 days.",
+      "revenueMixTitle": "Revenue mix · {month}",
+      "revenueOriginal": "Original submissions",
+      "revenueResubmission": "Resubmissions",
+      "revenueTotal": "Total"
+    },
+    "settings": {
+      "pageDescription": "Atlas organisation profile and platform defaults.",
+      "orgTitle": "Atlas organisation",
+      "save": "Save organisation",
+      "success": "Settings saved",
+      "nameEn": "Name (English)",
+      "nameAr": "Name (Arabic)",
+      "email": "Email",
+      "phone": "Phone",
+      "website": "Website",
+      "tabs": {
+        "organisation": "Organisation",
+        "staff": "Staff"
+      },
+      "staff": {
+        "help": "System admins manage staff accounts and roles. Other Atlas roles can view the staff list only.",
+        "invite": "Invite staff",
+        "sendInvite": "Send invite",
+        "colName": "Staff member",
+        "status": "Status",
+        "lastLogin": "Last login",
+        "deactivate": "Deactivate",
+        "confirmDeactivate": "Deactivate this staff account? They will no longer be able to sign in.",
+        "roleUpdated": "Role updated.",
+        "deactivated": "Staff account deactivated.",
+        "invitedWithPassword": "Invite created. Temporary password: {password}",
+        "inviteSent": "Invite sent. Credentials were emailed to the staff member.",
+        "fields": {
+          "email": "Email",
+          "role": "Role",
+          "fullNameEn": "Full name (English)",
+          "fullNameAr": "Full name (Arabic)"
+        },
+        "roles": {
+          "INTAKE_OFFICER": "Intake officer",
+          "TECHNICAL_REVIEWER": "Technical reviewer",
+          "DECISION_MAKER": "Decision maker",
+          "FINANCE": "Finance",
+          "CATALOGUE_MANAGER": "Catalogue manager",
+          "QUALITY_MANAGER": "Quality manager",
+          "SYSTEM_ADMIN": "System admin"
+        },
+        "statusValues": {
+          "ACTIVE": "Active",
+          "SUSPENDED": "Suspended",
+          "DISABLED": "Deactivated"
+        },
+        "errors": {
+          "VALIDATION": "Check the form and try again.",
+          "UNAUTHORIZED": "Sign in again to continue.",
+          "FORBIDDEN": "You do not have permission for this action.",
+          "NOT_FOUND": "We could not find that staff member.",
+          "SAVE_FAILED": "Could not save. Try again.",
+          "EMAIL_TAKEN": "That email already belongs to a user.",
+          "EMAIL_UNAVAILABLE": "That email cannot be used.",
+          "CANNOT_DEACTIVATE_SELF": "You cannot deactivate your own account.",
+          "LAST_ADMIN": "This is the last system admin — assign the role elsewhere first."
+        }
+      },
+      "errors": {
+        "VALIDATION": "Check the form and try again.",
+        "UNAUTHORIZED": "Sign in again to continue.",
+        "FORBIDDEN": "You do not have permission for this action.",
+        "NOT_FOUND": "We could not find that record.",
+        "SAVE_FAILED": "Could not save. Try again."
+      }
+    },
+    "company": {
+      "pageDescription": "Atlas Support & Services organisation card.",
+      "redirectHint": "Organisation settings live under Settings."
+    }
+  },
+  "myRequests": {
+    "pageDescription": "Search and filter every conformity request for your organisation.",
+    "unavailableTitle": "Requests unavailable",
+    "unavailableDescription": "Connect the database and sign in as a client user.",
+    "filterState": "State",
+    "allStates": "All states",
+    "empty": "No requests match these filters. Start a new request or clear filters.",
+    "open": "Open",
+    "columns": {
+      "requestNo": "Request",
+      "product": "Product",
+      "state": "State",
+      "submission": "Submission",
+      "updated": "Updated",
+      "actions": "Actions"
+    }
+  },
+  "requestDetail": {
+    "pageDescription": "Timeline, documents, and actions for this request.",
+    "service": "Service",
+    "submission": "Submission #{n}",
+    "returnTitle": "Returned for corrections",
+    "returnFallback": "Atlas returned this request for corrections.",
+    "resubmit": "Resubmit request",
+    "resubmitSuccess": "Request resubmitted",
+    "uploadSuccess": "Document uploaded",
+    "replaceFile": "Replace file",
+    "noFileYet": "No file uploaded yet",
+    "noteLabel": "Note to Atlas (optional)",
+    "notePlaceholder": "Describe what you corrected",
+    "maxResubmissions": "This request has reached the maximum number of resubmissions.",
+    "documents": "Documents",
+    "documentsEmpty": "No documents uploaded yet.",
+    "comments": "Messages",
+    "commentsEmpty": "No messages yet.",
+    "sendMessage": "Send message",
+    "messagePlaceholder": "Write a message to Atlas...",
+    "messageSent": "Message sent",
+    "downloadReport": "Download report PDF",
+    "verify": "Verify publicly",
+    "draft": {
+      "title": "This request is still a draft",
+      "body": "Continue filling it in, or discard it if you no longer need it.",
+      "continue": "Continue draft",
+      "discard": "Discard draft",
+      "discardCancel": "Keep draft",
+      "discardConfirmTitle": "Discard this draft?",
+      "discardConfirmBody": "This can't be undone. The draft will be cancelled and removed from your open requests.",
+      "discardConfirmAction": "Discard draft",
+      "discarded": "Draft discarded"
+    },
+    "payment": {
+      "title": "Payment due",
+      "body": "{count, plural, one {# invoice} other {# invoices}} awaiting payment",
+      "viewStatement": "View statement"
+    },
+    "edit": {
+      "title": "Update product details",
+      "save": "Save changes",
+      "saved": "Product details updated"
+    },
+    "errors": {
+      "SAVE_FAILED": "Could not save. Try again.",
+      "NOT_FOUND": "Request not found.",
+      "FORBIDDEN": "You do not have permission.",
+      "UNAUTHORIZED": "Sign in again.",
+      "VALIDATION": "Check the form and try again.",
+      "MANDATORY_DOCS_MISSING": "Upload every mandatory document before resubmitting.",
+      "MAX_RESUBMISSIONS": "Maximum resubmissions reached.",
+      "NO_FILE": "Choose a file first.",
+      "MIME_REJECTED": "That file type is not accepted.",
+      "FILE_TOO_LARGE": "File is too large.",
+      "DOC_SLOT_NOT_FOUND": "Document slot not found.",
+      "CREDIT_OVER_LIMIT": "Your organisation has reached its credit limit. Contact Atlas finance to continue.",
+      "INVALID_STATE": "You can't message on this request yet.",
+      "ATTR_REQUIRED": "Fill every required product attribute.",
+      "ATTR_INVALID": "One or more product attributes are invalid.",
+      "FAULT_MISSING": "Cannot resubmit — the return is missing fault attribution. Contact Atlas.",
+      "NON_STACKABLE": "Remove the existing coupon before applying another.",
+      "INFECTED_FILE": "A document failed security scanning. Remove it and upload again."
+    }
+  },
+  "reports": {
+    "pageDescription": "Issued and closed conformity reports for your organisation.",
+    "unavailableTitle": "Reports unavailable",
+    "unavailableDescription": "Connect the database and sign in as a client user.",
+    "year": "Year",
+    "empty": "No reports issued in this year yet.",
+    "download": "PDF",
+    "open": "Open",
+    "verify": "Verify",
+    "columns": {
+      "requestNo": "Request",
+      "product": "Product",
+      "issuedAt": "Issued",
+      "state": "State",
+      "actions": "Actions"
+    }
+  },
+  "support": {
+    "pageDescription": "Contact Atlas or jump to the tools that usually unblock you.",
+    "contactTitle": "Contact Atlas",
+    "contactBody": "Regulatory intake and finance support for your workspace.",
+    "org": "Organisation",
+    "hours": "Hours",
+    "hoursValue": "Sun–Thu · 09:00–17:00 Arabia Standard Time",
+    "emailCta": "Email support",
+    "mailSubject": "Atlas COC support",
+    "helpTitle": "Quick links",
+    "helpReturned": "Returned requests",
+    "helpReturnedBody": "Fix artwork or missing particulars and resubmit.",
+    "helpStatement": "Statement of account",
+    "helpStatementBody": "Invoices, payments, and PDF downloads.",
+    "helpCompany": "Company profile",
+    "helpCompanyBody": "Keep CR, VAT, and address print-ready."
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "loginFailed": "Could not sign in. Check your details and try again.",
+    "signedInAs": "Signed in as"
+  }
+}

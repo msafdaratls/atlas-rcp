@@ -1,0 +1,200 @@
+"use client";
+
+import {
+  BarChart3,
+  Building2,
+  ClipboardList,
+  FilePlus2,
+  FileText,
+  FolderKanban,
+  Headphones,
+  LayoutDashboard,
+  type LucideIcon,
+  Package,
+  Receipt,
+  Settings,
+  Shield,
+  TicketPercent,
+  Users,
+} from "lucide-react";
+import type { Role } from "@prisma/client";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+
+export type NavItem = {
+  key: string;
+  href: string;
+  icon: LucideIcon;
+  /** Roles allowed to see this item. Omitted = visible to every role in the shell. */
+  roles?: Role[];
+};
+
+const CLIENT_NAV: NavItem[] = [
+  { key: "dashboard", href: "/dashboard", icon: LayoutDashboard },
+  {
+    key: "newRequest",
+    href: "/requests/new",
+    icon: FilePlus2,
+    roles: ["CLIENT_OWNER", "CLIENT_USER"],
+  },
+  {
+    key: "myRequests",
+    href: "/requests",
+    icon: ClipboardList,
+    roles: ["CLIENT_OWNER", "CLIENT_USER"],
+  },
+  {
+    key: "reports",
+    href: "/reports",
+    icon: FileText,
+    roles: ["CLIENT_OWNER", "CLIENT_USER"],
+  },
+  {
+    key: "statement",
+    href: "/statement",
+    icon: Receipt,
+    roles: ["CLIENT_OWNER", "CLIENT_FINANCE"],
+  },
+  { key: "company", href: "/company", icon: Building2 },
+  { key: "support", href: "/support", icon: Headphones },
+];
+
+/** Mirrors Atlas permission → role map in `src/lib/rbac.ts`. */
+const REQUESTS_ADMIN_ROLES: Role[] = [
+  "INTAKE_OFFICER",
+  "TECHNICAL_REVIEWER",
+  "DECISION_MAKER",
+  "SYSTEM_ADMIN",
+  "QUALITY_MANAGER",
+];
+
+const CLIENTS_READ_ROLES: Role[] = [
+  "INTAKE_OFFICER",
+  "DECISION_MAKER",
+  "FINANCE",
+  "SYSTEM_ADMIN",
+  "QUALITY_MANAGER",
+];
+
+const ADMIN_NAV: NavItem[] = [
+  // admin:dashboard — any Atlas staff (shell is Atlas-only)
+  { key: "dashboard", href: "", icon: LayoutDashboard },
+  {
+    key: "workQueues",
+    href: "/queues",
+    icon: FolderKanban,
+    roles: REQUESTS_ADMIN_ROLES,
+  },
+  {
+    key: "requests",
+    href: "/requests",
+    icon: ClipboardList,
+    roles: REQUESTS_ADMIN_ROLES,
+  },
+  {
+    key: "clients",
+    href: "/clients",
+    icon: Users,
+    roles: CLIENTS_READ_ROLES,
+  },
+  {
+    key: "catalogue",
+    href: "/catalogue",
+    icon: Package,
+    roles: ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"],
+  },
+  {
+    key: "coupons",
+    href: "/coupons",
+    icon: TicketPercent,
+    roles: ["CATALOGUE_MANAGER", "FINANCE", "SYSTEM_ADMIN"],
+  },
+  {
+    key: "finance",
+    href: "/finance",
+    icon: Receipt,
+    roles: ["FINANCE", "SYSTEM_ADMIN"],
+  },
+  {
+    key: "quality",
+    href: "/quality",
+    icon: Shield,
+    roles: ["QUALITY_MANAGER", "SYSTEM_ADMIN", "DECISION_MAKER"],
+  },
+  // Overview analytics — any Atlas (same as dashboard)
+  { key: "analytics", href: "/analytics", icon: BarChart3 },
+  {
+    key: "settings",
+    href: "/settings",
+    icon: Settings,
+    roles: ["SYSTEM_ADMIN"],
+  },
+];
+
+type AppSidebarProps = {
+  mode: "client" | "admin";
+  basePath: string;
+  /** Session roles, used to hide nav items the current user can't act on. */
+  roles?: Role[];
+  collapsed?: boolean;
+  onNavigate?: () => void;
+  className?: string;
+};
+
+export function AppSidebar({
+  mode,
+  basePath,
+  roles,
+  collapsed = false,
+  onNavigate,
+  className,
+}: AppSidebarProps) {
+  const t = useTranslations(mode === "client" ? "nav.client" : "nav.admin");
+  const pathname = usePathname();
+  const items = (mode === "client" ? CLIENT_NAV : ADMIN_NAV).filter(
+    (item) => !item.roles || item.roles.some((role) => roles?.includes(role)),
+  );
+
+  return (
+    <aside
+      className={cn(
+        "flex h-full flex-col border-e border-line bg-surface",
+        collapsed ? "w-[4.5rem]" : "w-60",
+        className,
+      )}
+    >
+      <nav className="flex-1 space-y-1 p-2" aria-label={mode}>
+        {items.map((item) => {
+          const href = `${basePath}${item.href}`;
+          const active =
+            item.href === ""
+              ? pathname === href || pathname === `${basePath}/`
+              : pathname === href || pathname.startsWith(`${href}/`);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.key}
+              href={href}
+              onClick={onNavigate}
+              title={t(item.key)}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors duration-150 ease-out",
+                collapsed && "justify-center px-0",
+                active
+                  ? "bg-atlas-green-tint text-atlas-green-600"
+                  : "text-ink-800 hover:bg-surface-alt",
+              )}
+            >
+              <Icon className="size-5 shrink-0" aria-hidden />
+              {!collapsed ? <span>{t(item.key)}</span> : null}
+            </Link>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+}
+
+export { CLIENT_NAV, ADMIN_NAV };

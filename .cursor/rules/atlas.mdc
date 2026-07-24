@@ -1,0 +1,75 @@
+---
+description: Atlas RCP — project rules (Arabic-first RTL, brand, engineering)
+alwaysApply: true
+---
+
+# Atlas RCP — project rules
+
+## Language & direction
+- Arabic is the DEFAULT locale. Every screen must work perfectly in RTL first,
+  then LTR.
+- Never use physical CSS properties for layout spacing. Use logical properties
+  only: ms-/me-/ps-/pe-, start-/end-, text-start/text-end, border-s/border-e.
+  `ml-4` and `left-0` are bugs.
+- Set <html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'} translate="no">.
+  The `translate="no"` is mandatory — browser auto-translation corrupts
+  regulatory Arabic terminology.
+- NEVER hardcode user-facing strings. Every string goes through next-intl.
+  Both ar.json and en.json must be updated in the same change.
+- Numbers, dates and currency use Intl with the active locale. Currency is SAR.
+
+## Brand tokens — use these, never invent colours
+Defined as CSS variables in globals.css:
+  --atlas-green: #519E53        primary
+  --atlas-green-600: #3E7C40    hover/pressed
+  --atlas-green-300: #6BB56D    light accent
+  --atlas-green-tint: #EEF5F0   section wash
+  --ink-900: #1C2229
+  --ink-800: #252821            body text
+  --ink-500: #4D4D4D            secondary text
+  --line: #DDDDDD               hairline borders
+  --surface: #FFFFFF
+  --surface-alt: #F7F9F7
+Status semantics (deliberately NOT brand green, so a passing state is never
+confused with a brand element):
+  --state-ok: #1F7A4D
+  --state-bad: #B3261E
+  --state-warn: #B45309
+  --state-neutral: #6B7280
+  --state-info: #2563EB
+  --state-gap: #7C3AED
+
+## Typography
+- Display + body: Montserrat Arabic, Montserrat (matches atls.com.sa).
+- Data/utility: IBM Plex Mono — used for request numbers, invoice numbers,
+  hashes, INS codes. Monospace signals "machine-verified value".
+- SELF-HOST all fonts via next/font/local. Never fetch a font from a CDN at
+  runtime. This is a hard rule.
+
+## Visual language
+- Flat surfaces. Hairline 1px --line borders. Border radius 8px (12px for cards).
+- No gradients, no drop shadows beyond a single subtle elevation token.
+- One accent colour on screen at a time.
+- Generous whitespace; density only in data tables.
+- Motion: 150-200ms ease-out. Respect prefers-reduced-motion. No decorative
+  animation.
+
+## Copy rules
+- Active voice. A button says exactly what happens: "Submit request", not "OK".
+- An action keeps the same name through the whole flow: the button that says
+  "Return to client" produces a toast that says "Returned to client".
+- Errors state what happened and what to do next. Never surface a raw upstream
+  error string to a user.
+- Empty states are an invitation to act, with the primary action inline.
+
+## Engineering rules
+- Server Components by default; "use client" only where interactivity requires it.
+- All mutations are Server Actions in src/server/, validated with a Zod schema
+  at the boundary. Never trust client input.
+- Every query that touches tenant data MUST filter by the caller's
+  organisationId. Write a `scopedDb(session)` helper and use it everywhere.
+- Authorisation is checked server-side on every action via `requirePermission()`.
+  Hiding a button is not authorisation.
+- Money is Prisma Decimal, never float. Format only at render time.
+- Every state transition writes an AuditLog row. No exceptions.
+- No `any`. No unhandled promise. No console.log in committed code.

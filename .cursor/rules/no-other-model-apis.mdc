@@ -1,0 +1,19 @@
+---
+description: Ask before using Claude, Grok, or other third-party model APIs / Task model overrides
+alwaysApply: true
+---
+
+# Ask before other model APIs
+
+Default: **do not** use Claude, Grok, GPT, Gemini, or similar APIs.
+
+## Not allowed without explicit user permission
+- Selecting those models via Task / subagent `model` overrides (`claude-*`, `cursor-grok-*`, `gpt-*`, etc.)
+- Adding those providers’ SDKs or HTTP APIs into application code
+
+## Allowed by default
+- Subagents / Task **without** a foreign `model` override (same default agent as this session)
+- Normal tooling (shell, read/edit, search, etc.)
+
+## If you need another model
+Ask the user first (which model and why). Only use it after they allow it for that request.

@@ -1,0 +1,687 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum OrganisationType {
+  CLIENT
+  ATLAS
+}
+
+enum OrganisationStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum Role {
+  CLIENT_OWNER
+  CLIENT_USER
+  CLIENT_FINANCE
+  INTAKE_OFFICER
+  TECHNICAL_REVIEWER
+  DECISION_MAKER
+  FINANCE
+  CATALOGUE_MANAGER
+  QUALITY_MANAGER
+  SYSTEM_ADMIN
+}
+
+enum RequestState {
+  DRAFT
+  SUBMITTED
+  UNDER_INTAKE_REVIEW
+  RETURNED_TO_CLIENT
+  ACCEPTED
+  ASSESSMENT_QUEUED
+  ASSESSMENT_RUNNING
+  TECHNICAL_REVIEW
+  DECISION
+  REPORT_ISSUED
+  CLOSED
+  CANCELLED
+  ON_HOLD
+}
+
+enum AvStatus {
+  PENDING
+  CLEAN
+  INFECTED
+}
+
+enum CommentDirection {
+  ATLAS_TO_CLIENT
+  CLIENT_TO_ATLAS
+  INTERNAL
+}
+
+enum ReturnReasonCode {
+  MISSING_ARTWORK
+  ILLEGIBLE_SCAN
+  LOW_RESOLUTION
+  WRONG_PRODUCT_TYPE
+  MISSING_COA
+  MISSING_FORMULA
+  INCOMPLETE_FORMULA
+  EXPIRED_DOCUMENT
+  WRONG_LANGUAGE
+  MISMATCHED_PRODUCT
+  OTHER
+}
+
+enum FaultAttribution {
+  CLIENT_FAULT
+  ATLAS_FAULT
+  REGULATORY_CHANGE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIALLY_PAID
+  VOID
+}
+
+enum LedgerEntryType {
+  INVOICE
+  PAYMENT
+  CREDIT_NOTE
+  REFUND
+  ADJUSTMENT
+  WRITE_OFF
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CARD
+  CASH
+  CREDIT_NOTE
+}
+
+enum PaymentStatus {
+  PENDING_VERIFICATION
+  CONFIRMED
+  REJECTED
+}
+
+enum CouponDiscountType {
+  PERCENT
+  FIXED
+}
+
+enum CouponAppliesTo {
+  ALL
+  MAIN_CATEGORY
+  SUB_CATEGORY
+  SERVICE_ITEM
+}
+
+enum CouponClientScope {
+  ALL
+  SPECIFIC
+  NEW_CLIENTS_ONLY
+}
+
+enum CouponStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  IN_APP
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+// ─── Organisation & users ────────────────────────────────────────────────────
+
+model Organisation {
+  id              String             @id @default(cuid())
+  type            OrganisationType
+  nameEn          String
+  nameAr          String
+  logoKey         String?
+  email           String
+  phone           String?
+  website         String?
+  crNumber        String?
+  vatNumber       String?
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  region          String?
+  postalCode      String?
+  country         String             @default("SA")
+  nationalAddress String?
+  creditLimit     Decimal            @default(0) @db.Decimal(14, 2)
+  /// When true, new client submissions should be blocked once balance exceeds creditLimit.
+  autoHoldWhenOverLimit Boolean      @default(false)
+  paymentTermsDays Int               @default(0)
+  status          OrganisationStatus @default(ACTIVE)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  users              User[]
+  requests           Request[]
+  invoices           Invoice[]
+  ledgerEntries      LedgerEntry[]
+  payments           Payment[]
+  couponRedemptions  CouponRedemption[]
+  auditLogs          AuditLog[]
+
+  @@index([type, status])
+  @@index([crNumber])
+}
+
+model User {
+  id               String     @id @default(cuid())
+  organisationId   String
+  email            String     @unique
+  username         String     @unique
+  passwordHash     String
+  fullNameEn       String
+  fullNameAr       String
+  phone            String?
+  avatarKey        String?
+  locale           String     @default("ar")
+  status           UserStatus @default(ACTIVE)
+  lastLoginAt      DateTime?
+  emailVerifiedAt  DateTime?
+  createdAt        DateTime   @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  roles        UserRole[]
+
+  createdRequests   Request[]          @relation("RequestCreatedBy")
+  assignedRequests  Request[]          @relation("RequestAssignedTo")
+  uploadedVersions  DocumentVersion[]
+  requestEvents     RequestEvent[]
+  requestComments   RequestComment[]
+  ledgerEntries     LedgerEntry[]
+  confirmedPayments Payment[]          @relation("PaymentConfirmedBy")
+  createdCoupons    Coupon[]
+  notifications     Notification[]
+  notificationPreferences NotificationPreference[]
+  auditLogs         AuditLog[]
+
+  @@index([organisationId])
+  @@index([status])
+}
+
+model UserRole {
+  userId String
+  role   Role
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@index([role])
+}
+
+model NotificationPreference {
+  id            String  @id @default(cuid())
+  userId        String
+  eventType     String
+  emailEnabled  Boolean @default(true)
+  inAppEnabled  Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventType])
+  @@index([userId])
+}
+
+// ─── Catalogue ───────────────────────────────────────────────────────────────
+
+model MainCategory {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  nameEn    String
+  nameAr    String
+  descEn    String?
+  descAr    String?
+  icon      String?
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  subCategories SubCategory[]
+}
+
+model SubCategory {
+  id             String  @id @default(cuid())
+  mainCategoryId String
+  code           String
+  nameEn         String
+  nameAr         String
+  descEn         String?
+  descAr         String?
+  sortOrder      Int     @default(0)
+  active         Boolean @default(true)
+
+  mainCategory MainCategory  @relation(fields: [mainCategoryId], references: [id])
+  serviceItems ServiceItem[]
+
+  @@unique([mainCategoryId, code])
+  @@index([mainCategoryId, sortOrder])
+}
+
+model ServiceItem {
+  id                    String  @id @default(cuid())
+  subCategoryId         String
+  code                  String
+  nameEn                String
+  nameAr                String
+  descEn                String?
+  descAr                String?
+  basePrice             Decimal @db.Decimal(14, 2)
+  vatRate               Decimal @default(0.15) @db.Decimal(5, 4)
+  resubmissionPricePct  Decimal @default(0.50) @db.Decimal(5, 4)
+  slaHours              Int
+  freeResubmissions     Int     @default(0)
+  maxResubmissions      Int     @default(3)
+  /// JSON Schema describing product attributes collected at request time.
+  productAttrSchema     Json    @default("{}")
+  /// Requirement sets shown in "What we check" [{ code, titleEn, titleAr }]
+  checkSets             Json    @default("[]")
+  sortOrder             Int     @default(0)
+  active                Boolean @default(true)
+
+  subCategory       SubCategory        @relation(fields: [subCategoryId], references: [id])
+  requiredDocuments RequiredDocument[]
+  requests          Request[]
+
+  @@unique([subCategoryId, code])
+  @@index([subCategoryId, active, sortOrder])
+}
+
+model RequiredDocument {
+  id                String   @id @default(cuid())
+  serviceItemId     String
+  code              String
+  nameEn            String
+  nameAr            String
+  mandatory         Boolean  @default(true)
+  acceptedMimeTypes String[]
+  maxSizeMb         Int      @default(50)
+  helpEn            String?
+  helpAr            String?
+  sortOrder         Int      @default(0)
+
+  serviceItem      ServiceItem       @relation(fields: [serviceItemId], references: [id], onDelete: Cascade)
+  requestDocuments RequestDocument[]
+
+  @@unique([serviceItemId, code])
+  @@index([serviceItemId, sortOrder])
+}
+
+// ─── Requests ────────────────────────────────────────────────────────────────
+
+model Request {
+  id               String       @id @default(cuid())
+  requestNo        String       @unique
+  organisationId   String
+  serviceItemId    String
+  createdByUserId  String
+  assignedToUserId String?
+  state            RequestState @default(DRAFT)
+  /// Prior state when moved to ON_HOLD; resume must return here.
+  heldFromState    RequestState?
+  productNameEn    String       @default("")
+  productNameAr    String       @default("")
+  brand            String?
+  productAttrs     Json         @default("{}")
+  submissionNo     Int          @default(1)
+  priceCharged     Decimal      @default(0) @db.Decimal(14, 2)
+  discountApplied  Decimal      @default(0) @db.Decimal(14, 2)
+  couponCode       String?
+  /// Client-supplied key; submitRequest is idempotent on this value.
+  idempotencyKey   String?      @unique
+  slaDueAt         DateTime?
+  /// When set, SLA clock is paused (ON_HOLD / RETURNED_TO_CLIENT).
+  slaPausedAt      DateTime?
+  submittedAt      DateTime?
+  closedAt         DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  organisation  Organisation       @relation(fields: [organisationId], references: [id])
+  serviceItem   ServiceItem        @relation(fields: [serviceItemId], references: [id])
+  createdBy     User               @relation("RequestCreatedBy", fields: [createdByUserId], references: [id])
+  assignedTo    User?              @relation("RequestAssignedTo", fields: [assignedToUserId], references: [id])
+  documents     RequestDocument[]
+  events        RequestEvent[]
+  comments      RequestComment[]
+  invoices      Invoice[]
+  redemptions   CouponRedemption[]
+
+  @@index([organisationId, state])
+  @@index([state, slaDueAt])
+  @@index([serviceItemId])
+  @@index([createdByUserId])
+  @@index([assignedToUserId])
+}
+
+model RequestDocument {
+  id                 String   @id @default(cuid())
+  requestId          String
+  requiredDocumentId String?
+  label              String
+  currentVersionId   String?  @unique
+  createdAt          DateTime @default(now())
+
+  request          Request           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requiredDocument RequiredDocument? @relation(fields: [requiredDocumentId], references: [id])
+  currentVersion   DocumentVersion?  @relation("CurrentDocumentVersion", fields: [currentVersionId], references: [id])
+  versions         DocumentVersion[] @relation("DocumentVersions")
+
+  @@index([requestId])
+}
+
+model DocumentVersion {
+  id               String   @id @default(cuid())
+  documentId       String
+  version          Int
+  fileName         String
+  mimeType         String
+  sizeBytes        Int
+  storageKey       String
+  sha256           String
+  uploadedByUserId String
+  avStatus         AvStatus @default(PENDING)
+  uploadedAt       DateTime @default(now())
+
+  document       RequestDocument  @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedBy     User             @relation(fields: [uploadedByUserId], references: [id])
+  currentFor     RequestDocument? @relation("CurrentDocumentVersion")
+
+  @@unique([documentId, version])
+  @@index([documentId, uploadedAt])
+  @@index([sha256])
+}
+
+model RequestEvent {
+  id               String             @id @default(cuid())
+  requestId        String
+  fromState        RequestState?
+  toState          RequestState
+  actorUserId      String
+  actorRole        Role
+  note             String?
+  reasonCode       ReturnReasonCode?
+  faultAttribution FaultAttribution?
+  metadata         Json               @default("{}")
+  createdAt        DateTime           @default(now())
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor   User    @relation(fields: [actorUserId], references: [id])
+
+  @@index([requestId, createdAt])
+  @@index([toState, createdAt])
+}
+
+model RequestComment {
+  id           String             @id @default(cuid())
+  requestId    String
+  authorUserId String
+  direction    CommentDirection
+  reasonCode   ReturnReasonCode?
+  bodyEn       String?
+  bodyAr       String?
+  attachments  Json               @default("[]")
+  readAt       DateTime?
+  createdAt    DateTime           @default(now())
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorUserId], references: [id])
+
+  @@index([requestId, createdAt])
+}
+
+// ─── Commerce ────────────────────────────────────────────────────────────────
+
+model Invoice {
+  id             String        @id @default(cuid())
+  invoiceNo      String        @unique
+  organisationId String
+  requestId      String?
+  subtotal       Decimal       @db.Decimal(14, 2)
+  discount       Decimal       @default(0) @db.Decimal(14, 2)
+  vatAmount      Decimal       @db.Decimal(14, 2)
+  total          Decimal       @db.Decimal(14, 2)
+  currency       String        @default("SAR")
+  status         InvoiceStatus @default(DRAFT)
+  issuedAt       DateTime?
+  dueAt          DateTime?
+  createdAt      DateTime      @default(now())
+
+  organisation Organisation       @relation(fields: [organisationId], references: [id])
+  request      Request?           @relation(fields: [requestId], references: [id])
+  lines        InvoiceLine[]
+  allocations  PaymentAllocation[]
+
+  @@index([organisationId, status])
+  @@index([requestId])
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  qty         Int     @default(1)
+  unitPrice   Decimal @db.Decimal(14, 2)
+  lineTotal   Decimal @db.Decimal(14, 2)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+/// APPEND ONLY. Corrections are reversing entries, never edits.
+/// There is no update/delete API for ledger rows in application code.
+model LedgerEntry {
+  id             String          @id @default(cuid())
+  organisationId String
+  entryDate      DateTime        @default(now())
+  type           LedgerEntryType
+  referenceType  String
+  referenceId    String
+  debit          Decimal         @default(0) @db.Decimal(14, 2)
+  credit         Decimal         @default(0) @db.Decimal(14, 2)
+  descriptionEn  String
+  descriptionAr  String
+  createdByUserId String
+  /// When set, this row reverses `reversesEntry` (append-only correction).
+  reversesEntryId String?
+  createdAt      DateTime        @default(now())
+
+  organisation  Organisation @relation(fields: [organisationId], references: [id])
+  createdBy     User         @relation(fields: [createdByUserId], references: [id])
+  reversesEntry LedgerEntry? @relation("LedgerReversal", fields: [reversesEntryId], references: [id])
+  reversedBy    LedgerEntry[] @relation("LedgerReversal")
+
+  @@index([organisationId, entryDate])
+  @@index([referenceType, referenceId])
+  @@index([reversesEntryId])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  organisationId    String
+  amount            Decimal       @db.Decimal(14, 2)
+  method            PaymentMethod
+  reference         String?
+  proofStorageKey   String?
+  status            PaymentStatus @default(PENDING_VERIFICATION)
+  rejectReason      String?
+  rejectedAt        DateTime?
+  receivedAt        DateTime      @default(now())
+  confirmedByUserId String?
+  confirmedAt       DateTime?
+  createdAt         DateTime      @default(now())
+
+  organisation Organisation        @relation(fields: [organisationId], references: [id])
+  confirmedBy  User?               @relation("PaymentConfirmedBy", fields: [confirmedByUserId], references: [id])
+  allocations  PaymentAllocation[]
+
+  @@index([organisationId, status])
+}
+
+model PaymentAllocation {
+  id        String  @id @default(cuid())
+  paymentId String
+  invoiceId String
+  amount    Decimal @db.Decimal(14, 2)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@unique([paymentId, invoiceId])
+  @@index([invoiceId])
+}
+
+model Coupon {
+  id                   String             @id @default(cuid())
+  code                 String             @unique
+  nameEn               String
+  nameAr               String
+  discountType         CouponDiscountType
+  value                Decimal            @db.Decimal(14, 2)
+  maxDiscountAmount    Decimal?           @db.Decimal(14, 2)
+  minOrderAmount       Decimal?           @db.Decimal(14, 2)
+  appliesTo            CouponAppliesTo    @default(ALL)
+  appliesToIds         String[]           @default([])
+  clientScope          CouponClientScope  @default(ALL)
+  clientIds            String[]           @default([])
+  validFrom            DateTime
+  validTo              DateTime
+  totalUsageLimit      Int?
+  perClientLimit       Int?
+  usedCount            Int                @default(0)
+  stackable            Boolean            @default(false)
+  excludesResubmissions Boolean           @default(true)
+  status               CouponStatus       @default(ACTIVE)
+  createdByUserId      String
+  createdAt            DateTime           @default(now())
+
+  createdBy   User               @relation(fields: [createdByUserId], references: [id])
+  redemptions CouponRedemption[]
+
+  @@index([status, validFrom, validTo])
+}
+
+model CouponRedemption {
+  id              String   @id @default(cuid())
+  couponId        String
+  organisationId  String
+  requestId       String
+  discountApplied Decimal  @db.Decimal(14, 2)
+  redeemedAt      DateTime @default(now())
+
+  coupon       Coupon       @relation(fields: [couponId], references: [id])
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  request      Request      @relation(fields: [requestId], references: [id])
+
+  @@unique([couponId, organisationId, requestId])
+  @@index([organisationId, redeemedAt])
+}
+
+// ─── Platform ────────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  titleEn   String
+  titleAr   String
+  bodyEn    String
+  bodyAr    String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+/// Transactional outbox for email (and future async channels).
+/// Written in the SAME transaction as the domain state change.
+model NotificationOutbox {
+  id                String              @id @default(cuid())
+  eventType         String
+  channel           NotificationChannel @default(EMAIL)
+  userId            String?
+  recipient         String
+  locale            String              @default("ar")
+  payload           Json                @default("{}")
+  /// Unique when set — e.g. SLA_AT_RISK:{requestId}
+  dedupeKey         String?             @unique
+  status            OutboxStatus        @default(PENDING)
+  attempts          Int                 @default(0)
+  nextAttemptAt     DateTime            @default(now())
+  lastError         String?
+  providerMessageId String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([eventType, createdAt])
+  @@index([userId])
+}
+
+model NotificationLog {
+  id                String              @id @default(cuid())
+  channel           NotificationChannel
+  recipient         String
+  template          String
+  status            String
+  providerMessageId String?
+  error             String?
+  sentAt            DateTime            @default(now())
+
+  @@index([channel, sentAt])
+  @@index([recipient, sentAt])
+}
+
+model AuditLog {
+  id             String  @id @default(cuid())
+  actorUserId    String?
+  actorRole      Role?
+  organisationId String?
+  action         String
+  entityType     String
+  entityId       String
+  before         Json?
+  after          Json?
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  actor        User?         @relation(fields: [actorUserId], references: [id])
+  organisation Organisation? @relation(fields: [organisationId], references: [id])
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([organisationId, createdAt])
+  @@index([createdAt])
+}
