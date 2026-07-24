@@ -12,6 +12,7 @@ export default async function PublicLandingPage({ params }: Props) {
   const locale = raw as Locale;
   setRequestLocale(locale);
   const t = await getTranslations("landing");
+  const tAuth = await getTranslations("auth");
   const tCommon = await getTranslations("common");
 
   return (
@@ -23,14 +24,11 @@ export default async function PublicLandingPage({ params }: Props) {
         <Button asChild>
           <Link href={`/${locale}/login`}>{t("signIn")}</Link>
         </Button>
+        <Button asChild variant="secondary">
+          <Link href={`/${locale}/signup`}>{tAuth("createAccount")}</Link>
+        </Button>
         <Button asChild variant="outline">
           <Link href={`/${locale}/verify`}>{t("verifyCta")}</Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href={`/${locale}/client/dashboard`}>{t("clientPortal")}</Link>
-        </Button>
-        <Button asChild variant="secondary">
-          <Link href={`/${locale}/admin/queues`}>{t("adminConsole")}</Link>
         </Button>
       </div>
     </main>

@@ -2,37 +2,37 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { AuthShell } from "@/components/atlas/auth-shell";
-import { LoginForm } from "@/components/atlas/login-form";
+import { SignupForm } from "@/components/atlas/signup-form";
 import { Link } from "@/lib/i18n/navigation";
 import { isLocale, type Locale } from "@/lib/i18n/config";
 
 type Props = { params: Promise<{ locale: string }> };
 
-export default async function LoginPage({ params }: Props) {
+export default async function SignupPage({ params }: Props) {
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
   const locale = raw as Locale;
   setRequestLocale(locale);
-  const t = await getTranslations("auth");
+  const t = await getTranslations("signup");
 
   return (
     <AuthShell
       locale={locale}
-      title={t("signInTitle")}
-      subtitle={t("signInSubtitle")}
+      title={t("title")}
+      subtitle={t("subtitle")}
       footer={
         <>
-          {t("noAccount")}{" "}
+          {t("haveAccount")}{" "}
           <Link
-            href="/signup"
+            href="/login"
             className="font-medium text-[var(--atlas-green-600)] underline-offset-4 hover:underline"
           >
-            {t("createAccount")}
+            {t("signInLink")}
           </Link>
         </>
       }
     >
-      <LoginForm />
+      <SignupForm locale={locale} />
     </AuthShell>
   );
 }
