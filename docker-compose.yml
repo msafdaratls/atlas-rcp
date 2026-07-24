@@ -1,0 +1,53 @@
+# Single-droplet deployment: PostgreSQL + the Atlas app (with the notification
+# worker running in-process — fine for one instance). To scale the web tier to
+# more than one instance, set NOTIFICATIONS_WORKER=0 here and run the worker as
+# a separate service, otherwise SLA scans and emails would run more than once.
+#
+#   cp .env.example .env   # then fill AUTH_SECRET, SMTP_*, SPACES_* …
+#   docker compose up -d --build
+#
+# For production also put a TLS-terminating reverse proxy (Caddy / Nginx / a DO
+# load balancer) in front of the app — see deploy/nginx.conf.example.
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-atlas_rcp}
+    volumes:
+      - atlas_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-atlas_rcp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      # Overrides the localhost URL in .env so the app reaches the db service.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-atlas_rcp}?schema=public
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    # Apply migrations, then start the standalone server.
+    command: sh -c "npx prisma migrate deploy && node server.js"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+volumes:
+  atlas_pgdata:
