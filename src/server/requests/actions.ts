@@ -1264,11 +1264,11 @@ export async function submitRequest(
       if (notifyOrgId) await notifyCreditLimitReached(notifyOrgId);
       return { ok: false, error: "CREDIT_OVER_LIMIT" };
     }
-    if (message.startsWith("COUPON_")) {
-      return { ok: false, error: message.replace("COUPON_", "") };
-    }
     if (message === "COUPON_NOT_FOUND") {
       return { ok: false, error: "NOT_FOUND" };
+    }
+    if (message.startsWith("COUPON_")) {
+      return { ok: false, error: message.replace("COUPON_", "") };
     }
     return { ok: false, error: "SAVE_FAILED" };
   }

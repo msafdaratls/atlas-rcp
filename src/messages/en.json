@@ -239,6 +239,7 @@
         "SLA_AT_RISK": "SLA at risk (80% elapsed)",
         "INVOICE_ISSUED": "Invoice issued",
         "PAYMENT_RECEIVED": "Payment received",
+        "PAYMENT_REJECTED": "Payment rejected",
         "STATEMENT_OVERDUE": "Statement overdue",
         "CREDIT_LIMIT": "Credit limit reached"
       }

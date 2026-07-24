@@ -239,6 +239,7 @@
         "SLA_AT_RISK": "تنبيه مستوى الخدمة (80٪ من النافذة)",
         "INVOICE_ISSUED": "إصدار فاتورة",
         "PAYMENT_RECEIVED": "استلام دفعة",
+        "PAYMENT_REJECTED": "رفض الدفعة",
         "STATEMENT_OVERDUE": "تأخر كشف الحساب",
         "CREDIT_LIMIT": "بلوغ حد الائتمان"
       }
