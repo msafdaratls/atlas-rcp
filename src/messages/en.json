@@ -395,7 +395,8 @@
       "FAULT_MISSING": "Cannot resubmit — the return is missing fault attribution. Contact Atlas.",
       "NON_STACKABLE": "Remove the existing coupon before applying another.",
       "INFECTED_FILE": "A document failed security scanning. Remove it and upload again.",
-      "MIME_REJECTED": "That file type is not allowed."
+      "MIME_REJECTED": "That file type is not allowed.",
+      "AV_UNAVAILABLE": "Security scanning is temporarily unavailable. Try again in a moment."
     }
   },
   "finance": {
@@ -511,7 +512,9 @@
       "INVALID_PROOF": "Proof must be PDF, PNG or JPG.",
       "FILE_TOO_LARGE": "That file exceeds the size limit.",
       "ALLOCATION_EXCEEDS_PAYMENT": "Allocations exceed the payment amount.",
-      "UNEXPECTED": "Something went wrong. Reference {reference}. Try again or contact support."
+      "UNEXPECTED": "Something went wrong. Reference {reference}. Try again or contact support.",
+      "INFECTED_FILE": "That file failed security scanning. Upload a different file.",
+      "AV_UNAVAILABLE": "Security scanning is temporarily unavailable. Try again in a moment."
     }
   },
   "returnReasons": {
@@ -1081,7 +1084,8 @@
       "ATTR_INVALID": "One or more product attributes are invalid.",
       "FAULT_MISSING": "Cannot resubmit — the return is missing fault attribution. Contact Atlas.",
       "NON_STACKABLE": "Remove the existing coupon before applying another.",
-      "INFECTED_FILE": "A document failed security scanning. Remove it and upload again."
+      "INFECTED_FILE": "A document failed security scanning. Remove it and upload again.",
+      "AV_UNAVAILABLE": "Security scanning is temporarily unavailable. Try again in a moment."
     }
   },
   "reports": {

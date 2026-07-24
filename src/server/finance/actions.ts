@@ -60,6 +60,11 @@ export async function recordClientPayment(
       if (!mimeAllowed(sniffed, allowed)) {
         return { ok: false, error: "INVALID_PROOF" };
       }
+      // Scan the proof before persisting (no-op unless AV_DRIVER=clamav).
+      const { getAvScanner } = await import("@/lib/av");
+      if ((await getAvScanner().scan(buffer)) === "INFECTED") {
+        return { ok: false, error: "INFECTED_FILE" };
+      }
       const stored = await storage.put({
         keyPrefix: `orgs/${orgId}/payments`,
         fileName: proof.name,

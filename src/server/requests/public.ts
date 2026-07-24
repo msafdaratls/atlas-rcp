@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { consumeRateLimitAsync } from "@/lib/rate-limit";
 
 /**
  * Fields safe to show to an unauthenticated visitor scanning a report QR
@@ -28,7 +28,7 @@ export async function getPublicVerification(
   const requestNo = code.trim();
   if (!requestNo) return null;
 
-  const limited = consumeRateLimit({
+  const limited = await consumeRateLimitAsync({
     key: `verify:${requestNo.toLowerCase()}`,
     limit: 30,
     windowMs: 60_000,

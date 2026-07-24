@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { signIn } from "@/lib/auth";
 import { getSession } from "@/lib/auth/session";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { consumeRateLimitAsync } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -33,7 +33,7 @@ export async function loginAction(
   const hdrs = await headers();
   const forwarded = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim();
   const ipOrEmail = forwarded || email;
-  const limited = consumeRateLimit({
+  const limited = await consumeRateLimitAsync({
     key: `login:${ipOrEmail}`,
     limit: 10,
     windowMs: 15 * 60 * 1000,

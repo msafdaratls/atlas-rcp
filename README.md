@@ -79,6 +79,14 @@ balancer). Health probe: `GET /api/health` (200 when the DB is reachable).
 - **Email** — set `SMTP_*` to a real ESP (SES / Postmark / Resend) and configure
   SPF/DKIM/DMARC.
 - **Secrets** — `AUTH_SECRET` via `openssl rand -base64 48`; `.env` is gitignored.
+- **Antivirus** — set `AV_DRIVER=clamav` + `CLAMD_HOST/PORT` to scan every
+  upload; a clamd outage fails closed (upload rejected). Default `none` accepts
+  uploads unscanned (dev only).
+- **Rate limiting** — in-process by default. For >1 web instance set
+  `RATE_LIMIT_DRIVER=redis` + `REDIS_URL` so login/verify limits are shared
+  (fail-open on a Redis outage).
+- **Logs** — structured JSON in production (`src/lib/logger.ts`), ready for a
+  log drain; add the Sentry SDK in `logger.error` to ship errors.
 - **Scaling** — the notification worker runs in-process. To run more than one
   web instance, set `NOTIFICATIONS_WORKER=0` and run the worker separately, or
   SLA scans and emails will fire multiple times.
