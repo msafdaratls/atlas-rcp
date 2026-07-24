@@ -30,6 +30,19 @@ import { toast } from "sonner";
 type AppliesTo = "ALL" | "MAIN_CATEGORY" | "SUB_CATEGORY" | "SERVICE_ITEM";
 type ClientScope = "ALL" | "SPECIFIC" | "NEW_CLIENTS_ONLY";
 
+/**
+ * A `datetime-local` value is a wall-clock string with no timezone. `new Date(v)`
+ * reads it as local time, which — once stored and rendered from its UTC ISO
+ * string — can shift the calendar date by a day. Anchoring the same wall-clock
+ * value to UTC makes the stored and displayed date match what the admin typed.
+ */
+function localInputToUtc(v: string): Date {
+  const [datePart, timePart = "00:00"] = v.split("T");
+  const [y, m, d] = datePart.split("-").map(Number);
+  const [hh, mm] = timePart.split(":").map(Number);
+  return new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0));
+}
+
 type Props = {
   options: CouponCreateOptions;
 };
@@ -129,8 +142,8 @@ export function CreateCouponForm({ options }: Props) {
         appliesToIds: appliesTo === "ALL" ? [] : appliesToIds,
         clientScope,
         clientIds: clientScope === "SPECIFIC" ? clientIds : [],
-        validFrom: new Date(validFrom),
-        validTo: new Date(validTo),
+        validFrom: localInputToUtc(validFrom),
+        validTo: localInputToUtc(validTo),
         totalUsageLimit: totalUsageLimit.trim()
           ? Number(totalUsageLimit)
           : undefined,

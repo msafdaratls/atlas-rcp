@@ -1,0 +1,61 @@
+# Deployment onto an EXISTING droplet that already runs another site behind
+# Apache/Nginx on ports 80/443 (e.g. the atls.com.sa main site). Unlike
+# docker-compose.prod.yml, this does NOT run Caddy and does NOT bind 80/443.
+#
+# The app listens only on 127.0.0.1:3000 — the host's existing reverse proxy
+# adds a vhost for coc.atls.com.sa that proxies to it, and certbot handles TLS.
+# Uploaded documents persist in a named Docker volume (local disk).
+#
+#   cp .env.example .env    # set AUTH_SECRET, AUTH_URL=https://coc.atls.com.sa, …
+#   docker compose -f docker-compose.droplet.yml up -d --build
+#
+# Apply DB migrations run automatically on app start. Health: GET /api/health.
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-atlas_rcp}
+    volumes:
+      - atlas_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-atlas_rcp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atlas_rcp}?schema=public
+      # Local-disk storage inside the persisted volume below.
+      STORAGE_DRIVER: local
+      STORAGE_ROOT: /app/storage/uploads
+    env_file:
+      - .env
+    # Bind to loopback only: the host reverse proxy (Apache) reaches it, the
+    # public internet cannot. Nothing else on the droplet is touched.
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - atlas_uploads:/app/storage/uploads
+    command: sh -c "npx prisma migrate deploy && node server.js"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+volumes:
+  atlas_pgdata:
+  atlas_uploads:

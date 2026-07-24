@@ -429,6 +429,23 @@ export function CompanyProfileForm({ initial }: Props) {
                       toast.error(t(`errors.${result.error}` as never));
                       return;
                     }
+                    // Optimistically add the new member so the list reflects
+                    // the invite immediately; router.refresh() reconciles with
+                    // server truth. (The list is local state seeded from props,
+                    // so a refresh alone would not add the row.)
+                    setUsers((list) => [
+                      ...list,
+                      {
+                        id: result.data.userId,
+                        email: values.email,
+                        fullNameEn: values.fullNameEn,
+                        fullNameAr: values.fullNameAr,
+                        status: "ACTIVE",
+                        lastLoginAt: null,
+                        roles: [values.role],
+                        isSelf: false,
+                      },
+                    ]);
                     toast.success(t("toast.inviteSent"));
                     inviteForm.reset();
                     setInviteOpen(false);

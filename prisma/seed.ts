@@ -1,7 +1,33 @@
 import { PrismaClient, Prisma, Role, RequestState, CommentDirection, ReturnReasonCode, FaultAttribution, CouponDiscountType, CouponAppliesTo, CouponClientScope, CouponStatus, OrganisationType } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 const prisma = new PrismaClient();
+
+const UPLOAD_ROOT = path.join(process.cwd(), "storage", "uploads");
+
+/** A minimal but valid single-page PDF used as a placeholder for seeded documents. */
+const PLACEHOLDER_PDF = Buffer.from(
+  "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n4 0 obj<</Length 52>>stream\nBT /F1 16 Tf 20 60 Td (Atlas seed document) Tj ET\nendstream endobj\n5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Size 6/Root 1 0 R>>\n%%EOF",
+  "utf8",
+);
+
+/** A simple square SVG logo placeholder carrying the organisation's initial. */
+function placeholderLogoSvg(initial: string, color: string): Buffer {
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect width="128" height="128" rx="24" fill="${color}"/><text x="64" y="82" font-family="Arial, sans-serif" font-size="64" font-weight="700" fill="#ffffff" text-anchor="middle">${initial}</text></svg>`,
+    "utf8",
+  );
+}
+
+/** Write a placeholder file (plus its mime sidecar) for a storage key, mirroring LocalFilesystemStorage. */
+async function writeSeedFile(key: string, body: Buffer, mimeType: string) {
+  const absolute = path.join(UPLOAD_ROOT, key);
+  await mkdir(path.dirname(absolute), { recursive: true });
+  await writeFile(absolute, body);
+  await writeFile(`${absolute}.mime`, mimeType, "utf8");
+}
 
 const PASSWORD = "Atlas@2026";
 /** Must be ≥8 chars — login form + Zod enforce minLength 8. */
@@ -157,7 +183,7 @@ async function main() {
       type: OrganisationType.CLIENT,
       nameEn: "Al Noor Pharmaceuticals Co.",
       nameAr: "شركة النور للصناعات الدوائية",
-      logoKey: "orgs/al-noor/logo.png",
+      logoKey: "orgs/al-noor/logo.svg",
       email: "regulatory@alnoorpharma.sa",
       phone: "+966112345678",
       website: "https://alnoorpharma.sa",
@@ -181,7 +207,7 @@ async function main() {
       type: OrganisationType.CLIENT,
       nameEn: "Gulf Beauty Trading LLC",
       nameAr: "الخليج لتجارة مستحضرات التجميل",
-      logoKey: "orgs/gulf-beauty/logo.png",
+      logoKey: "orgs/gulf-beauty/logo.svg",
       email: "compliance@gulfbeauty.sa",
       phone: "+966126789012",
       website: "https://gulfbeauty.sa",
@@ -2242,6 +2268,49 @@ async function main() {
   const invoiceCount = await prisma.invoice.count();
   const paymentCount = await prisma.payment.count();
   const ledgerCount = await prisma.ledgerEntry.count();
+
+  // ── Materialise placeholder files for every seeded storage key ────────────
+  // The DB rows reference documents, payment proofs, and logos by storage key;
+  // without the physical files, the auth-gated /api/storage route 404s and the
+  // demo shows broken document viewers and logos. Write a placeholder for each.
+  const orgLogos = await prisma.organisation.findMany({
+    where: { logoKey: { not: null } },
+    select: { logoKey: true, nameEn: true, type: true },
+  });
+  // The real Atlas brand logo (from atls.com.sa) ships in the repo; demo client
+  // organisations keep a generated initial-tile placeholder.
+  const atlasLogo = await readFile(
+    path.join(process.cwd(), "prisma", "seed-assets", "atlas-logo.svg"),
+  ).catch(() => null);
+  const logoColors = ["#2563eb", "#b45309", "#7c3aed"];
+  let placeholderIndex = 0;
+  for (const org of orgLogos) {
+    if (!org.logoKey) continue;
+    const body =
+      org.type === OrganisationType.ATLAS && atlasLogo
+        ? atlasLogo
+        : placeholderLogoSvg(
+            org.nameEn.trim().charAt(0).toUpperCase() || "A",
+            logoColors[placeholderIndex++ % logoColors.length] ?? "#2563eb",
+          );
+    await writeSeedFile(org.logoKey, body, "image/svg+xml");
+  }
+
+  const docVersions = await prisma.documentVersion.findMany({
+    select: { storageKey: true },
+  });
+  const paymentProofs = await prisma.payment.findMany({
+    where: { proofStorageKey: { not: null } },
+    select: { proofStorageKey: true },
+  });
+  const pdfKeys = new Set<string>();
+  for (const v of docVersions) pdfKeys.add(v.storageKey);
+  for (const p of paymentProofs) {
+    if (p.proofStorageKey) pdfKeys.add(p.proofStorageKey);
+  }
+  for (const key of pdfKeys) {
+    await writeSeedFile(key, PLACEHOLDER_PDF, "application/pdf");
+  }
 
   process.stdout.write(
     `${JSON.stringify(

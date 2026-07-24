@@ -281,7 +281,10 @@ function ManualAdjustmentForm({
       className="max-w-lg space-y-3 rounded-lg border border-line bg-surface p-4"
       onSubmit={(e) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
+        // Capture the form element now — after the awaited action revalidates
+        // and re-renders, `e.currentTarget` is nulled and `.reset()` would throw.
+        const formEl = e.currentTarget;
+        const fd = new FormData(formEl);
         startTransition(async () => {
           const result = await postManualLedgerEntry({
             organisationId: orgId,
@@ -296,7 +299,7 @@ function ManualAdjustmentForm({
             return;
           }
           toast.success(t("admin.adjustmentPosted"));
-          e.currentTarget.reset();
+          formEl.reset();
         });
       }}
     >

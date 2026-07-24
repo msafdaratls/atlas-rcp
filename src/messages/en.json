@@ -714,6 +714,23 @@
         "actions": "Actions"
       },
       "success": "Catalogue updated",
+      "edit": {
+        "button": "Edit",
+        "dialogTitle": "Edit service",
+        "nameEn": "Name (English)",
+        "nameAr": "Name (Arabic)",
+        "descEn": "Description (English)",
+        "descAr": "Description (Arabic)",
+        "basePrice": "Base price (SAR)",
+        "vatRate": "VAT rate",
+        "slaHours": "SLA (hours)",
+        "resubmissionPricePct": "Resubmission price %",
+        "freeResubmissions": "Free resubmissions",
+        "maxResubmissions": "Max resubmissions",
+        "cancel": "Cancel",
+        "save": "Save changes",
+        "success": "Service updated"
+      },
       "errors": {
         "VALIDATION": "Check the form and try again.",
         "UNAUTHORIZED": "Sign in again to continue.",

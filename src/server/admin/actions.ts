@@ -532,6 +532,103 @@ export async function toggleServiceItemActive(
   }
 }
 
+const updateServiceItemSchema = z.object({
+  id: z.string().min(1),
+  nameEn: z.string().trim().min(2).max(200),
+  nameAr: z.string().trim().min(2).max(200),
+  descEn: z.string().trim().max(2000).optional(),
+  descAr: z.string().trim().max(2000).optional(),
+  basePrice: z.union([z.string(), z.number()]),
+  vatRate: z.union([z.string(), z.number()]),
+  slaHours: z.number().int().positive(),
+  resubmissionPricePct: z.union([z.string(), z.number()]),
+  freeResubmissions: z.number().int().min(0),
+  maxResubmissions: z.number().int().min(0),
+});
+
+export type UpdateServiceItemInput = z.infer<typeof updateServiceItemSchema>;
+
+export async function updateServiceItem(
+  input: UpdateServiceItemInput,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const parsed = updateServiceItemSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const data = parsed.data;
+
+    const basePrice = parseMoneyInput(data.basePrice, { min: 0, max: 10_000_000 });
+    if (!basePrice) return { ok: false, error: "VALIDATION" };
+    const vatRate = parseMoneyInput(data.vatRate, { min: 0, max: 1 });
+    if (!vatRate) return { ok: false, error: "VALIDATION" };
+    const resubmissionPricePct = parseMoneyInput(data.resubmissionPricePct, {
+      min: 0,
+      max: 1,
+    });
+    if (!resubmissionPricePct) return { ok: false, error: "VALIDATION" };
+
+    const existing = await prisma.serviceItem.findUnique({
+      where: { id: data.id },
+      select: {
+        id: true,
+        basePrice: true,
+        vatRate: true,
+        slaHours: true,
+        nameEn: true,
+        nameAr: true,
+      },
+    });
+    if (!existing) return { ok: false, error: "NOT_FOUND" };
+
+    await prisma.serviceItem.update({
+      where: { id: existing.id },
+      data: {
+        nameEn: data.nameEn,
+        nameAr: data.nameAr,
+        descEn: data.descEn || null,
+        descAr: data.descAr || null,
+        basePrice,
+        vatRate,
+        slaHours: data.slaHours,
+        resubmissionPricePct,
+        freeResubmissions: data.freeResubmissions,
+        maxResubmissions: data.maxResubmissions,
+      },
+    });
+
+    await writeAuditLog({
+      session,
+      action: "catalogue.serviceItem.update",
+      entityType: "ServiceItem",
+      entityId: existing.id,
+      before: {
+        basePrice: existing.basePrice.toString(),
+        vatRate: existing.vatRate.toString(),
+        slaHours: existing.slaHours,
+        nameEn: existing.nameEn,
+        nameAr: existing.nameAr,
+      },
+      after: {
+        basePrice: basePrice.toString(),
+        vatRate: vatRate.toString(),
+        slaHours: data.slaHours,
+        nameEn: data.nameEn,
+        nameAr: data.nameAr,
+      },
+    });
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
 const requiredDocumentInputSchema = z.object({
   code: z.string().trim().min(1).max(40),
   nameEn: z.string().trim().min(1).max(200),

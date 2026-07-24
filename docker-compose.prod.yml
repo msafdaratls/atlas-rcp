@@ -1,0 +1,74 @@
+# Production single-droplet stack: PostgreSQL + Atlas app + Caddy (automatic
+# HTTPS). Unlike docker-compose.yml (dev/simple), the app port is NOT published
+# to the host — all public traffic goes through Caddy on 80/443.
+#
+#   cp .env.production.example .env   # then fill secrets, APP_DOMAIN, ACME_EMAIL
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Caddy provisions Let's Encrypt certs automatically once APP_DOMAIN's A record
+# points at this droplet. Health probe: GET /api/health (200 when DB reachable).
+#
+# NOTE: For real production prefer DigitalOcean Managed Postgres over the bundled
+# `db` service (automated backups + connection pooling). To do that, delete the
+# `db` service + `depends_on`, and point DATABASE_URL at the managed cluster.
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-atlas_rcp}
+    volumes:
+      - atlas_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-atlas_rcp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atlas_rcp}?schema=public
+    env_file:
+      - .env
+    # No host port: only Caddy talks to the app over the internal network.
+    expose:
+      - "3000"
+    command: sh -c "npx prisma migrate deploy && node server.js"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  atlas_pgdata:
+  caddy_data:
+  caddy_config:

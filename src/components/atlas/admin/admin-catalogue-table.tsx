@@ -2,10 +2,21 @@
 
 import { MoneyValue } from "@/components/atlas/money-value";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { STATE_TONE_CLASS } from "@/lib/request-state";
 import { cn } from "@/lib/utils";
-import { toggleServiceItemActive } from "@/server/admin/actions";
+import {
+  toggleServiceItemActive,
+  updateServiceItem,
+} from "@/server/admin/actions";
 import type { AdminCatalogueItem } from "@/server/admin/queries";
 import { Loader2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -22,6 +33,7 @@ export function AdminCatalogueTable({ rows }: Props) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<AdminCatalogueItem | null>(null);
   const [, startTransition] = useTransition();
 
   const filtered = useMemo(() => {
@@ -126,18 +138,28 @@ export function AdminCatalogueTable({ rows }: Props) {
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={pendingId === item.id}
-                      onClick={() => handleToggle(item)}
-                    >
-                      {pendingId === item.id ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : null}
-                      {t("toggle")}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditing(item)}
+                      >
+                        {t("edit.button")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={pendingId === item.id}
+                        onClick={() => handleToggle(item)}
+                      >
+                        {pendingId === item.id ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : null}
+                        {t("toggle")}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -145,6 +167,195 @@ export function AdminCatalogueTable({ rows }: Props) {
           </table>
         </div>
       )}
+
+      <EditServiceDialog
+        item={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          router.refresh();
+        }}
+      />
     </div>
+  );
+}
+
+function EditServiceDialog({
+  item,
+  onClose,
+  onSaved,
+}: {
+  item: AdminCatalogueItem | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const t = useTranslations("adminOps.catalogue");
+  const [pending, startTransition] = useTransition();
+
+  if (!item) return null;
+
+  return (
+    <Dialog open={item !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t("edit.dialogTitle")}</DialogTitle>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            startTransition(async () => {
+              const result = await updateServiceItem({
+                id: item.id,
+                nameEn: String(fd.get("nameEn") ?? ""),
+                nameAr: String(fd.get("nameAr") ?? ""),
+                descEn: String(fd.get("descEn") ?? ""),
+                descAr: String(fd.get("descAr") ?? ""),
+                basePrice: String(fd.get("basePrice") ?? ""),
+                vatRate: String(fd.get("vatRate") ?? ""),
+                slaHours: Number(fd.get("slaHours")),
+                resubmissionPricePct: String(fd.get("resubmissionPricePct") ?? ""),
+                freeResubmissions: Number(fd.get("freeResubmissions")),
+                maxResubmissions: Number(fd.get("maxResubmissions")),
+              });
+              if (!result.ok) {
+                toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+                return;
+              }
+              toast.success(t("edit.success"));
+              onSaved();
+            });
+          }}
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="edit-nameEn">{t("edit.nameEn")}</Label>
+              <Input id="edit-nameEn" name="nameEn" defaultValue={item.nameEn} />
+            </div>
+            <div>
+              <Label htmlFor="edit-nameAr">{t("edit.nameAr")}</Label>
+              <Input
+                id="edit-nameAr"
+                name="nameAr"
+                dir="rtl"
+                defaultValue={item.nameAr}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="edit-descEn">{t("edit.descEn")}</Label>
+            <Textarea
+              id="edit-descEn"
+              name="descEn"
+              defaultValue={item.descEn}
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-descAr">{t("edit.descAr")}</Label>
+            <Textarea
+              id="edit-descAr"
+              name="descAr"
+              dir="rtl"
+              defaultValue={item.descAr}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <Label htmlFor="edit-basePrice">{t("edit.basePrice")}</Label>
+              <Input
+                id="edit-basePrice"
+                name="basePrice"
+                type="number"
+                step="0.01"
+                min="0"
+                dir="ltr"
+                defaultValue={item.basePrice}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-vatRate">{t("edit.vatRate")}</Label>
+              <Input
+                id="edit-vatRate"
+                name="vatRate"
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                dir="ltr"
+                defaultValue={item.vatRate}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-slaHours">{t("edit.slaHours")}</Label>
+              <Input
+                id="edit-slaHours"
+                name="slaHours"
+                type="number"
+                min="1"
+                dir="ltr"
+                defaultValue={item.slaHours}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <Label htmlFor="edit-resubmissionPricePct">
+                {t("edit.resubmissionPricePct")}
+              </Label>
+              <Input
+                id="edit-resubmissionPricePct"
+                name="resubmissionPricePct"
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                dir="ltr"
+                defaultValue={item.resubmissionPricePct}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-freeResubmissions">
+                {t("edit.freeResubmissions")}
+              </Label>
+              <Input
+                id="edit-freeResubmissions"
+                name="freeResubmissions"
+                type="number"
+                min="0"
+                dir="ltr"
+                defaultValue={item.freeResubmissions}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-maxResubmissions">
+                {t("edit.maxResubmissions")}
+              </Label>
+              <Input
+                id="edit-maxResubmissions"
+                name="maxResubmissions"
+                type="number"
+                min="0"
+                dir="ltr"
+                defaultValue={item.maxResubmissions}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t("edit.cancel")}
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {t("edit.save")}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

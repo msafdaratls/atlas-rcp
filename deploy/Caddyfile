@@ -1,0 +1,37 @@
+# Caddy reverse proxy with AUTOMATIC HTTPS for the Atlas app.
+#
+# Caddy obtains and renews Let's Encrypt certificates on its own — no certbot,
+# no manual renewal. Point your domain's A record at the droplet, set the
+# APP_DOMAIN and ACME_EMAIL env vars (see .env / docker-compose.prod.yml), and
+# HTTPS just works on first boot.
+#
+# Used by docker-compose.prod.yml. The {$VAR} syntax reads from Caddy's env.
+
+{$APP_DOMAIN} {
+	# TLS cert lifecycle notifications / recovery contact.
+	tls {$ACME_EMAIL}
+
+	# Must be >= serverActions.bodySizeLimit (60mb) so document uploads succeed.
+	request_body {
+		max_size 64MB
+	}
+
+	# Health probe (bypasses access logging noise).
+	handle /api/health {
+		reverse_proxy app:3000
+	}
+
+	reverse_proxy app:3000 {
+		# Let the Next.js app see the real client scheme/host for secure cookies
+		# and correct callback URLs (Auth.js reads X-Forwarded-* / AUTH_URL).
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	encode zstd gzip
+
+	log {
+		output stdout
+		format json
+	}
+}

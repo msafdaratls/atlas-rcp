@@ -807,9 +807,15 @@ export type AdminCatalogueItem = {
   code: string;
   nameEn: string;
   nameAr: string;
+  descEn: string;
+  descAr: string;
   active: boolean;
   basePrice: number;
+  vatRate: number;
   slaHours: number;
+  resubmissionPricePct: number;
+  freeResubmissions: number;
+  maxResubmissions: number;
   subCategoryId: string;
   subCategoryNameEn: string;
   subCategoryNameAr: string;
@@ -833,9 +839,15 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
       code: item.code,
       nameEn: item.nameEn,
       nameAr: item.nameAr,
+      descEn: item.descEn ?? "",
+      descAr: item.descAr ?? "",
       active: item.active,
       basePrice: toNumber(item.basePrice),
+      vatRate: toNumber(item.vatRate),
       slaHours: item.slaHours,
+      resubmissionPricePct: toNumber(item.resubmissionPricePct),
+      freeResubmissions: item.freeResubmissions,
+      maxResubmissions: item.maxResubmissions,
       subCategoryId: item.subCategoryId,
       subCategoryNameEn: item.subCategory.nameEn,
       subCategoryNameAr: item.subCategory.nameAr,

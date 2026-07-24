@@ -61,9 +61,14 @@ function AtlasWordmark({ className }: { className?: string }) {
         className,
       )}
     >
-      <span className="flex size-8 items-center justify-center rounded-md bg-atlas-green text-sm text-white">
-        A
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/atlas-mark.svg"
+        alt=""
+        width={32}
+        height={32}
+        className="size-8"
+      />
       <span>{t("appName")}</span>
     </Link>
   );

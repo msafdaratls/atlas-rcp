@@ -20,3 +20,6 @@ README.md
 Dockerfile
 .dockerignore
 docker-compose.yml
+docker-compose.prod.yml
+DEPLOYMENT.md
+deploy
