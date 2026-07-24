@@ -68,7 +68,8 @@
       "finance": "Finance",
       "quality": "Quality",
       "analytics": "Analytics",
-      "settings": "Settings"
+      "settings": "Settings",
+      "audit": "Audit log"
     }
   },
   "states": {
@@ -1004,6 +1005,23 @@
     "company": {
       "pageDescription": "Atlas Support & Services organisation card.",
       "redirectHint": "Organisation settings live under Settings."
+    },
+    "audit": {
+      "pageDescription": "Immutable record of every state change and privileged action.",
+      "filterAction": "Action",
+      "filterEntity": "Entity type",
+      "allActions": "All actions",
+      "apply": "Apply",
+      "colWhen": "When",
+      "colActor": "Actor",
+      "colAction": "Action",
+      "colEntity": "Entity",
+      "colOrg": "Organisation",
+      "emptyTitle": "No audit entries",
+      "emptyBody": "No actions match these filters yet.",
+      "total": "{count} entries",
+      "prev": "Previous",
+      "next": "Next"
     }
   },
   "myRequests": {
@@ -1137,7 +1155,16 @@
     "helpHint": "Trouble signing in? Contact your account administrator.",
     "noAccount": "New to Atlas?",
     "createAccount": "Create an account",
-    "haveAccount": "Already have an account?"
+    "haveAccount": "Already have an account?",
+    "forgotPassword": "Forgot password?",
+    "resendVerification": "Resend verification email",
+    "resendSent": "If your account needs verifying, a new link is on its way.",
+    "errors": {
+      "INVALID_CREDENTIALS": "Incorrect email or password.",
+      "RATE_LIMITED": "Too many attempts. Wait a few minutes and try again.",
+      "ACCOUNT_LOCKED": "Too many failed attempts — your account is locked for 15 minutes.",
+      "EMAIL_NOT_VERIFIED": "Verify your email before signing in. Check your inbox for the link."
+    }
   },
   "signup": {
     "title": "Create your account",
@@ -1171,6 +1198,50 @@
       "INVALID_SAUDI_PHONE": "Enter a valid Saudi number, e.g. +9665XXXXXXXX.",
       "RATE_LIMITED": "Too many attempts. Wait a few minutes and try again.",
       "SIGNUP_FAILED": "Could not create your account. Try again."
+    },
+    "checkEmailTitle": "Check your email",
+    "checkEmailBody": "We sent a verification link to {email}. Open it to activate your account, then sign in.",
+    "resend": "Resend link",
+    "resendSent": "Sent — check your inbox."
+  },
+  "verifyEmail": {
+    "title": "Email verification",
+    "successTitle": "Email verified",
+    "successBody": "Your email is confirmed. You can sign in now.",
+    "failTitle": "Link invalid or expired",
+    "failBody": "This verification link is invalid or has expired. Request a new one from the sign-in page.",
+    "signIn": "Go to sign in"
+  },
+  "forgotPassword": {
+    "title": "Reset your password",
+    "subtitle": "Enter your email and we'll send a reset link.",
+    "email": "Email",
+    "submit": "Send reset link",
+    "submitting": "Sending…",
+    "sentTitle": "Check your email",
+    "sentBody": "If an account exists for that address, a reset link is on its way.",
+    "backToSignIn": "Back to sign in"
+  },
+  "resetPassword": {
+    "title": "Set a new password",
+    "subtitle": "Choose a new password for your account.",
+    "password": "New password",
+    "confirmPassword": "Confirm new password",
+    "passwordHint": "At least 8 characters, with a letter and a number.",
+    "submit": "Update password",
+    "submitting": "Updating…",
+    "successTitle": "Password updated",
+    "successBody": "Your password has been changed. You can sign in now.",
+    "signIn": "Go to sign in",
+    "missingToken": "This reset link is invalid. Request a new one.",
+    "requestNew": "Request a new link",
+    "errors": {
+      "VALIDATION": "Check the fields and try again.",
+      "PASSWORD_MISMATCH": "The two passwords don't match.",
+      "WEAK_PASSWORD": "Use at least 8 characters, with a letter and a number.",
+      "INVALID_TOKEN": "This reset link is invalid or has expired. Request a new one.",
+      "RATE_LIMITED": "Too many attempts. Wait a few minutes and try again.",
+      "SAVE_FAILED": "Could not update your password. Try again."
     }
   }
 }

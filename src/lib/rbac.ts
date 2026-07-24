@@ -41,6 +41,8 @@ const QUALITY_READ_ROLES: Role[] = [
 
 const FINANCE_ADMIN_ROLES: Role[] = ["FINANCE", "SYSTEM_ADMIN"];
 
+const AUDIT_READ_ROLES: Role[] = ["SYSTEM_ADMIN", "QUALITY_MANAGER"];
+
 export function requirePermission(
   session: SessionUser,
   permission:
@@ -60,6 +62,7 @@ export function requirePermission(
     | "catalogue:manage"
     | "coupons:manage"
     | "quality:read"
+    | "audit:read"
     | "settings:admin"
     | "staff:manage",
 ): void {
@@ -142,6 +145,11 @@ export function requirePermission(
       return;
     case "quality:read":
       if (!isAtlas || !hasAnyRole(session, QUALITY_READ_ROLES)) {
+        throw new Error("FORBIDDEN");
+      }
+      return;
+    case "audit:read":
+      if (!isAtlas || !hasAnyRole(session, AUDIT_READ_ROLES)) {
         throw new Error("FORBIDDEN");
       }
       return;

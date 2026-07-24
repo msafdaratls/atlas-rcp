@@ -288,7 +288,8 @@ export async function inviteOrganisationUser(
         fullNameAr: parsed.data.fullNameAr,
         locale: "ar",
         status: "ACTIVE",
-        emailVerifiedAt: null,
+        // Created by an authenticated owner — treated as a trusted invite.
+        emailVerifiedAt: new Date(),
         roles: { create: [{ role: parsed.data.role }] },
       },
     });

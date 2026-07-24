@@ -29,3 +29,11 @@ export function formatDate(
     options ?? { dateStyle: "medium" },
   ).format(date);
 }
+
+/** Date + time, for audit trails and logs. */
+export function formatDateTime(value: Date | string, locale: string) {
+  return formatDate(value, locale, {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}

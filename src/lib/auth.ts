@@ -12,6 +12,10 @@ const credentialsSchema = z.object({
   password: z.string().min(8),
 });
 
+/** Account lockout: lock for LOCKOUT_MS after MAX_FAILED_LOGINS bad passwords. */
+const MAX_FAILED_LOGINS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000;
+
 function applyUserToToken(
   token: JWT,
   user: {
@@ -84,14 +88,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        // Locked out after too many failed attempts.
+        if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+          return null;
+        }
+
+        // Email must be verified before the account can sign in.
+        if (!user.emailVerifiedAt) {
+          return null;
+        }
+
         const valid = await compare(parsed.data.password, user.passwordHash);
         if (!valid) {
+          const attempts = user.failedLoginAttempts + 1;
+          const locked = attempts >= MAX_FAILED_LOGINS;
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              failedLoginAttempts: locked ? 0 : attempts,
+              lockedUntil: locked ? new Date(Date.now() + LOCKOUT_MS) : null,
+            },
+          });
           return null;
         }
 
         await prisma.user.update({
           where: { id: user.id },
-          data: { lastLoginAt: new Date() },
+          data: {
+            lastLoginAt: new Date(),
+            failedLoginAttempts: 0,
+            lockedUntil: null,
+          },
         });
 
         return {

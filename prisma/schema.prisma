@@ -207,10 +207,13 @@ model User {
   status           UserStatus @default(ACTIVE)
   lastLoginAt      DateTime?
   emailVerifiedAt  DateTime?
+  failedLoginAttempts Int      @default(0)
+  lockedUntil      DateTime?
   createdAt        DateTime   @default(now())
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   roles        UserRole[]
+  verificationTokens VerificationToken[]
 
   createdRequests   Request[]          @relation("RequestCreatedBy")
   assignedRequests  Request[]          @relation("RequestAssignedTo")
@@ -684,4 +687,27 @@ model AuditLog {
   @@index([actorUserId, createdAt])
   @@index([organisationId, createdAt])
   @@index([createdAt])
+}
+
+// ─── Auth tokens (email verification + password reset) ───────────────────────
+
+enum VerificationTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model VerificationToken {
+  id        String                @id @default(cuid())
+  userId    String
+  type      VerificationTokenType
+  /// SHA-256 of the raw token; the raw value is only sent in the email link.
+  tokenHash String                @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime              @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
 }

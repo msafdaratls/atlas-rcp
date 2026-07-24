@@ -2,13 +2,21 @@
 
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "@/lib/i18n/navigation";
+import { Link, useRouter } from "@/lib/i18n/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginAction } from "@/server/auth/login";
+import { resendVerificationAction } from "@/server/auth/signup";
+
+const ERROR_CODES = new Set([
+  "INVALID_CREDENTIALS",
+  "RATE_LIMITED",
+  "ACCOUNT_LOCKED",
+  "EMAIL_NOT_VERIFIED",
+]);
 
 export function LoginForm() {
   const t = useTranslations("landing");
@@ -16,18 +24,38 @@ export function LoginForm() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   function onSubmit(formData: FormData) {
     setError(null);
+    setUnverifiedEmail(null);
+    setResent(false);
     startTransition(async () => {
       const result = await loginAction(formData);
       if (!result.ok) {
-        setError(tAuth("loginFailed"));
+        const code = ERROR_CODES.has(result.error)
+          ? result.error
+          : "INVALID_CREDENTIALS";
+        setError(tAuth(`errors.${code}` as never));
+        if (code === "EMAIL_NOT_VERIFIED" && result.email) {
+          setUnverifiedEmail(result.email);
+        }
         return;
       }
       router.push(result.redirectTo);
       router.refresh();
+    });
+  }
+
+  function onResend() {
+    if (!unverifiedEmail) return;
+    const fd = new FormData();
+    fd.set("email", unverifiedEmail);
+    startTransition(async () => {
+      await resendVerificationAction(fd);
+      setResent(true);
     });
   }
 
@@ -82,22 +110,37 @@ export function LoginForm() {
       </div>
 
       {error ? (
-        <p
-          id="login-error"
-          className="text-sm text-[var(--state-bad)]"
-          role="alert"
-        >
-          {error}
-        </p>
+        <div id="login-error" role="alert" className="space-y-1">
+          <p className="text-sm text-[var(--state-bad)]">{error}</p>
+          {unverifiedEmail && !resent ? (
+            <button
+              type="button"
+              onClick={onResend}
+              disabled={pending}
+              className="text-sm font-medium text-[var(--atlas-green-600)] underline-offset-4 hover:underline disabled:opacity-50"
+            >
+              {tAuth("resendVerification")}
+            </button>
+          ) : null}
+          {resent ? (
+            <p className="text-sm text-[var(--ink-500)]">{tAuth("resendSent")}</p>
+          ) : null}
+        </div>
       ) : null}
 
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? tAuth("signingIn") : t("signIn")}
       </Button>
 
-      <p className="pt-1 text-center text-xs text-[var(--ink-500)]">
-        {tAuth("helpHint")}
-      </p>
+      <div className="flex items-center justify-between pt-1 text-xs">
+        <Link
+          href="/forgot-password"
+          className="font-medium text-[var(--atlas-green-600)] underline-offset-4 hover:underline"
+        >
+          {tAuth("forgotPassword")}
+        </Link>
+        <span className="text-[var(--ink-500)]">{tAuth("helpHint")}</span>
+      </div>
     </form>
   );
 }

@@ -21,6 +21,13 @@ const formulaMime = [
 ] as const;
 
 async function main() {
+  // Refuse to run against production — this wipes and reseeds demo data.
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "1") {
+    throw new Error(
+      "Refusing to seed in production. Set ALLOW_PROD_SEED=1 only if you are certain.",
+    );
+  }
+
   // Wipe in dependency order for idempotent local reseeds
   await prisma.auditLog.deleteMany();
   await prisma.notificationLog.deleteMany();

@@ -1,15 +1,13 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
 
-import { useRouter } from "@/lib/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signupAction } from "@/server/auth/signup";
+import { signupAction, resendVerificationAction } from "@/server/auth/signup";
 
 const ERROR_CODES = new Set([
   "VALIDATION",
@@ -24,9 +22,10 @@ const ERROR_CODES = new Set([
 export function SignupForm({ locale }: { locale: "ar" | "en" }) {
   const t = useTranslations("signup");
   const tAuth = useTranslations("auth");
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   function onSubmit(formData: FormData) {
@@ -40,10 +39,50 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
         setError(t(`errors.${code}` as never));
         return;
       }
-      toast.success(t("success"));
-      router.push(result.redirectTo);
-      router.refresh();
+      setSentTo(result.email);
     });
+  }
+
+  function onResend() {
+    if (!sentTo) return;
+    const fd = new FormData();
+    fd.set("email", sentTo);
+    fd.set("locale", locale);
+    startTransition(async () => {
+      await resendVerificationAction(fd);
+      setResent(true);
+    });
+  }
+
+  if (sentTo) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-lg border border-line bg-surface-alt p-4">
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-state-ok" />
+          <div className="space-y-1">
+            <p className="font-semibold text-ink-900">{t("checkEmailTitle")}</p>
+            <p className="text-sm text-ink-500">
+              {t("checkEmailBody", { email: sentTo })}
+            </p>
+          </div>
+        </div>
+        {resent ? (
+          <p className="text-center text-sm text-[var(--ink-500)]">
+            {t("resendSent")}
+          </p>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={onResend}
+            disabled={pending}
+          >
+            {t("resend")}
+          </Button>
+        )}
+      </div>
+    );
   }
 
   const hasError = Boolean(error);

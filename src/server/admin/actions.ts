@@ -989,7 +989,8 @@ export async function inviteAtlasStaff(
         fullNameAr: parsed.data.fullNameAr,
         locale: "ar",
         status: "ACTIVE",
-        emailVerifiedAt: null,
+        // Created by an authenticated admin — treated as a trusted invite.
+        emailVerifiedAt: new Date(),
         roles: { create: [{ role: parsed.data.role }] },
       },
     });

@@ -12,6 +12,7 @@ import {
   type LucideIcon,
   Package,
   Receipt,
+  ScrollText,
   Settings,
   Shield,
   TicketPercent,
@@ -122,6 +123,12 @@ const ADMIN_NAV: NavItem[] = [
     href: "/quality",
     icon: Shield,
     roles: ["QUALITY_MANAGER", "SYSTEM_ADMIN", "DECISION_MAKER"],
+  },
+  {
+    key: "audit",
+    href: "/audit",
+    icon: ScrollText,
+    roles: ["SYSTEM_ADMIN", "QUALITY_MANAGER"],
   },
   // Overview analytics — any Atlas (same as dashboard)
   { key: "analytics", href: "/analytics", icon: BarChart3 },

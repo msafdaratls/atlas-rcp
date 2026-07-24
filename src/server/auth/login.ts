@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { signIn } from "@/lib/auth";
 import { getSession } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 import { consumeRateLimitAsync } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
@@ -15,7 +16,7 @@ const loginSchema = z.object({
 
 export type LoginActionResult =
   | { ok: true; redirectTo: "/client" | "/admin" }
-  | { ok: false };
+  | { ok: false; error: string; email?: string };
 
 export async function loginAction(
   formData: FormData,
@@ -26,7 +27,7 @@ export async function loginAction(
   });
 
   if (!parsed.success) {
-    return { ok: false };
+    return { ok: false, error: "INVALID_CREDENTIALS" };
   }
 
   const email = parsed.data.email.toLowerCase();
@@ -39,7 +40,21 @@ export async function loginAction(
     windowMs: 15 * 60 * 1000,
   });
   if (!limited.ok) {
-    return { ok: false };
+    return { ok: false, error: "RATE_LIMITED" };
+  }
+
+  // Pre-check for clearer messaging (enforcement also lives in authorize()).
+  const known = await prisma.user.findUnique({
+    where: { email },
+    select: { emailVerifiedAt: true, lockedUntil: true, status: true },
+  });
+  if (known && known.status === "ACTIVE") {
+    if (known.lockedUntil && known.lockedUntil.getTime() > Date.now()) {
+      return { ok: false, error: "ACCOUNT_LOCKED" };
+    }
+    if (!known.emailVerifiedAt) {
+      return { ok: false, error: "EMAIL_NOT_VERIFIED", email };
+    }
   }
 
   try {
@@ -51,17 +66,16 @@ export async function loginAction(
 
     const session = await getSession();
     if (!session) {
-      return { ok: false };
+      return { ok: false, error: "INVALID_CREDENTIALS" };
     }
 
     return {
       ok: true,
-      redirectTo:
-        session.organisation.type === "ATLAS" ? "/admin" : "/client",
+      redirectTo: session.organisation.type === "ATLAS" ? "/admin" : "/client",
     };
   } catch (error) {
     if (error instanceof AuthError) {
-      return { ok: false };
+      return { ok: false, error: "INVALID_CREDENTIALS" };
     }
     throw error;
   }

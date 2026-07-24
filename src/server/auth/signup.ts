@@ -1,18 +1,19 @@
 "use server";
 
-import { AuthError } from "next-auth";
 import { headers } from "next/headers";
 import { hash } from "bcryptjs";
 
-import { signIn } from "@/lib/auth";
-import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { consumeRateLimitAsync } from "@/lib/rate-limit";
+import { issueVerificationToken } from "@/lib/auth/tokens";
+import { sendVerificationEmail } from "@/lib/auth/auth-email";
 import { signupSchema } from "@/lib/validators/auth";
 
 export type SignupActionResult =
-  | { ok: true; redirectTo: "/client" }
+  | { ok: true; requiresVerification: true; email: string }
   | { ok: false; error: string };
+
+const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Derive a unique, URL-safe username from the email local part. */
 async function uniqueUsername(email: string): Promise<string> {
@@ -53,11 +54,9 @@ export async function signupAction(
 
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
+    const known = ["PASSWORD_MISMATCH", "INVALID_SAUDI_PHONE", "WEAK_PASSWORD"];
     const code =
-      issue?.message === "PASSWORD_MISMATCH" ||
-      issue?.message === "INVALID_SAUDI_PHONE"
-        ? issue.message
-        : "VALIDATION";
+      issue && known.includes(issue.message) ? issue.message : "VALIDATION";
     return { ok: false, error: code };
   }
 
@@ -67,7 +66,7 @@ export async function signupAction(
 
   const hdrs = await headers();
   const forwarded = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const limited = consumeRateLimit({
+  const limited = await consumeRateLimitAsync({
     key: `signup:${forwarded || email}`,
     limit: 5,
     windowMs: 60 * 60 * 1000,
@@ -75,6 +74,8 @@ export async function signupAction(
   if (!limited.ok) {
     return { ok: false, error: "RATE_LIMITED" };
   }
+
+  let verificationToken: string | null = null;
 
   try {
     const existing = await prisma.user.findUnique({
@@ -88,7 +89,7 @@ export async function signupAction(
     const username = await uniqueUsername(email);
     const passwordHash = await hash(data.password, 12);
 
-    await prisma.$transaction(async (tx) => {
+    verificationToken = await prisma.$transaction(async (tx) => {
       const organisation = await tx.organisation.create({
         data: {
           type: "CLIENT",
@@ -111,6 +112,8 @@ export async function signupAction(
           phone,
           locale: data.locale,
           status: "ACTIVE",
+          // Left unverified — login is blocked until the email is confirmed.
+          emailVerifiedAt: null,
           roles: { create: [{ role: "CLIENT_OWNER" }] },
         },
       });
@@ -129,6 +132,13 @@ export async function signupAction(
           },
         },
       });
+
+      return issueVerificationToken(
+        user.id,
+        "EMAIL_VERIFICATION",
+        VERIFICATION_TTL_MS,
+        tx,
+      );
     });
   } catch (error) {
     // Unique-constraint race on email/username → treat as taken.
@@ -142,23 +152,41 @@ export async function signupAction(
     return { ok: false, error: "SIGNUP_FAILED" };
   }
 
-  // Sign the new owner in immediately.
-  try {
-    await signIn("credentials", {
-      email,
-      password: data.password,
-      redirect: false,
-    });
-    const session = await getSession();
-    if (!session) {
-      return { ok: false, error: "SIGNUP_FAILED" };
-    }
-    return { ok: true, redirectTo: "/client" };
-  } catch (error) {
-    if (error instanceof AuthError) {
-      // Account exists but auto sign-in failed — let them sign in manually.
-      return { ok: false, error: "SIGNUP_FAILED" };
-    }
-    throw error;
+  await sendVerificationEmail({ to: email, locale: data.locale, token: verificationToken });
+
+  return { ok: true, requiresVerification: true, email };
+}
+
+/** Re-sends a verification link. Always reports success (no account enumeration). */
+export async function resendVerificationAction(
+  formData: FormData,
+): Promise<{ ok: true }> {
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  const locale = formData.get("locale") === "en" ? "en" : "ar";
+  if (!email) return { ok: true };
+
+  const hdrs = await headers();
+  const forwarded = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const limited = await consumeRateLimitAsync({
+    key: `resend-verify:${forwarded || email}`,
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!limited.ok) return { ok: true };
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, emailVerifiedAt: true, locale: true },
+  });
+  if (user && !user.emailVerifiedAt) {
+    const token = await issueVerificationToken(
+      user.id,
+      "EMAIL_VERIFICATION",
+      VERIFICATION_TTL_MS,
+    );
+    await sendVerificationEmail({ to: email, locale: user.locale || locale, token });
   }
+  return { ok: true };
 }
