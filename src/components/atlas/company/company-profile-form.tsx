@@ -78,11 +78,11 @@ export function CompanyProfileForm({ initial }: Props) {
       nameAr: initial.organisation.nameAr,
       crNumber: initial.organisation.crNumber ?? "",
       vatNumber: initial.organisation.vatNumber ?? "",
-      website: initial.organisation.website,
+      website: initial.organisation.website ?? "",
       email: initial.organisation.email,
       phone: initial.organisation.phone ?? "+966",
       addressLine1: initial.organisation.addressLine1 ?? "",
-      addressLine2: initial.organisation.addressLine2,
+      addressLine2: initial.organisation.addressLine2 ?? "",
       city: initial.organisation.city ?? "",
       region:
         (initial.organisation.region as CompanyProfileInput["region"]) ||
@@ -269,7 +269,11 @@ export function CompanyProfileForm({ initial }: Props) {
                 dir="ltr"
                 disabled={!initial.canEdit}
                 {...form.register("website", {
-                  setValueAs: (v: string) => (v.trim() === "" ? null : v.trim()),
+                  // v can be null when the stored website is empty — guard before trim.
+                  setValueAs: (v: string | null) => {
+                    const trimmed = (v ?? "").trim();
+                    return trimmed === "" ? null : trimmed;
+                  },
                 })}
               />
             </div>
