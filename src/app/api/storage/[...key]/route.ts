@@ -27,6 +27,29 @@ function isImageMime(mime: string): boolean {
   );
 }
 
+/**
+ * True when the browser can render this type inline AND it is safe to do so.
+ * PDFs and raster images qualify (labels/artwork are usually PDF or PNG/JPG).
+ * SVG never qualifies — it can execute embedded script, so it is always served
+ * as an attachment. Everything else downloads.
+ */
+function isInlineSafe(mime: string): boolean {
+  if (mime === "image/svg+xml") return false;
+  return mime === "application/pdf" || isImageMime(mime);
+}
+
+/**
+ * RFC 6266 Content-Disposition value with an ASCII `filename` fallback plus a
+ * UTF-8 `filename*` so non-ASCII names (e.g. Arabic label files) survive.
+ */
+function contentDisposition(
+  type: "inline" | "attachment",
+  name: string,
+): string {
+  const ascii = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_") || "download";
+  return `${type}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
 function mapAuthError(error: unknown): NextResponse {
   const message = error instanceof Error ? error.message : "UNAUTHORIZED";
   if (message === "UNAUTHORIZED") {
@@ -76,11 +99,16 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const isAtlas = session.organisation.type === "ATLAS";
     const isClient = session.organisation.type === "CLIENT";
 
+    // Filename used for the Content-Disposition header; defaults to the last
+    // key segment and is upgraded to the real uploaded filename for documents.
+    let downloadName: string | undefined;
+
     const docVersion = await prisma.documentVersion.findFirst({
       where: { storageKey: key },
       select: {
         avStatus: true,
         mimeType: true,
+        fileName: true,
         document: {
           select: {
             request: { select: { organisationId: true } },
@@ -90,6 +118,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     });
 
     if (docVersion) {
+      downloadName = docVersion.fileName;
       if (docVersion.avStatus === "INFECTED") {
         return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
       }
@@ -143,16 +172,15 @@ export async function GET(_request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
     }
 
-    // Never serve SVG inline; force attachment. Prefer attachment for non-images.
-    const disposition =
-      object.mimeType === "image/svg+xml" || !isImageMime(object.mimeType)
-        ? "attachment"
-        : "inline";
+    // PDFs and images render inline (so admins can preview label artwork in the
+    // browser); SVG and other types download. See isInlineSafe.
+    const disposition = isInlineSafe(object.mimeType) ? "inline" : "attachment";
+    const fileName = downloadName ?? key.split("/").pop() ?? "download";
 
     return new NextResponse(new Uint8Array(object.body), {
       headers: {
         "Content-Type": object.mimeType,
-        "Content-Disposition": disposition,
+        "Content-Disposition": contentDisposition(disposition, fileName),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, max-age=3600",
       },
