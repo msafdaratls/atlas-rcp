@@ -1,5 +1,6 @@
 import { AdminCatalogueTable } from "@/components/atlas/admin/admin-catalogue-table";
 import { CreateServiceWizard } from "@/components/atlas/admin/create-service-wizard";
+import { ManageCategoriesDialog } from "@/components/atlas/admin/manage-categories-dialog";
 import { EmptyState } from "@/components/atlas/empty-state";
 import { PageHeader } from "@/components/atlas/page-header";
 import { requireSession } from "@/lib/auth/session";
@@ -38,7 +39,12 @@ export default async function AdminCataloguePage({ params }: Props) {
         description={t("pageDescription")}
         breadcrumbs={[{ label: tNav("catalogue") }]}
         actions={
-          categoryTree ? <CreateServiceWizard categoryTree={categoryTree} /> : null
+          categoryTree ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <ManageCategoriesDialog categoryTree={categoryTree} />
+              <CreateServiceWizard categoryTree={categoryTree} />
+            </div>
+          ) : null
         }
       />
       {items ? (

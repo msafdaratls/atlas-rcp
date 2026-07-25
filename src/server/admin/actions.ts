@@ -812,6 +812,150 @@ export async function createServiceItem(
   }
 }
 
+const createMainCategorySchema = z.object({
+  code: z.string().trim().min(1).max(40),
+  nameEn: z.string().trim().min(2).max(200),
+  nameAr: z.string().trim().min(2).max(200),
+  descEn: z.string().trim().max(2000).optional(),
+  descAr: z.string().trim().max(2000).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+/** Creates a top-level catalogue category. Code is globally unique. */
+export async function createMainCategory(
+  input: z.infer<typeof createMainCategorySchema>,
+): Promise<ActionResult<{ mainCategoryId: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const parsed = createMainCategorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const data = parsed.data;
+
+    let mainCategoryId: string;
+    try {
+      mainCategoryId = await prisma.$transaction(async (tx) => {
+        const category = await tx.mainCategory.create({
+          data: {
+            code: data.code,
+            nameEn: data.nameEn,
+            nameAr: data.nameAr,
+            descEn: data.descEn || null,
+            descAr: data.descAr || null,
+            sortOrder: data.sortOrder ?? 0,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorUserId: session.id,
+            actorRole: session.roles[0],
+            action: "catalogue.mainCategory.create",
+            entityType: "MainCategory",
+            entityId: category.id,
+            after: { code: category.code, nameEn: category.nameEn },
+          },
+        });
+        return category.id;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { ok: false, error: "CODE_TAKEN" };
+      }
+      throw error;
+    }
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: { mainCategoryId } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const createSubCategorySchema = z.object({
+  mainCategoryId: z.string().min(1),
+  code: z.string().trim().min(1).max(40),
+  nameEn: z.string().trim().min(2).max(200),
+  nameAr: z.string().trim().min(2).max(200),
+  descEn: z.string().trim().max(2000).optional(),
+  descAr: z.string().trim().max(2000).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+/** Creates a subcategory under a main category. Code is unique per parent. */
+export async function createSubCategory(
+  input: z.infer<typeof createSubCategorySchema>,
+): Promise<ActionResult<{ subCategoryId: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const parsed = createSubCategorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const data = parsed.data;
+
+    const main = await prisma.mainCategory.findUnique({
+      where: { id: data.mainCategoryId },
+      select: { id: true },
+    });
+    if (!main) return { ok: false, error: "NOT_FOUND" };
+
+    let subCategoryId: string;
+    try {
+      subCategoryId = await prisma.$transaction(async (tx) => {
+        const sub = await tx.subCategory.create({
+          data: {
+            mainCategoryId: data.mainCategoryId,
+            code: data.code,
+            nameEn: data.nameEn,
+            nameAr: data.nameAr,
+            descEn: data.descEn || null,
+            descAr: data.descAr || null,
+            sortOrder: data.sortOrder ?? 0,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorUserId: session.id,
+            actorRole: session.roles[0],
+            action: "catalogue.subCategory.create",
+            entityType: "SubCategory",
+            entityId: sub.id,
+            after: {
+              code: sub.code,
+              nameEn: sub.nameEn,
+              mainCategoryId: sub.mainCategoryId,
+            },
+          },
+        });
+        return sub.id;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { ok: false, error: "CODE_TAKEN" };
+      }
+      throw error;
+    }
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: { subCategoryId } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
 const setCouponStatusSchema = z.object({
   id: z.string().min(1),
   status: z.enum(["ACTIVE", "PAUSED"]),

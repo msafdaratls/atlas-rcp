@@ -778,7 +778,8 @@
         "UNAUTHORIZED": "Sign in again to continue.",
         "FORBIDDEN": "You do not have permission for this action.",
         "NOT_FOUND": "We could not find that record.",
-        "SAVE_FAILED": "Could not save. Try again."
+        "SAVE_FAILED": "Could not save. Try again.",
+        "CODE_TAKEN": "That code is already in use."
       },
       "create": {
         "button": "Create service",
@@ -873,6 +874,26 @@
           "CODE_TAKEN": "That code is already used in this subcategory.",
           "SAVE_FAILED": "Could not save. Try again."
         }
+      },
+      "categories": {
+        "button": "Manage categories",
+        "title": "Manage categories",
+        "description": "Add the main categories and subcategories that services are grouped under. A service needs a subcategory, which needs a main category.",
+        "existing": "Existing categories",
+        "none": "No categories yet.",
+        "mainSection": "Add main category",
+        "subSection": "Add subcategory",
+        "parent": "Main category",
+        "parentPlaceholder": "Select a main category…",
+        "code": "Code",
+        "nameEn": "Name (English)",
+        "nameAr": "Name (Arabic)",
+        "addMain": "Add main category",
+        "addSub": "Add subcategory",
+        "close": "Close",
+        "mainAdded": "Main category added.",
+        "subAdded": "Subcategory added.",
+        "needMainFirst": "Add a main category first."
       }
     },
     "coupons": {
