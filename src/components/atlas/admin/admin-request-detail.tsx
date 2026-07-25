@@ -1,5 +1,6 @@
 "use client";
 
+import { AssessmentPanel } from "@/components/atlas/admin/assessment-panel";
 import { DocumentCard, type DocumentVersionView } from "@/components/atlas/document-card";
 import { MoneyValue } from "@/components/atlas/money-value";
 import { SlaMeter } from "@/components/atlas/sla-meter";
@@ -20,8 +21,26 @@ import {
   addAtlasClientComment,
   transitionAdminRequest,
 } from "@/server/admin/actions";
+import { hasCheckItems } from "@/lib/assessment";
 import type { AdminRequestDetail } from "@/server/admin/queries";
 import type { FaultAttribution, RequestState, ReturnReasonCode } from "@prisma/client";
+
+const ASSESSMENT_SHOW_STATES: RequestState[] = [
+  "ACCEPTED",
+  "ASSESSMENT_QUEUED",
+  "ASSESSMENT_RUNNING",
+  "TECHNICAL_REVIEW",
+  "DECISION",
+  "REPORT_ISSUED",
+  "CLOSED",
+  "ON_HOLD",
+];
+
+const ASSESSMENT_EDIT_STATES: RequestState[] = [
+  "ASSESSMENT_RUNNING",
+  "TECHNICAL_REVIEW",
+  "DECISION",
+];
 import {
   Ban,
   CheckCircle2,
@@ -341,6 +360,16 @@ export function AdminRequestDetailPanel({ data }: Props) {
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {ASSESSMENT_SHOW_STATES.includes(data.state) &&
+      hasCheckItems(data.serviceItem.checkSets) ? (
+        <AssessmentPanel
+          requestId={data.id}
+          checkSets={data.serviceItem.checkSets}
+          initial={data.assessment}
+          editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
+        />
       ) : null}
 
       <StatusRail

@@ -2,6 +2,7 @@ import { PrismaClient, Prisma, Role, RequestState, CommentDirection, ReturnReaso
 import bcrypt from "bcryptjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { foodCheckSets } from "./seed-assets/sfda-checksets";
 
 const prisma = new PrismaClient();
 
@@ -590,13 +591,8 @@ async function main() {
     required: ["product_type", "target_group"],
   };
 
-  const foodCheckSets = [
-    { code: "GSO_9", titleEn: "GSO 9 — General labelling", titleAr: "GSO 9 — بطاقة البيان العامة" },
-    { code: "FD_55", titleEn: "FD 55 — Food supplements", titleAr: "FD 55 — المكملات الغذائية" },
-    { code: "FD_2233", titleEn: "FD 2233 — Nutrition labelling", titleAr: "FD 2233 — بطاقة التغذية" },
-    { code: "FD_2333", titleEn: "FD 2333 — Claims", titleAr: "FD 2333 — الادعاءات" },
-    { code: "FD_2500", titleEn: "FD 2500 — Additives", titleAr: "FD 2500 — المواد المضافة" },
-  ];
+  // foodCheckSets (5 sections, 113 SFDA verification items with full knowledge base)
+  // is imported from ./seed-assets/sfda-checksets — generated from the SFDA workbook.
 
   const cosmeticCheckSets = [
     { code: "GSO_1943", titleEn: "GSO 1943 — Cosmetic labelling", titleAr: "GSO 1943 — بطاقة مستحضرات التجميل" },
@@ -874,7 +870,7 @@ async function main() {
         ...seed,
         docs: [...seed.docs],
         productAttrSchema: isCosmetic ? cosmeticAttrs : foodSupplementAttrs,
-        checkSets: isCosmetic ? cosmeticCheckSets : foodCheckSets,
+        checkSets: (isCosmetic ? cosmeticCheckSets : foodCheckSets) as unknown as Prisma.InputJsonValue,
       }),
     );
   }

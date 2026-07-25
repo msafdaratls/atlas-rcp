@@ -353,6 +353,8 @@ model Request {
   productNameAr    String       @default("")
   brand            String?
   productAttrs     Json         @default("{}")
+  /// Technical-review verdicts per check item: { verdicts, notes, updatedAt, updatedByUserId }.
+  assessment       Json         @default("{}")
   submissionNo     Int          @default(1)
   priceCharged     Decimal      @default(0) @db.Decimal(14, 2)
   discountApplied  Decimal      @default(0) @db.Decimal(14, 2)

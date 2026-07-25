@@ -12,6 +12,12 @@ import type {
   UserStatus,
 } from "@prisma/client";
 import { Prisma } from "@prisma/client";
+import {
+  parseAssessment,
+  parseCheckSets,
+  type AssessmentState,
+  type CheckSet,
+} from "@/lib/assessment";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { toNumber } from "@/lib/pricing";
@@ -339,7 +345,9 @@ export type AdminRequestDetail = {
     nameAr: string;
     slaHours: number;
     maxResubmissions: number;
+    checkSets: CheckSet[];
   };
+  assessment: AssessmentState;
   createdBy: { id: string; fullNameEn: string; fullNameAr: string; email: string };
   assignedTo: {
     id: string;
@@ -418,6 +426,7 @@ export async function getAdminRequestDetail(
             nameAr: true,
             slaHours: true,
             maxResubmissions: true,
+            checkSets: true,
           },
         },
         createdBy: {
@@ -487,7 +496,16 @@ export async function getAdminRequestDetail(
         }),
       ),
       organisation: request.organisation,
-      serviceItem: request.serviceItem,
+      serviceItem: {
+        id: request.serviceItem.id,
+        code: request.serviceItem.code,
+        nameEn: request.serviceItem.nameEn,
+        nameAr: request.serviceItem.nameAr,
+        slaHours: request.serviceItem.slaHours,
+        maxResubmissions: request.serviceItem.maxResubmissions,
+        checkSets: parseCheckSets(request.serviceItem.checkSets),
+      },
+      assessment: parseAssessment(request.assessment),
       createdBy: request.createdBy,
       assignedTo: request.assignedTo,
       events: request.events.map((e) => ({

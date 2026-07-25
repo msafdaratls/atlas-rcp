@@ -689,6 +689,50 @@
         "SAVE_FAILED": "Could not save. Try again.",
         "INVALID_STATE": "You can't message on this request yet.",
         "CONFLICT": "This request changed while you were working. Refresh and try again."
+      },
+      "assessment": {
+        "title": "Technical assessment",
+        "subtitle": "Mark each item Compliant / Non-compliant / N/A. N/A items are excluded from the compliance rate.",
+        "progress": "{done} of {total} items assessed",
+        "overallRate": "Compliance rate",
+        "save": "Save assessment",
+        "saved": "Assessment saved",
+        "unsaved": "Unsaved changes",
+        "readOnly": "This assessment is read-only in the current state.",
+        "verdict": {
+          "COMPLIANT": "Compliant",
+          "NON_COMPLIANT": "Non-compliant",
+          "NA": "N/A"
+        },
+        "decision": {
+          "ACCEPTED": "Recommendation: Accepted",
+          "ACCEPTED_WITH_REMARKS": "Recommendation: Accepted with remarks",
+          "REJECTED": "Recommendation: Rejected",
+          "INCOMPLETE": "Assessment incomplete"
+        },
+        "note": {
+          "add": "Add note",
+          "edit": "Note",
+          "placeholder": "Reviewer note for this item…"
+        },
+        "guide": {
+          "show": "Guidance",
+          "compliantWhen": "Compliant when",
+          "evidenceRequired": "Evidence required",
+          "commonNonConformities": "Common non-conformities",
+          "decisionRule": "Decision rule",
+          "knowledgeBase": "Knowledge base",
+          "referenceRange": "Reference"
+        },
+        "errors": {
+          "VALIDATION": "Some entries were invalid.",
+          "NOT_FOUND": "Request not found.",
+          "INVALID_STATE": "The assessment can only be edited during review.",
+          "NO_CHECKLIST": "This service has no checklist to assess.",
+          "FORBIDDEN": "You do not have permission.",
+          "UNAUTHORIZED": "Sign in again to continue.",
+          "SAVE_FAILED": "Could not save the assessment. Try again."
+        }
       }
     },
     "clients": {

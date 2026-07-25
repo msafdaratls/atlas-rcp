@@ -6,6 +6,12 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
+import {
+  computeAssessment,
+  hasCheckItems,
+  parseCheckSets,
+  type AssessmentState,
+} from "@/lib/assessment";
 import { writeAuditLog } from "@/lib/audit";
 import { parsePercentCouponValue } from "@/lib/billing-helpers";
 import { prisma } from "@/lib/db";
@@ -386,6 +392,109 @@ export async function addAdminInternalComment(
 
     revalidatePath(`/[locale]/admin/requests/${request.id}`, "page");
     return { ok: true, data: { commentId: comment.id } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+/** States in which a reviewer may edit the item-level assessment. */
+const ASSESSMENT_EDIT_STATES: RequestState[] = [
+  "ASSESSMENT_RUNNING",
+  "TECHNICAL_REVIEW",
+  "DECISION",
+];
+
+const saveAssessmentSchema = z.object({
+  requestId: z.string().min(1),
+  verdicts: z.record(
+    z.string(),
+    z.enum(["COMPLIANT", "NON_COMPLIANT", "NA"]),
+  ),
+  notes: z.record(z.string(), z.string().trim().max(1000)).optional(),
+});
+
+export async function saveAssessment(
+  input: z.infer<typeof saveAssessmentSchema>,
+): Promise<ActionResult<{ recommendation: string; complete: boolean }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = saveAssessmentSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const request = await prisma.request.findUnique({
+      where: { id: parsed.data.requestId },
+      select: {
+        id: true,
+        state: true,
+        organisationId: true,
+        assessment: true,
+        serviceItem: { select: { checkSets: true } },
+      },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+
+    if (!ASSESSMENT_EDIT_STATES.includes(request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    // Keep only verdicts/notes whose item codes exist in the service checklist.
+    const checkSets = parseCheckSets(request.serviceItem.checkSets);
+    if (!hasCheckItems(checkSets)) {
+      return { ok: false, error: "NO_CHECKLIST" };
+    }
+    const known = new Set(
+      checkSets.flatMap((s) => s.items.map((i) => i.code)),
+    );
+
+    const verdicts: Record<string, "COMPLIANT" | "NON_COMPLIANT" | "NA"> = {};
+    for (const [code, v] of Object.entries(parsed.data.verdicts)) {
+      if (known.has(code)) verdicts[code] = v;
+    }
+    const notes: Record<string, string> = {};
+    for (const [code, n] of Object.entries(parsed.data.notes ?? {})) {
+      if (known.has(code) && n.trim()) notes[code] = n.trim();
+    }
+
+    const nextState: AssessmentState = {
+      verdicts,
+      notes,
+      updatedAt: new Date().toISOString(),
+      updatedByUserId: session.id,
+    };
+    const summary = computeAssessment(checkSets, nextState);
+
+    await prisma.request.update({
+      where: { id: request.id },
+      data: { assessment: nextState as unknown as Prisma.InputJsonValue },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: request.organisationId,
+      action: "request.assessment.save",
+      entityType: "Request",
+      entityId: request.id,
+      before: { assessment: request.assessment },
+      after: {
+        assessed: summary.assessed,
+        total: summary.total,
+        recommendation: summary.recommendation,
+      },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${request.id}`, "page");
+    return {
+      ok: true,
+      data: {
+        recommendation: summary.recommendation,
+        complete: summary.complete,
+      },
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
