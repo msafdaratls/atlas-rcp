@@ -5,7 +5,6 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { signIn } from "@/lib/auth";
-import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { consumeRateLimitAsync } from "@/lib/rate-limit";
 
@@ -58,20 +57,28 @@ export async function loginAction(
   }
 
   try {
+    // signIn sets the session cookie on the *response*; it throws AuthError on
+    // bad credentials and returns cleanly on success. We must NOT read the
+    // session back via auth()/getSession() here — that reads the *incoming*
+    // request's cookies, which don't yet carry the cookie signIn just set, so
+    // the first attempt would spuriously fail ("wrong password") and only the
+    // second (which now has the cookie) would succeed.
     await signIn("credentials", {
       email,
       password: parsed.data.password,
       redirect: false,
     });
 
-    const session = await getSession();
-    if (!session) {
-      return { ok: false, error: "INVALID_CREDENTIALS" };
-    }
+    // Login succeeded (no throw). Decide the redirect from the DB rather than
+    // from a session we can't yet observe in this request.
+    const org = await prisma.user.findUnique({
+      where: { email },
+      select: { organisation: { select: { type: true } } },
+    });
 
     return {
       ok: true,
-      redirectTo: session.organisation.type === "ATLAS" ? "/admin" : "/client",
+      redirectTo: org?.organisation.type === "ATLAS" ? "/admin" : "/client",
     };
   } catch (error) {
     if (error instanceof AuthError) {
