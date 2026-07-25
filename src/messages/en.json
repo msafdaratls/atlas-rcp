@@ -627,6 +627,23 @@
         "sla": "SLA",
         "updated": "Updated",
         "actions": "Actions"
+      },
+      "newRequest": "New request",
+      "onBehalf": {
+        "title": "New request for a client",
+        "description": "Choose the client this request is for, then complete it on their behalf.",
+        "selectLabel": "Client",
+        "selectPlaceholder": "Select a client…",
+        "continue": "Continue",
+        "banner": "You are creating this request for {client}.",
+        "change": "Change client",
+        "noClients": "No active clients yet. Create a client first.",
+        "createClientCta": "Create a client",
+        "errors": {
+          "CLIENT_NOT_FOUND": "That client could not be found.",
+          "FORBIDDEN": "You don't have permission to do this.",
+          "FAILED": "Something went wrong. Please try again."
+        }
       }
     },
     "requestDetail": {
@@ -684,6 +701,31 @@
         "creditLimit": "Credit limit",
         "openRequests": "Open requests",
         "actions": "Actions"
+      },
+      "create": {
+        "title": "Create client",
+        "trigger": "Create client",
+        "description": "Set up a client organisation and its owner login. The owner can sign in immediately with the password you set.",
+        "companyNameEn": "Company name (English)",
+        "companyNameAr": "Company name (Arabic)",
+        "ownerNameEn": "Owner name (English)",
+        "ownerNameAr": "Owner name (Arabic)",
+        "email": "Owner email",
+        "phone": "Phone (optional)",
+        "phoneHint": "Saudi format, e.g. +9665XXXXXXXX",
+        "password": "Initial password",
+        "passwordHint": "At least 8 characters with a letter and a number.",
+        "submit": "Create client",
+        "cancel": "Cancel",
+        "success": "Client account created for {email}.",
+        "errors": {
+          "EMAIL_TAKEN": "That email already has an account.",
+          "WEAK_PASSWORD": "Password must be at least 8 characters and include a letter and a number.",
+          "INVALID_SAUDI_PHONE": "Enter a valid Saudi phone number.",
+          "VALIDATION": "Please check the highlighted fields.",
+          "FORBIDDEN": "You don't have permission to create clients.",
+          "SAVE_FAILED": "Couldn't create the client. Please try again."
+        }
       }
     },
     "clientDetail": {

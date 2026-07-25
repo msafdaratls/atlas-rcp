@@ -3,7 +3,8 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { requireSession, type SessionUser } from "@/lib/auth/session";
+import { requireSession } from "@/lib/auth/session";
+import { resolveRequestContext } from "@/lib/request-context";
 import { writeAuditLog } from "@/lib/audit";
 import {
   exceedsMaxResubmissions,
@@ -139,11 +140,10 @@ async function notifyCreditLimitReached(organisationId: string): Promise<void> {
 }
 
 async function loadServiceContext(
-  session: SessionUser,
+  organisationId: string,
   serviceItemId: string,
   submissionNo: number,
 ) {
-  const { organisationId } = scopedDb(session);
   const item = await prisma.serviceItem.findFirst({
     where: { id: serviceItemId, active: true },
     include: {
@@ -185,11 +185,11 @@ export async function createOrSelectDraft(
   input: z.infer<typeof createOrSelectDraftSchema>,
 ): Promise<ActionResult<{ requestId: string; requestNo: string }>> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
+    const ctx = await resolveRequestContext();
+    const session = ctx.session;
+    const orgId = ctx.organisationId;
     const parsed = createOrSelectDraftSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
-    const { organisationId: orgId } = scopedDb(session);
 
     if (parsed.data.resumeRequestId) {
       const existing = await prisma.request.findFirst({
@@ -201,17 +201,17 @@ export async function createOrSelectDraft(
       });
       if (existing) {
         if (existing.serviceItemId !== parsed.data.serviceItemId) {
-          const ctx = await loadServiceContext(
-            session,
+          const svc = await loadServiceContext(
+            orgId,
             parsed.data.serviceItemId,
             1,
           );
-          if (!ctx) return { ok: false, error: "SERVICE_NOT_FOUND" };
+          if (!svc) return { ok: false, error: "SERVICE_NOT_FOUND" };
 
           const switchedBreakdown = computePriceBreakdown({
-            basePrice: ctx.basePrice,
+            basePrice: svc.basePrice,
             discount: 0,
-            vatRate: ctx.vatRate,
+            vatRate: svc.vatRate,
           });
 
           const docs = await prisma.requestDocument.findMany({
@@ -259,13 +259,13 @@ export async function createOrSelectDraft(
       }
     }
 
-    const ctx = await loadServiceContext(session, parsed.data.serviceItemId, 1);
-    if (!ctx) return { ok: false, error: "SERVICE_NOT_FOUND" };
+    const svc = await loadServiceContext(orgId, parsed.data.serviceItemId, 1);
+    if (!svc) return { ok: false, error: "SERVICE_NOT_FOUND" };
 
     const draftBreakdown = computePriceBreakdown({
-      basePrice: ctx.basePrice,
+      basePrice: svc.basePrice,
       discount: 0,
-      vatRate: ctx.vatRate,
+      vatRate: svc.vatRate,
     });
 
     const created = await prisma.$transaction(async (tx) => {
@@ -324,12 +324,12 @@ export async function saveDraftProductDetails(
   input: z.infer<typeof draftProductSchema>,
 ): Promise<ActionResult> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
+    const ctx = await resolveRequestContext();
+    const session = ctx.session;
+    const orgId = ctx.organisationId;
     const parsed = draftProductSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
-    const { organisationId: orgId } = scopedDb(session);
     const draft = await prisma.request.findFirst({
       where: {
         organisationId: orgId,
@@ -390,12 +390,12 @@ export async function discardDraftRequest(
   input: z.infer<typeof discardDraftSchema>,
 ): Promise<ActionResult> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
+    const ctx = await resolveRequestContext();
+    const session = ctx.session;
+    const orgId = ctx.organisationId;
     const parsed = discardDraftSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
-    const { organisationId: orgId } = scopedDb(session);
     const draft = await prisma.request.findFirst({
       where: {
         organisationId: orgId,
@@ -455,11 +455,10 @@ export async function previewCoupon(
   }>
 > {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
+    const ctx = await resolveRequestContext();
+    const orgId = ctx.organisationId;
     const parsed = couponDraftSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
-    const { organisationId: orgId } = scopedDb(session);
     const draft = await prisma.request.findFirst({
       where: {
         organisationId: orgId,
@@ -546,9 +545,9 @@ export async function applyCouponToDraft(
   if (!preview.ok) return preview;
 
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
-    const { organisationId: orgId } = scopedDb(session);
+    const ctx = await resolveRequestContext();
+    const session = ctx.session;
+    const orgId = ctx.organisationId;
     const code = parsed.data.code.trim().toUpperCase();
 
     const draft = await prisma.request.findFirst({
@@ -615,11 +614,11 @@ export async function removeCouponFromDraft(
   input: z.infer<typeof removeCouponFromDraftSchema>,
 ): Promise<ActionResult<{ total: number }>> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
+    const ctx = await resolveRequestContext();
+    const session = ctx.session;
+    const orgId = ctx.organisationId;
     const parsed = removeCouponFromDraftSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
-    const { organisationId: orgId } = scopedDb(session);
     const draft = await prisma.request.findFirst({
       where: {
         organisationId: orgId,
@@ -684,8 +683,8 @@ export async function uploadRequestDocument(formData: FormData): Promise<
   }>
 > {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
+    const ctx = await resolveRequestContext();
+    const session = ctx.session;
     const requiredDocumentIdRaw = formData.get("requiredDocumentId");
     const ids = uploadRequestDocumentIdsSchema.safeParse({
       requestId: String(formData.get("requestId") ?? ""),
@@ -704,7 +703,7 @@ export async function uploadRequestDocument(formData: FormData): Promise<
       return { ok: false, error: "NO_FILE" };
     }
 
-    const { organisationId: orgId } = scopedDb(session);
+    const orgId = ctx.organisationId;
     const draft = await prisma.request.findFirst({
       where: {
         organisationId: orgId,
@@ -883,11 +882,11 @@ export async function removeRequestDocument(
   input: z.infer<typeof removeRequestDocumentSchema>,
 ): Promise<ActionResult> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
+    const ctx = await resolveRequestContext();
+    const session = ctx.session;
+    const orgId = ctx.organisationId;
     const parsed = removeRequestDocumentSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
-    const { organisationId: orgId } = scopedDb(session);
     const draft = await prisma.request.findFirst({
       where: {
         organisationId: orgId,
@@ -953,12 +952,12 @@ export async function submitRequest(
 ): Promise<ActionResult<{ requestId: string; requestNo: string }>> {
   let notifyOrgId: string | undefined;
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
+    const ctx = await resolveRequestContext();
+    const session = ctx.session;
     const parsed = submitSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
-    const { organisationId: orgId } = scopedDb(session);
+    const orgId = ctx.organisationId;
     notifyOrgId = orgId;
 
     const existingByKey = await prisma.request.findUnique({

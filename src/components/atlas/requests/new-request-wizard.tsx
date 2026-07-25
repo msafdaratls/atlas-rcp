@@ -28,6 +28,7 @@ import {
   submitRequest,
   uploadRequestDocument,
 } from "@/server/requests/actions";
+import { endRequestOnBehalf } from "@/server/requests/on-behalf";
 import { Pill, Sparkles, Upload, X } from "lucide-react";
 import type {
   CataloguePayload,
@@ -52,12 +53,18 @@ type Props = {
   catalogue: CataloguePayload;
   initialDraft: DraftRequestView | null;
   initialMainId?: string | null;
+  /** Where to send the user after submit (before the request id). */
+  redirectBasePath?: string;
+  /** True when an admin is creating on a client's behalf — clears the pin. */
+  onBehalf?: boolean;
 };
 
 export function NewRequestWizard({
   catalogue,
   initialDraft,
   initialMainId,
+  redirectBasePath = "/client/requests",
+  onBehalf = false,
 }: Props) {
   const t = useTranslations("newRequest");
   const locale = useLocale();
@@ -438,7 +445,10 @@ export function NewRequestWizard({
         return;
       }
       toast.success(t("submitted", { number: result.data.requestNo }));
-      router.push(`/${locale}/client/requests/${result.data.requestId}`);
+      if (onBehalf) {
+        await endRequestOnBehalf();
+      }
+      router.push(`/${locale}${redirectBasePath}/${result.data.requestId}`);
     });
   }
 

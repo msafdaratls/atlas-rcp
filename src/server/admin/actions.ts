@@ -13,9 +13,11 @@ import { canTransitionRequest, requirePermission } from "@/lib/rbac";
 import { parseMoneyInput } from "@/lib/pricing";
 import { resumeSlaDueAt } from "@/lib/sla";
 import {
+  createClientSchema,
   deactivateAtlasStaffSchema,
   inviteAtlasStaffSchema,
   updateAtlasStaffRoleSchema,
+  type CreateClientInput,
   type DeactivateAtlasStaffInput,
   type InviteAtlasStaffInput,
   type UpdateAtlasStaffRoleInput,
@@ -1232,6 +1234,130 @@ export async function deactivateAtlasStaff(
 
     revalidatePath("/[locale]/admin/settings", "page");
     return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+/** Derive a unique, URL-safe username from the email local part. */
+async function uniqueClientUsername(email: string): Promise<string> {
+  const base =
+    email
+      .split("@")[0]
+      ?.toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "")
+      .slice(0, 24) || "user";
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const candidate =
+      attempt === 0 ? base : `${base}-${Math.random().toString(36).slice(2, 6)}`;
+    const taken = await prisma.user.findUnique({
+      where: { username: candidate },
+      select: { id: true },
+    });
+    if (!taken) return candidate;
+  }
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+/**
+ * Admin-side client onboarding: creates a client organisation and its owner
+ * user in one transaction. The account is ACTIVE with the email pre-verified,
+ * so the owner can sign in immediately with the initial password the admin set.
+ */
+export async function createClientAction(
+  input: CreateClientInput,
+): Promise<ActionResult<{ organisationId: string; email: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "clients:create");
+
+    const parsed = createClientSchema.safeParse(input);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const known = ["INVALID_SAUDI_PHONE", "WEAK_PASSWORD"];
+      const code =
+        issue && known.includes(issue.message) ? issue.message : "VALIDATION";
+      return { ok: false, error: code };
+    }
+
+    const data = parsed.data;
+    const email = data.email.toLowerCase();
+    const phone = data.phone ? data.phone.trim() || null : null;
+
+    const existing = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (existing) return { ok: false, error: "EMAIL_TAKEN" };
+
+    const username = await uniqueClientUsername(email);
+    const passwordHash = await bcrypt.hash(data.password, 12);
+
+    let organisationId: string;
+    try {
+      organisationId = await prisma.$transaction(async (tx) => {
+        const organisation = await tx.organisation.create({
+          data: {
+            type: "CLIENT",
+            nameEn: data.companyNameEn,
+            nameAr: data.companyNameAr,
+            email,
+            phone,
+            status: "ACTIVE",
+          },
+        });
+
+        const user = await tx.user.create({
+          data: {
+            organisationId: organisation.id,
+            email,
+            username,
+            passwordHash,
+            fullNameEn: data.fullNameEn,
+            fullNameAr: data.fullNameAr,
+            phone,
+            locale: data.locale,
+            status: "ACTIVE",
+            // Admin-created accounts are trusted: verified so login is allowed.
+            emailVerifiedAt: new Date(),
+            roles: { create: [{ role: "CLIENT_OWNER" }] },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            actorUserId: session.id,
+            actorRole: session.roles[0],
+            organisationId: organisation.id,
+            action: "admin.client.create",
+            entityType: "Organisation",
+            entityId: organisation.id,
+            after: {
+              organisationNameEn: organisation.nameEn,
+              ownerEmail: email,
+              ownerUserId: user.id,
+            },
+          },
+        });
+
+        return organisation.id;
+      });
+    } catch (error) {
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String((error as { code: string }).code)
+          : "";
+      if (code === "P2002") return { ok: false, error: "EMAIL_TAKEN" };
+      return { ok: false, error: "SAVE_FAILED" };
+    }
+
+    revalidatePath("/[locale]/admin/clients", "page");
+    return { ok: true, data: { organisationId, email } };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {

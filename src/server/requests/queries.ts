@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { requireSession } from "@/lib/auth/session";
+import { resolveRequestContext } from "@/lib/request-context";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac";
 import { toNumber } from "@/lib/pricing";
@@ -85,8 +86,7 @@ function parseCheckSets(value: unknown) {
 
 export async function getCatalogueForNewRequest(): Promise<CataloguePayload | null> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
+    await resolveRequestContext();
 
     const [mains, subs, items] = await Promise.all([
       prisma.mainCategory.findMany({
@@ -157,13 +157,11 @@ export async function getCatalogueForNewRequest(): Promise<CataloguePayload | nu
 
 export async function getOpenDraftRequestId(): Promise<string | null> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
-    const { organisationId } = scopedDb(session);
+    const ctx = await resolveRequestContext();
     const draft = await prisma.request.findFirst({
       where: {
-        organisationId,
-        createdByUserId: session.id,
+        organisationId: ctx.organisationId,
+        createdByUserId: ctx.actorUserId,
         state: "DRAFT",
       },
       orderBy: { updatedAt: "desc" },
@@ -205,13 +203,11 @@ export async function getDraftRequest(
   requestId: string,
 ): Promise<DraftRequestView | null> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "requests:create");
-    const { organisationId } = scopedDb(session);
+    const ctx = await resolveRequestContext();
     const draft = await prisma.request.findFirst({
       where: {
         id: requestId,
-        organisationId,
+        organisationId: ctx.organisationId,
         state: "DRAFT",
       },
       include: {

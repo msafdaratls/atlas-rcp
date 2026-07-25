@@ -574,6 +574,35 @@ export type AdminClientListResult = {
   pageCount: number;
 };
 
+export type OnBehalfClientOption = {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  email: string;
+};
+
+/**
+ * Active client organisations for the "new request on behalf" picker. Gated by
+ * the same permission that lets staff act on a client's behalf.
+ */
+export async function listClientsForOnBehalf(): Promise<
+  OnBehalfClientOption[] | null
+> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:create-behalf");
+
+    const orgs = await prisma.organisation.findMany({
+      where: { type: "CLIENT", status: "ACTIVE" },
+      orderBy: { nameEn: "asc" },
+      select: { id: true, nameEn: true, nameAr: true, email: true },
+    });
+    return orgs;
+  } catch {
+    return null;
+  }
+}
+
 export async function listAdminClients(input: {
   q?: string | null;
   page?: number;

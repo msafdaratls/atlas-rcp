@@ -1,5 +1,34 @@
 import { z } from "zod";
 
+import { passwordSchema } from "@/lib/validators/auth";
+
+/** Optional Saudi phone: empty string / null allowed, else +9665XXXXXXXX etc. */
+const optionalSaudiPhone = z
+  .string()
+  .trim()
+  .regex(/^\+966[1-9]\d{8}$/, { message: "INVALID_SAUDI_PHONE" })
+  .optional()
+  .nullable()
+  .or(z.literal(""));
+
+/**
+ * Admin-created client account: company + owner user in one step. The account
+ * is created ACTIVE with the email pre-verified, so the owner can sign in with
+ * the initial password immediately.
+ */
+export const createClientSchema = z.object({
+  companyNameEn: z.string().trim().min(2).max(200),
+  companyNameAr: z.string().trim().min(2).max(200),
+  fullNameEn: z.string().trim().min(2).max(120),
+  fullNameAr: z.string().trim().min(2).max(120),
+  email: z.string().trim().toLowerCase().email().max(200),
+  phone: optionalSaudiPhone,
+  password: passwordSchema,
+  locale: z.enum(["ar", "en"]),
+});
+
+export type CreateClientInput = z.infer<typeof createClientSchema>;
+
 /** Atlas-side roles assignable via staff invites (mirrors the client invite flow). */
 export const ATLAS_STAFF_ROLES = [
   "INTAKE_OFFICER",

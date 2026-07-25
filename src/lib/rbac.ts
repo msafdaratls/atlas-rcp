@@ -25,6 +25,9 @@ const CLIENTS_READ_ROLES: Role[] = [
   "QUALITY_MANAGER",
 ];
 
+/** Staff who may create client accounts and open requests on their behalf. */
+const CLIENTS_CREATE_ROLES: Role[] = ["INTAKE_OFFICER", "SYSTEM_ADMIN"];
+
 const CATALOGUE_MANAGE_ROLES: Role[] = ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"];
 
 const COUPONS_MANAGE_ROLES: Role[] = [
@@ -57,6 +60,8 @@ export function requirePermission(
     | "finance:admin"
     | "admin:dashboard"
     | "clients:read"
+    | "clients:create"
+    | "requests:create-behalf"
     | "clients:finance"
     | "analytics:finance"
     | "catalogue:manage"
@@ -130,6 +135,12 @@ export function requirePermission(
       return;
     case "clients:read":
       if (!isAtlas || !hasAnyRole(session, CLIENTS_READ_ROLES)) {
+        throw new Error("FORBIDDEN");
+      }
+      return;
+    case "clients:create":
+    case "requests:create-behalf":
+      if (!isAtlas || !hasAnyRole(session, CLIENTS_CREATE_ROLES)) {
         throw new Error("FORBIDDEN");
       }
       return;

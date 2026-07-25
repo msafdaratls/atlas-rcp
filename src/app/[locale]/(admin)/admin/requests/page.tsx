@@ -1,12 +1,15 @@
 import { AdminRequestsTable } from "@/components/atlas/admin/admin-requests-table";
 import { EmptyState } from "@/components/atlas/empty-state";
 import { PageHeader } from "@/components/atlas/page-header";
+import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth/session";
 import { isLocale, type Locale } from "@/lib/i18n/config";
 import { requirePagePermission } from "@/lib/page-auth";
+import { checkPermission } from "@/lib/rbac";
 import { listAdminRequests } from "@/server/admin/queries";
 import { ClipboardList } from "lucide-react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
@@ -30,6 +33,7 @@ export default async function AdminRequestsPage({ params, searchParams }: Props)
 
   const session = await requireSession();
   requirePagePermission(session, "requests:admin", locale);
+  const canCreateOnBehalf = checkPermission(session, "requests:create-behalf");
 
   const sp = await searchParams;
   const t = await getTranslations("adminOps.requests");
@@ -47,6 +51,15 @@ export default async function AdminRequestsPage({ params, searchParams }: Props)
         title={tNav("requests")}
         description={t("pageDescription")}
         breadcrumbs={[{ label: tNav("requests") }]}
+        actions={
+          canCreateOnBehalf ? (
+            <Button asChild>
+              <Link href={`/${locale}/admin/requests/new`}>
+                {t("newRequest")}
+              </Link>
+            </Button>
+          ) : undefined
+        }
       />
       {data ? (
         <Suspense fallback={null}>
