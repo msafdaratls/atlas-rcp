@@ -108,6 +108,7 @@ export function AdminCreateClientForm() {
               id="phone"
               type="tel"
               dir="ltr"
+              required
               placeholder="+9665XXXXXXXX"
               {...register("phone")}
             />

@@ -66,6 +66,31 @@ export async function resolveRecipients(
     case "REQUEST_RESUBMITTED":
       return activeUsersByRoles(tx, ["INTAKE_OFFICER"], "ATLAS");
 
+    case "REQUEST_RECEIVED": {
+      const ids = new Set<string>();
+      if (ctx.createdByUserId) ids.add(ctx.createdByUserId);
+      if (ctx.organisationId) {
+        const owners = await activeUsersByRoles(
+          tx,
+          ["CLIENT_OWNER"],
+          "CLIENT",
+          ctx.organisationId,
+        );
+        for (const o of owners) ids.add(o.id);
+      }
+      if (ids.size === 0) return [];
+      return tx.user.findMany({
+        where: { id: { in: [...ids] }, status: "ACTIVE" },
+        select: {
+          id: true,
+          email: true,
+          locale: true,
+          fullNameEn: true,
+          fullNameAr: true,
+        },
+      });
+    }
+
     case "REQUEST_RETURNED":
     case "REPORT_ISSUED": {
       const ids = new Set<string>();

@@ -155,7 +155,7 @@ th,td{border-bottom:1px solid #DDDDDD;padding:6px 4px;text-align:${dir === "rtl"
 </style>
 </head>
 <body>
-  <h1>Atlas COC · ${input.locale === "ar" ? "فاتورة" : "Invoice"} ${esc(input.invoiceNo)}</h1>
+  <h1>Atlas COC · ${input.locale === "ar" ? "فاتورة مبدئية" : "Pro Forma Invoice"} ${esc(input.invoiceNo)}</h1>
   <p>${esc(input.organisationName)}</p>
   <p class="mono">${esc(input.status)} · ${esc(input.issuedAt)}</p>
   <table>

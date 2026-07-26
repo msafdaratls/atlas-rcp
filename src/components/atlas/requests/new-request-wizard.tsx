@@ -36,6 +36,22 @@ import type {
   DraftRequestView,
 } from "@/server/requests/queries";
 
+type PersistedWizardState = {
+  requestId: string | null;
+  step: number;
+  mainId: string | null;
+  subId: string | null;
+  itemId: string | null;
+  productNameEn: string;
+  productNameAr: string;
+  brand: string;
+  attrs: Record<string, unknown>;
+  couponCode: string;
+  appliedCoupon: string | null;
+  discount: number;
+  artworkFinal: boolean;
+};
+
 type UploadSlotState = {
   requiredDocumentId: string | null;
   label: string;
@@ -128,6 +144,71 @@ export function NewRequestWizard({
   const [discount, setDiscount] = useState(initialDraft?.discountApplied ?? 0);
   const [artworkFinal, setArtworkFinal] = useState(false);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
+
+  const storageKey = `atlas.newRequestWizard:${redirectBasePath}`;
+
+  // Restore in-progress input that would otherwise be lost across a locale
+  // switch (which remounts this page under the new /[locale] segment).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw) as PersistedWizardState;
+      if ((saved.requestId ?? null) !== (requestId ?? null)) return;
+      setStep(saved.step);
+      setMainId(saved.mainId);
+      setSubId(saved.subId);
+      setItemId(saved.itemId);
+      setProductNameEn(saved.productNameEn);
+      setProductNameAr(saved.productNameAr);
+      setBrand(saved.brand);
+      setAttrs(saved.attrs);
+      setCouponCode(saved.couponCode);
+      setAppliedCoupon(saved.appliedCoupon);
+      setDiscount(saved.discount);
+      setArtworkFinal(saved.artworkFinal);
+    } catch {
+      // Corrupt/old-shape entry — ignore and start fresh.
+    }
+    // Restore once, right after mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const data: PersistedWizardState = {
+      requestId,
+      step,
+      mainId,
+      subId,
+      itemId,
+      productNameEn,
+      productNameAr,
+      brand,
+      attrs,
+      couponCode,
+      appliedCoupon,
+      discount,
+      artworkFinal,
+    };
+    window.sessionStorage.setItem(storageKey, JSON.stringify(data));
+  }, [
+    storageKey,
+    requestId,
+    step,
+    mainId,
+    subId,
+    itemId,
+    productNameEn,
+    productNameAr,
+    brand,
+    attrs,
+    couponCode,
+    appliedCoupon,
+    discount,
+    artworkFinal,
+  ]);
 
   const attrFields = useMemo(
     () => parseAttrSchema(selectedItem?.productAttrSchema),
@@ -445,6 +526,9 @@ export function NewRequestWizard({
         return;
       }
       toast.success(t("submitted", { number: result.data.requestNo }));
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(storageKey);
+      }
       if (onBehalf) {
         await endRequestOnBehalf();
       }

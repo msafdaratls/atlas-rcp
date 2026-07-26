@@ -48,7 +48,7 @@ test("signupSchema rejects a weak password even when confirmation matches", () =
     fullNameEn: "Jane Doe",
     fullNameAr: "جين",
     email: "jane@example.com",
-    phone: "",
+    phone: "+966512345678",
     password: "password", // no digit
     confirmPassword: "password",
     locale: "en",

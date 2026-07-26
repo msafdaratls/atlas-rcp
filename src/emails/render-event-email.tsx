@@ -96,6 +96,8 @@ export function emailSubject(
     switch (event) {
       case "REQUEST_SUBMITTED":
         return `طلب جديد${no}`;
+      case "REQUEST_RECEIVED":
+        return `تأكيد استلام طلبكم${no}`;
       case "REQUEST_RESUBMITTED":
         return `إعادة تقديم${no}`;
       case "REQUEST_RETURNED":
@@ -107,7 +109,7 @@ export function emailSubject(
       case "REPORT_ISSUED":
         return `إصدار التقرير${no}`;
       case "INVOICE_ISSUED":
-        return `إصدار فاتورة${no}`;
+        return `إصدار فاتورة مبدئية${no}`;
       case "PAYMENT_RECEIVED":
         return `استلام دفعة${no}`;
       case "PAYMENT_REJECTED":
@@ -125,6 +127,8 @@ export function emailSubject(
   switch (event) {
     case "REQUEST_SUBMITTED":
       return `New request${no}`;
+    case "REQUEST_RECEIVED":
+      return `We've received your request${no}`;
     case "REQUEST_RESUBMITTED":
       return `Resubmitted${no}`;
     case "REQUEST_RETURNED":
@@ -136,7 +140,7 @@ export function emailSubject(
     case "REPORT_ISSUED":
       return `Report issued${no}`;
     case "INVOICE_ISSUED":
-      return `Invoice issued${no}`;
+      return `Pro forma invoice issued${no}`;
     case "PAYMENT_RECEIVED":
       return `Payment received${no}`;
     case "PAYMENT_REJECTED":

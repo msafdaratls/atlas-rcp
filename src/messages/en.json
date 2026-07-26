@@ -90,7 +90,7 @@
   "notifications": {
     "title": "Notifications",
     "bellLabel": "Notifications",
-    "pageDescription": "In-app alerts for requests, invoices, and SLA events.",
+    "pageDescription": "In-app alerts for requests, pro forma invoices, and SLA events.",
     "empty": "No notifications yet.",
     "markAllRead": "Mark all read",
     "viewAll": "View all notifications",
@@ -151,7 +151,7 @@
     "verifiedIssuedAt": "Issued on"
   },
   "company": {
-    "pageDescription": "These details print on regulatory reports and invoices. Save explicitly — nothing autosaves.",
+    "pageDescription": "These details print on regulatory reports and pro forma invoices. Save explicitly — nothing autosaves.",
     "unavailableTitle": "Company profile unavailable",
     "unavailableDescription": "Connect PostgreSQL, run migrations and seed, then reopen this page.",
     "wrongPortalTitle": "Client company profile",
@@ -207,7 +207,7 @@
       "nationalAddress": "National Address"
     },
     "users": {
-      "help": "Owners manage billing and users. Request users create and track requests. Finance sees invoices and the statement only.",
+      "help": "Owners manage billing and users. Request users create and track requests. Finance sees pro forma invoices and the statement only.",
       "invite": "Invite user",
       "sendInvite": "Send invite",
       "colName": "User",
@@ -219,7 +219,7 @@
     "roles": {
       "CLIENT_OWNER": "Owner — manages billing and users",
       "CLIENT_USER": "Requests — creates and tracks requests",
-      "CLIENT_FINANCE": "Finance — sees invoices and statement only"
+      "CLIENT_FINANCE": "Finance — sees pro forma invoices and statement only"
     },
     "status": {
       "ACTIVE": "Active",
@@ -233,12 +233,13 @@
       "event": "Event",
       "email": "Email",
       "inApp": "In-app",
-      "legalLockedHint": "Legal and financial notices stay on so invoice and statement events are never missed.",
+      "legalLockedHint": "Legal and financial notices stay on so pro forma invoice and statement events are never missed.",
       "events": {
+        "REQUEST_RECEIVED": "Request received acknowledgement",
         "REQUEST_RETURNED": "Request returned to client",
         "REPORT_ISSUED": "Report issued",
         "SLA_AT_RISK": "SLA at risk (80% elapsed)",
-        "INVOICE_ISSUED": "Invoice issued",
+        "INVOICE_ISSUED": "Pro forma invoice issued",
         "PAYMENT_RECEIVED": "Payment received",
         "PAYMENT_REJECTED": "Payment rejected",
         "STATEMENT_OVERDUE": "Statement overdue",
@@ -402,7 +403,7 @@
     }
   },
   "finance": {
-    "clientDescription": "Your organisation balance, invoices, and payment records. Internal ledger only — no online card checkout in this phase.",
+    "clientDescription": "Your organisation balance, pro forma invoices, and payment records. Internal ledger only — no online card checkout in this phase.",
     "adminDescription": "Verify client payments, manage credit limits, and post adjustments. Ledger rows are append-only.",
     "unavailableTitle": "Statement unavailable",
     "unavailableDescription": "Sign in as a client owner or finance user with a connected database.",
@@ -423,7 +424,7 @@
     },
     "tabs": {
       "ledger": "Ledger",
-      "invoices": "Invoices",
+      "invoices": "Pro forma invoices",
       "payment": "Record a payment"
     },
     "filters": {
@@ -441,7 +442,7 @@
       "empty": "No ledger entries in this range."
     },
     "invoices": {
-      "empty": "No invoices yet.",
+      "empty": "No pro forma invoices yet.",
       "download": "PDF"
     },
     "invoiceStatus": {
@@ -479,7 +480,7 @@
       "rejectReason": "Rejection reason",
       "confirmed": "Payment confirmed and allocated.",
       "rejected": "Payment rejected.",
-      "fifoHint": "Confirm uses FIFO allocation against open invoices by default. Partial allocation is allowed.",
+      "fifoHint": "Confirm uses FIFO allocation against open pro forma invoices by default. Partial allocation is allowed.",
       "sortBy": "Sort by",
       "sortOverdue": "Days overdue",
       "sortBalance": "Balance",
@@ -535,7 +536,7 @@
   "dashboard": {
     "client": {
       "pageDescription": "Track returns, open work, and start a new conformity request.",
-      "financePageDescription": "Open balance, overdue invoices, and recent billing activity.",
+      "financePageDescription": "Open balance, overdue pro forma invoices, and recent billing activity.",
       "unavailableTitle": "Dashboard unavailable",
       "unavailableDescription": "Connect the database and sign in as a client user.",
       "accessDenied": {
@@ -553,11 +554,11 @@
       },
       "financeStats": {
         "balance": "Open balance",
-        "openInvoices": "Open invoices",
+        "openInvoices": "Open pro forma invoices",
         "overdue": "Overdue amount"
       },
-      "financeInvoicesTitle": "Recent invoices",
-      "financeInvoicesEmpty": "No invoices yet.",
+      "financeInvoicesTitle": "Recent pro forma invoices",
+      "financeInvoicesEmpty": "No pro forma invoices yet.",
       "viewStatement": "View statement",
       "openInvoice": "Open",
       "dueAt": "Due",
@@ -1201,7 +1202,7 @@
     },
     "payment": {
       "title": "Payment due",
-      "body": "{count, plural, one {# invoice} other {# invoices}} awaiting payment",
+      "body": "{count, plural, one {# pro forma invoice} other {# pro forma invoices}} awaiting payment",
       "viewStatement": "View statement"
     },
     "edit": {
@@ -1261,7 +1262,7 @@
     "helpReturned": "Returned requests",
     "helpReturnedBody": "Fix artwork or missing particulars and resubmit.",
     "helpStatement": "Statement of account",
-    "helpStatementBody": "Invoices, payments, and PDF downloads.",
+    "helpStatementBody": "Pro forma invoices, payments, and PDF downloads.",
     "helpCompany": "Company profile",
     "helpCompanyBody": "Keep CR, VAT, and address print-ready."
   },
@@ -1299,7 +1300,6 @@
     "fullNameAr": "Your name (Arabic)",
     "email": "Work email",
     "phone": "Phone",
-    "phoneOptional": "Phone (optional)",
     "phoneHint": "Format: +9665XXXXXXXX",
     "password": "Password",
     "passwordHint": "At least 8 characters.",

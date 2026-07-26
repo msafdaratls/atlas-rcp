@@ -1192,8 +1192,8 @@ export async function submitRequest(
           referenceId: invoice.id,
           debit: breakdown.total,
           credit: 0,
-          descriptionEn: `Invoice ${invoiceNo} for request ${updated.requestNo}`,
-          descriptionAr: `فاتورة ${invoiceNo} للطلب ${updated.requestNo}`,
+          descriptionEn: `Pro forma invoice ${invoiceNo} for request ${updated.requestNo}`,
+          descriptionAr: `فاتورة مبدئية ${invoiceNo} للطلب ${updated.requestNo}`,
           createdByUserId: session.id,
         });
       }
@@ -1212,6 +1212,25 @@ export async function submitRequest(
             createdByUserId: session.id,
             ...notificationCopy("REQUEST_SUBMITTED", {
               requestNo: updated.requestNo,
+            }),
+          },
+        },
+        tx,
+      );
+
+      await notify(
+        {
+          event: "REQUEST_RECEIVED",
+          data: {
+            requestId: updated.id,
+            requestNo: updated.requestNo,
+            state: "SUBMITTED",
+            link: `/client/requests/${updated.id}`,
+            organisationId: orgId,
+            createdByUserId: session.id,
+            ...notificationCopy("REQUEST_RECEIVED", {
+              requestNo: updated.requestNo,
+              slaHours: String(draft.serviceItem.slaHours),
             }),
           },
         },
@@ -1476,8 +1495,8 @@ export async function resubmitReturnedRequest(
           referenceId: invoice.id,
           debit: breakdown.total,
           credit: 0,
-          descriptionEn: `Resubmission invoice ${invoiceNo} for ${row.requestNo}`,
-          descriptionAr: `فاتورة إعادة تقديم ${invoiceNo} للطلب ${row.requestNo}`,
+          descriptionEn: `Resubmission pro forma invoice ${invoiceNo} for ${row.requestNo}`,
+          descriptionAr: `فاتورة مبدئية لإعادة تقديم ${invoiceNo} للطلب ${row.requestNo}`,
           createdByUserId: session.id,
         });
       }

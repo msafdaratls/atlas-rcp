@@ -1,5 +1,6 @@
 export const NOTIFICATION_EVENTS = [
   { type: "REQUEST_SUBMITTED", legalFinancial: false },
+  { type: "REQUEST_RECEIVED", legalFinancial: false },
   { type: "REQUEST_RETURNED", legalFinancial: false },
   { type: "REQUEST_RESUBMITTED", legalFinancial: false },
   { type: "REQUEST_ACCEPTED", legalFinancial: false },
@@ -33,6 +34,7 @@ export function isLegalFinancialEvent(type: string): boolean {
 /** Events shown on the company notification preferences grid. */
 export const PREFERENCE_EVENTS = NOTIFICATION_EVENTS.filter((e) =>
   [
+    "REQUEST_RECEIVED",
     "REQUEST_RETURNED",
     "REPORT_ISSUED",
     "SLA_AT_RISK",

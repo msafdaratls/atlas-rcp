@@ -1,13 +1,10 @@
 import { z } from "zod";
 
-/** Optional Saudi phone: empty string / null allowed, else +9665XXXXXXXX etc. */
-const optionalSaudiPhone = z
+/** Required Saudi phone: +9665XXXXXXXX etc. */
+const requiredSaudiPhone = z
   .string()
   .trim()
-  .regex(/^\+966[1-9]\d{8}$/, { message: "INVALID_SAUDI_PHONE" })
-  .optional()
-  .nullable()
-  .or(z.literal(""));
+  .regex(/^\+966[1-9]\d{8}$/, { message: "INVALID_SAUDI_PHONE" });
 
 /**
  * Password policy: ≥8 chars with at least one letter and one digit. Kept
@@ -29,7 +26,7 @@ export const signupSchema = z
     fullNameEn: z.string().trim().min(2).max(120),
     fullNameAr: z.string().trim().min(2).max(120),
     email: z.string().trim().toLowerCase().email().max(200),
-    phone: optionalSaudiPhone,
+    phone: requiredSaudiPhone,
     password: passwordSchema,
     confirmPassword: z.string().min(1).max(200),
     locale: z.enum(["ar", "en"]).default("ar"),

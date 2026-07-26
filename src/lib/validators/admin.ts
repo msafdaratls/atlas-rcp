@@ -2,14 +2,11 @@ import { z } from "zod";
 
 import { passwordSchema } from "@/lib/validators/auth";
 
-/** Optional Saudi phone: empty string / null allowed, else +9665XXXXXXXX etc. */
-const optionalSaudiPhone = z
+/** Required Saudi phone: +9665XXXXXXXX etc. */
+const requiredSaudiPhone = z
   .string()
   .trim()
-  .regex(/^\+966[1-9]\d{8}$/, { message: "INVALID_SAUDI_PHONE" })
-  .optional()
-  .nullable()
-  .or(z.literal(""));
+  .regex(/^\+966[1-9]\d{8}$/, { message: "INVALID_SAUDI_PHONE" });
 
 /**
  * Admin-created client account: company + owner user in one step. The account
@@ -22,7 +19,7 @@ export const createClientSchema = z.object({
   fullNameEn: z.string().trim().min(2).max(120),
   fullNameAr: z.string().trim().min(2).max(120),
   email: z.string().trim().toLowerCase().email().max(200),
-  phone: optionalSaudiPhone,
+  phone: requiredSaudiPhone,
   password: passwordSchema,
   locale: z.enum(["ar", "en"]),
 });

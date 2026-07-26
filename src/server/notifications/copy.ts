@@ -5,6 +5,7 @@
 
 export type NotificationCopyKey =
   | "REQUEST_SUBMITTED"
+  | "REQUEST_RECEIVED"
   | "REQUEST_RESUBMITTED"
   | "REQUEST_RETURNED"
   | "REQUEST_ACCEPTED"
@@ -26,6 +27,7 @@ export type NotificationCopyVars = {
   amount?: string;
   reason?: string;
   message?: string;
+  slaHours?: string;
 };
 
 export type NotificationCopy = {
@@ -45,6 +47,16 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
     bodyAr: "{requestNo} بانتظار مراجعة الاستلام.",
     ctaLabelEn: "Open in intake",
     ctaLabelAr: "فتح في الاستلام",
+  },
+  REQUEST_RECEIVED: {
+    titleEn: "Thank you for choosing Atlas",
+    titleAr: "شكراً لاختياركم أطلس",
+    bodyEn:
+      "This is to confirm that we have received your request {requestNo}. It is now in our processing queue and will be handled within the {slaHours}-hour SLA for this service. We appreciate your trust in Atlas and will notify you as it progresses.",
+    bodyAr:
+      "نود إبلاغكم بأننا استلمنا طلبكم {requestNo}، وهو الآن ضمن قائمة المعالجة لدينا وسيتم إنجازه خلال مدة مستوى الخدمة المحددة بـ {slaHours} ساعة لهذه الخدمة. نشكر لكم ثقتكم بأطلس وسنوافيكم بآخر مستجدات طلبكم.",
+    ctaLabelEn: "Track your request",
+    ctaLabelAr: "تتبع طلبك",
   },
   REQUEST_RESUBMITTED: {
     titleEn: "Request resubmitted",
@@ -82,10 +94,10 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
     bodyAr: "{requestNo}: تقرير شهادة المطابقة جاهز الآن.",
   },
   INVOICE_ISSUED: {
-    titleEn: "Invoice issued",
-    titleAr: "إصدار فاتورة",
-    bodyEn: "Invoice {invoiceNo} for {requestNo} — SAR {amount}.",
-    bodyAr: "فاتورة {invoiceNo} للطلب {requestNo} — {amount} ر.س.",
+    titleEn: "Pro forma invoice issued",
+    titleAr: "إصدار فاتورة مبدئية",
+    bodyEn: "Pro forma invoice {invoiceNo} for {requestNo} — SAR {amount}.",
+    bodyAr: "فاتورة مبدئية {invoiceNo} للطلب {requestNo} — {amount} ر.س.",
     ctaLabelEn: "View statement",
     ctaLabelAr: "عرض كشف الحساب",
   },
@@ -150,8 +162,8 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
   STATEMENT_OVERDUE: {
     titleEn: "Statement overdue",
     titleAr: "تأخر كشف الحساب",
-    bodyEn: "Invoice {invoiceNo} is past due (open balance SAR {amount}).",
-    bodyAr: "الفاتورة {invoiceNo} متأخرة (الرصيد المفتوح {amount} ر.س).",
+    bodyEn: "Pro forma invoice {invoiceNo} is past due (open balance SAR {amount}).",
+    bodyAr: "الفاتورة المبدئية {invoiceNo} متأخرة (الرصيد المفتوح {amount} ر.س).",
     ctaLabelEn: "View statement",
     ctaLabelAr: "عرض كشف الحساب",
   },

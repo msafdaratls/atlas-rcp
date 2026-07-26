@@ -46,7 +46,7 @@ export async function signupAction(
     fullNameEn: formData.get("fullNameEn"),
     fullNameAr: formData.get("fullNameAr"),
     email: formData.get("email"),
-    phone: formData.get("phone") || null,
+    phone: formData.get("phone"),
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword"),
     locale: formData.get("locale") || "ar",
@@ -62,7 +62,7 @@ export async function signupAction(
 
   const data = parsed.data;
   const email = data.email.toLowerCase();
-  const phone = data.phone ? data.phone.trim() : null;
+  const phone = data.phone.trim();
 
   const hdrs = await headers();
   const forwarded = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim();

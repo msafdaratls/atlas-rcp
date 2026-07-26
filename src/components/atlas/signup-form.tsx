@@ -138,14 +138,16 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="phone">{t("phoneOptional")}</Label>
+          <Label htmlFor="phone">{t("phone")}</Label>
           <Input
             id="phone"
             name="phone"
             type="tel"
             autoComplete="tel"
+            required
             dir="ltr"
             placeholder="+9665XXXXXXXX"
+            aria-invalid={hasError}
             aria-describedby="phone-hint"
           />
           <p id="phone-hint" className="text-xs text-[var(--ink-500)]">
