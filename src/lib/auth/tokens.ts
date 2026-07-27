@@ -65,3 +65,21 @@ export async function consumeVerificationToken(
     return token.userId;
   });
 }
+
+/**
+ * Looks up the owner of a token that already exists (used or not) without
+ * consuming it. Used to distinguish "already verified by an earlier request
+ * for this same token" (e.g. an email security scanner prefetching the
+ * link) from a genuinely invalid/forged token.
+ */
+export async function getVerificationTokenOwner(
+  raw: string,
+  type: VerificationTokenType,
+): Promise<string | null> {
+  const tokenHash = hashToken(raw);
+  const token = await prisma.verificationToken.findUnique({
+    where: { tokenHash },
+  });
+  if (!token || token.type !== type) return null;
+  return token.userId;
+}

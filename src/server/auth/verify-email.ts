@@ -1,7 +1,10 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { consumeVerificationToken } from "@/lib/auth/tokens";
+import {
+  consumeVerificationToken,
+  getVerificationTokenOwner,
+} from "@/lib/auth/tokens";
 
 export type VerifyEmailResult =
   | { ok: true }
@@ -9,7 +12,14 @@ export type VerifyEmailResult =
 
 /**
  * Confirms an email-verification token: marks the user's email verified and
- * clears any lockout. Idempotent-ish — a used/expired token returns INVALID.
+ * clears any lockout.
+ *
+ * Truly idempotent: verification links get prefetched by corporate email
+ * "safe links" scanners before the user ever clicks, which would otherwise
+ * burn the single-use token and show the real click an error. If the token
+ * was already consumed but its owner is already verified, that earlier
+ * request was the scanner (or a duplicate click) completing the same
+ * verification, so we report success instead of INVALID_TOKEN.
  */
 export async function verifyEmailAction(
   token: string,
@@ -18,7 +28,18 @@ export async function verifyEmailAction(
   if (!raw) return { ok: false, error: "INVALID_TOKEN" };
 
   const userId = await consumeVerificationToken(raw, "EMAIL_VERIFICATION");
-  if (!userId) return { ok: false, error: "INVALID_TOKEN" };
+  if (!userId) {
+    const owner = await getVerificationTokenOwner(raw, "EMAIL_VERIFICATION");
+    if (!owner) return { ok: false, error: "INVALID_TOKEN" };
+    const alreadyVerified = await prisma.user.findUnique({
+      where: { id: owner },
+      select: { emailVerifiedAt: true },
+    });
+    if (!alreadyVerified?.emailVerifiedAt) {
+      return { ok: false, error: "INVALID_TOKEN" };
+    }
+    return { ok: true };
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
