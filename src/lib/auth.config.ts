@@ -9,7 +9,11 @@ export const authConfig = {
   // Node jwt callback in auth.ts revalidates against the DB; edge middleware cannot use Prisma.
   session: {
     strategy: "jwt",
-    maxAge: 60 * 60, // 1 hour — reduces deactivated-user middleware window
+    // Deactivated-user check runs on every jwt callback invocation (see auth.ts),
+    // so maxAge doesn't gate that anymore — it only controls how long an idle
+    // session survives before requiring re-login.
+    maxAge: 24 * 60 * 60, // 24 hours
+    updateAge: 60 * 60, // refresh (slide) the session at most once per hour of activity
   },
   pages: {
     // Auth.js fallback when no request locale is available (edge/default).
