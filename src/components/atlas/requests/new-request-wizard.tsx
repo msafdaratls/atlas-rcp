@@ -40,7 +40,7 @@ type PersistedWizardState = {
   requestId: string | null;
   step: number;
   mainId: string | null;
-  subId: string | null;
+  subIds: string[];
   itemId: string | null;
   productNameEn: string;
   productNameAr: string;
@@ -91,7 +91,7 @@ export function NewRequestWizard({
   const [mainId, setMainId] = useState<string | null>(
     initialDraft ? null : initialMainId ?? null,
   );
-  const [subId, setSubId] = useState<string | null>(null);
+  const [subIds, setSubIds] = useState<string[]>([]);
   const [itemId, setItemId] = useState<string | null>(
     initialDraft?.serviceItemId ?? null,
   );
@@ -121,7 +121,7 @@ export function NewRequestWizard({
 
   const selectedMain = catalogue.mains.find((m) => m.id === mainId) ?? null;
   const subs = catalogue.subs.filter((s) => s.mainCategoryId === mainId);
-  const items = catalogue.items.filter((i) => i.subCategoryId === subId);
+  const items = catalogue.items.filter((i) => subIds.includes(i.subCategoryId));
 
   const [slots, setSlots] = useState<UploadSlotState[]>([]);
 
@@ -132,7 +132,7 @@ export function NewRequestWizard({
     const sub = catalogue.subs.find((s) => s.id === item.subCategoryId);
     if (sub) {
       setMainId(sub.mainCategoryId);
-      setSubId(sub.id);
+      setSubIds([sub.id]);
     }
     setSlots(buildSlots(item, initialDraft, t("step3.additional")));
   }, [initialDraft, catalogue, t]);
@@ -158,7 +158,7 @@ export function NewRequestWizard({
       if ((saved.requestId ?? null) !== (requestId ?? null)) return;
       setStep(saved.step);
       setMainId(saved.mainId);
-      setSubId(saved.subId);
+      setSubIds(saved.subIds ?? []);
       setItemId(saved.itemId);
       setProductNameEn(saved.productNameEn);
       setProductNameAr(saved.productNameAr);
@@ -181,7 +181,7 @@ export function NewRequestWizard({
       requestId,
       step,
       mainId,
-      subId,
+      subIds,
       itemId,
       productNameEn,
       productNameAr,
@@ -198,7 +198,7 @@ export function NewRequestWizard({
     requestId,
     step,
     mainId,
-    subId,
+    subIds,
     itemId,
     productNameEn,
     productNameAr,
@@ -565,7 +565,7 @@ export function NewRequestWizard({
                   type="button"
                   onClick={() => {
                     setMainId(main.id);
-                    setSubId(null);
+                    setSubIds([]);
                     setItemId(null);
                   }}
                   className={cn(
@@ -599,12 +599,16 @@ export function NewRequestWizard({
                     key={sub.id}
                     type="button"
                     onClick={() => {
-                      setSubId(sub.id);
+                      setSubIds((prev) =>
+                        prev.includes(sub.id)
+                          ? prev.filter((id) => id !== sub.id)
+                          : [...prev, sub.id],
+                      );
                       setItemId(null);
                     }}
                     className={cn(
                       "rounded-md border px-3 py-2 text-sm font-medium",
-                      subId === sub.id
+                      subIds.includes(sub.id)
                         ? "border-atlas-green bg-atlas-green-tint text-atlas-green-600"
                         : "border-line text-ink-800",
                     )}
@@ -615,7 +619,7 @@ export function NewRequestWizard({
               </div>
             ) : null}
 
-            {subId ? (
+            {subIds.length > 0 ? (
               <ul className="space-y-2">
                 {items.map((item) => {
                   const vat = item.basePrice * item.vatRate;
