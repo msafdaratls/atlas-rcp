@@ -15,6 +15,7 @@ import {
 import { writeAuditLog } from "@/lib/audit";
 import { parsePercentCouponValue } from "@/lib/billing-helpers";
 import { prisma } from "@/lib/db";
+import { log } from "@/lib/logger";
 import { canTransitionRequest, requirePermission } from "@/lib/rbac";
 import { parseMoneyInput } from "@/lib/pricing";
 import { resumeSlaDueAt } from "@/lib/sla";
@@ -329,8 +330,13 @@ export async function transitionAdminRequest(
             tx,
           );
         }
-      } catch {
+      } catch (error) {
         // Notification delivery is best-effort; the transition itself must still succeed.
+        log.error("admin.requests.transition", "notification delivery failed", {
+          requestId,
+          toState,
+          error: error instanceof Error ? error.message : "unknown",
+        });
       }
     });
 

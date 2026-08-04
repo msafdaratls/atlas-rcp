@@ -4,7 +4,7 @@ import { Bell } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useTransition } from "react";
+import { useEffect, useMemo, useRef, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,10 +16,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
+  getUnreadNotificationCount,
   markAllNotificationsRead,
   markNotificationRead,
   type NotificationListItem,
 } from "@/server/notifications/queries";
+
+const POLL_INTERVAL_MS = 30_000;
 
 type Props = {
   mode: "client" | "admin";
@@ -46,6 +49,19 @@ export function NotificationBell({
   const locale = useLocale();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  const unreadCountRef = useRef(unreadCount);
+  unreadCountRef.current = unreadCount;
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const latest = await getUnreadNotificationCount();
+      if (latest !== unreadCountRef.current) {
+        router.refresh();
+      }
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [router]);
 
   const groups = useMemo(() => {
     const map = new Map<string, NotificationListItem[]>();
