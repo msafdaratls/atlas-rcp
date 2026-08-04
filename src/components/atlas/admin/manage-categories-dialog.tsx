@@ -26,8 +26,13 @@ import {
 import {
   createMainCategory,
   createSubCategory,
+  deleteMainCategory,
+  deleteSubCategory,
+  updateMainCategory,
+  updateSubCategory,
 } from "@/server/admin/actions";
 import type { AdminCategoryTreeNode } from "@/server/admin/queries";
+import { Loader2 } from "lucide-react";
 
 export function ManageCategoriesDialog({
   categoryTree,
@@ -51,6 +56,10 @@ export function ManageCategoriesDialog({
   const [subCode, setSubCode] = useState("");
   const [subNameEn, setSubNameEn] = useState("");
   const [subNameAr, setSubNameAr] = useState("");
+
+  // Row-level edit state
+  const [editingMainId, setEditingMainId] = useState<string | null>(null);
+  const [editingSubId, setEditingSubId] = useState<string | null>(null);
 
   function name(node: { nameEn: string; nameAr: string }) {
     return locale === "ar" ? node.nameAr : node.nameEn;
@@ -99,6 +108,68 @@ export function ManageCategoriesDialog({
     });
   }
 
+  function saveMain(id: string, fd: FormData) {
+    startTransition(async () => {
+      const result = await updateMainCategory({
+        id,
+        code: String(fd.get("code") ?? "").trim(),
+        nameEn: String(fd.get("nameEn") ?? "").trim(),
+        nameAr: String(fd.get("nameAr") ?? "").trim(),
+      });
+      if (!result.ok) {
+        toast.error(tErr(result.error as "SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("mainUpdated"));
+      setEditingMainId(null);
+      router.refresh();
+    });
+  }
+
+  function removeMain(id: string) {
+    if (!window.confirm(t("deleteMainConfirm"))) return;
+    startTransition(async () => {
+      const result = await deleteMainCategory({ id });
+      if (!result.ok) {
+        toast.error(tErr(result.error as "SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("mainDeleted"));
+      router.refresh();
+    });
+  }
+
+  function saveSub(id: string, fd: FormData) {
+    startTransition(async () => {
+      const result = await updateSubCategory({
+        id,
+        code: String(fd.get("code") ?? "").trim(),
+        nameEn: String(fd.get("nameEn") ?? "").trim(),
+        nameAr: String(fd.get("nameAr") ?? "").trim(),
+      });
+      if (!result.ok) {
+        toast.error(tErr(result.error as "SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("subUpdated"));
+      setEditingSubId(null);
+      router.refresh();
+    });
+  }
+
+  function removeSub(id: string) {
+    if (!window.confirm(t("deleteSubConfirm"))) return;
+    startTransition(async () => {
+      const result = await deleteSubCategory({ id });
+      if (!result.ok) {
+        toast.error(tErr(result.error as "SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("subDeleted"));
+      router.refresh();
+    });
+  }
+
   const canAddMain =
     mainCode.trim() && mainNameEn.trim().length >= 2 && mainNameAr.trim().length >= 2;
   const canAddSub =
@@ -131,21 +202,151 @@ export function ManageCategoriesDialog({
             ) : (
               <ul className="space-y-2 rounded-lg border border-line bg-surface-alt p-3 text-sm">
                 {categoryTree.map((main) => (
-                  <li key={main.id}>
-                    <p className="font-medium text-ink-900">
-                      {name(main)}{" "}
-                      <span className="font-data text-xs text-ink-500">
-                        {main.code}
-                      </span>
-                    </p>
+                  <li key={main.id} className="space-y-1">
+                    {editingMainId === main.id ? (
+                      <form
+                        className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-surface p-2"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          saveMain(main.id, new FormData(e.currentTarget));
+                        }}
+                      >
+                        <Input
+                          name="code"
+                          dir="ltr"
+                          className="w-24 font-data"
+                          defaultValue={main.code}
+                        />
+                        <Input
+                          name="nameEn"
+                          dir="ltr"
+                          className="w-40"
+                          defaultValue={main.nameEn}
+                        />
+                        <Input
+                          name="nameAr"
+                          dir="rtl"
+                          className="w-40"
+                          defaultValue={main.nameAr}
+                        />
+                        <Button type="submit" size="sm" disabled={pending}>
+                          {pending ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : null}
+                          {t("save")}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingMainId(null)}
+                        >
+                          {t("cancel")}
+                        </Button>
+                      </form>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium text-ink-900">
+                          {name(main)}{" "}
+                          <span className="font-data text-xs text-ink-500">
+                            {main.code}
+                          </span>
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setEditingMainId(main.id)}
+                          >
+                            {t("editMain")}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={pending}
+                            onClick={() => removeMain(main.id)}
+                          >
+                            {t("deleteMain")}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     {main.subCategories.length > 0 ? (
-                      <ul className="mt-1 space-y-0.5 ps-4 text-ink-700">
+                      <ul className="mt-1 space-y-1 ps-4 text-ink-700">
                         {main.subCategories.map((sub) => (
                           <li key={sub.id}>
-                            {name(sub)}{" "}
-                            <span className="font-data text-xs text-ink-500">
-                              {sub.code}
-                            </span>
+                            {editingSubId === sub.id ? (
+                              <form
+                                className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-surface p-2"
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  saveSub(sub.id, new FormData(e.currentTarget));
+                                }}
+                              >
+                                <Input
+                                  name="code"
+                                  dir="ltr"
+                                  className="w-24 font-data"
+                                  defaultValue={sub.code}
+                                />
+                                <Input
+                                  name="nameEn"
+                                  dir="ltr"
+                                  className="w-40"
+                                  defaultValue={sub.nameEn}
+                                />
+                                <Input
+                                  name="nameAr"
+                                  dir="rtl"
+                                  className="w-40"
+                                  defaultValue={sub.nameAr}
+                                />
+                                <Button type="submit" size="sm" disabled={pending}>
+                                  {pending ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : null}
+                                  {t("save")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingSubId(null)}
+                                >
+                                  {t("cancel")}
+                                </Button>
+                              </form>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2">
+                                <span>
+                                  {name(sub)}{" "}
+                                  <span className="font-data text-xs text-ink-500">
+                                    {sub.code}
+                                  </span>
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setEditingSubId(sub.id)}
+                                  >
+                                    {t("editSub")}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={pending}
+                                    onClick={() => removeSub(sub.id)}
+                                  >
+                                    {t("deleteSub")}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
                           </li>
                         ))}
                       </ul>

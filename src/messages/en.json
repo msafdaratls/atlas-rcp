@@ -818,7 +818,13 @@
         "maxResubmissions": "Max resubmissions",
         "cancel": "Cancel",
         "save": "Save changes",
-        "success": "Service updated"
+        "success": "Service updated",
+        "mainCategory": "Main category",
+        "subCategory": "Subcategory",
+        "selectMain": "Select a main category",
+        "selectSub": "Select a subcategory",
+        "code": "Code",
+        "sortOrder": "Sort order"
       },
       "errors": {
         "VALIDATION": "Check the form and try again.",
@@ -826,7 +832,10 @@
         "FORBIDDEN": "You do not have permission for this action.",
         "NOT_FOUND": "We could not find that record.",
         "SAVE_FAILED": "Could not save. Try again.",
-        "CODE_TAKEN": "That code is already in use."
+        "CODE_TAKEN": "That code is already in use.",
+        "HAS_REQUESTS": "This service has requests on file and can't be deleted. Deactivate it instead.",
+        "HAS_SERVICE_ITEMS": "This category still has services in it. Remove or move them first.",
+        "HAS_SUBCATEGORIES": "This main category still has subcategories. Delete them first."
       },
       "create": {
         "button": "Create service",
@@ -940,7 +949,24 @@
         "close": "Close",
         "mainAdded": "Main category added.",
         "subAdded": "Subcategory added.",
-        "needMainFirst": "Add a main category first."
+        "needMainFirst": "Add a main category first.",
+        "editMain": "Edit",
+        "deleteMain": "Delete",
+        "deleteMainConfirm": "Delete this main category? It must have no subcategories.",
+        "mainUpdated": "Main category updated.",
+        "mainDeleted": "Main category deleted.",
+        "editSub": "Edit",
+        "deleteSub": "Delete",
+        "deleteSubConfirm": "Delete this subcategory? It must have no services.",
+        "subUpdated": "Subcategory updated.",
+        "subDeleted": "Subcategory deleted.",
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "delete": {
+        "button": "Delete",
+        "confirm": "Delete this service? This cannot be undone.",
+        "success": "Service deleted"
       }
     },
     "coupons": {

@@ -915,6 +915,7 @@ export type AdminCatalogueItem = {
   resubmissionPricePct: number;
   freeResubmissions: number;
   maxResubmissions: number;
+  sortOrder: number;
   subCategoryId: string;
   subCategoryNameEn: string;
   subCategoryNameAr: string;
@@ -947,6 +948,7 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
       resubmissionPricePct: toNumber(item.resubmissionPricePct),
       freeResubmissions: item.freeResubmissions,
       maxResubmissions: item.maxResubmissions,
+      sortOrder: item.sortOrder,
       subCategoryId: item.subCategoryId,
       subCategoryNameEn: item.subCategory.nameEn,
       subCategoryNameAr: item.subCategory.nameAr,
@@ -966,11 +968,17 @@ export type AdminCategoryTreeNode = {
   code: string;
   nameEn: string;
   nameAr: string;
+  descEn: string;
+  descAr: string;
+  sortOrder: number;
   subCategories: Array<{
     id: string;
     code: string;
     nameEn: string;
     nameAr: string;
+    descEn: string;
+    descAr: string;
+    sortOrder: number;
   }>;
 };
 
@@ -997,11 +1005,17 @@ export async function listAdminCategoryTree(): Promise<
       code: main.code,
       nameEn: main.nameEn,
       nameAr: main.nameAr,
+      descEn: main.descEn ?? "",
+      descAr: main.descAr ?? "",
+      sortOrder: main.sortOrder,
       subCategories: main.subCategories.map((sub) => ({
         id: sub.id,
         code: sub.code,
         nameEn: sub.nameEn,
         nameAr: sub.nameAr,
+        descEn: sub.descEn ?? "",
+        descAr: sub.descAr ?? "",
+        sortOrder: sub.sortOrder,
       })),
     }));
   } catch {

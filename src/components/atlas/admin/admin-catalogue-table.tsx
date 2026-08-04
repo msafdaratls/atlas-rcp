@@ -10,23 +10,31 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { STATE_TONE_CLASS } from "@/lib/request-state";
 import { cn } from "@/lib/utils";
 import {
+  deleteServiceItem,
   toggleServiceItemActive,
   updateServiceItem,
 } from "@/server/admin/actions";
-import type { AdminCatalogueItem } from "@/server/admin/queries";
+import type { AdminCatalogueItem, AdminCategoryTreeNode } from "@/server/admin/queries";
 import { Loader2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
-type Props = { rows: AdminCatalogueItem[] };
+type Props = { rows: AdminCatalogueItem[]; categoryTree: AdminCategoryTreeNode[] };
 
-export function AdminCatalogueTable({ rows }: Props) {
+export function AdminCatalogueTable({ rows, categoryTree }: Props) {
   const t = useTranslations("adminOps.catalogue");
   const tCommon = useTranslations("common");
   const locale = useLocale();
@@ -60,6 +68,21 @@ export function AdminCatalogueTable({ rows }: Props) {
         return;
       }
       toast.success(t("success"));
+      router.refresh();
+    });
+  }
+
+  function handleDelete(item: AdminCatalogueItem) {
+    if (!window.confirm(t("delete.confirm"))) return;
+    setPendingId(item.id);
+    startTransition(async () => {
+      const result = await deleteServiceItem({ id: item.id });
+      setPendingId(null);
+      if (!result.ok) {
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("delete.success"));
       router.refresh();
     });
   }
@@ -159,6 +182,15 @@ export function AdminCatalogueTable({ rows }: Props) {
                         ) : null}
                         {t("toggle")}
                       </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={pendingId === item.id}
+                        onClick={() => handleDelete(item)}
+                      >
+                        {t("delete.button")}
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -170,6 +202,7 @@ export function AdminCatalogueTable({ rows }: Props) {
 
       <EditServiceDialog
         item={editing}
+        categoryTree={categoryTree}
         onClose={() => setEditing(null)}
         onSaved={() => {
           setEditing(null);
@@ -182,20 +215,33 @@ export function AdminCatalogueTable({ rows }: Props) {
 
 function EditServiceDialog({
   item,
+  categoryTree,
   onClose,
   onSaved,
 }: {
+  categoryTree: AdminCategoryTreeNode[];
   item: AdminCatalogueItem | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const t = useTranslations("adminOps.catalogue");
+  const locale = useLocale();
   const [pending, startTransition] = useTransition();
+  const [mainId, setMainId] = useState(item?.mainCategoryId ?? "");
+  const [subId, setSubId] = useState(item?.subCategoryId ?? "");
+
+  const selectedMain = categoryTree.find((m) => m.id === mainId) ?? null;
+  const subCategories = selectedMain?.subCategories ?? [];
 
   if (!item) return null;
 
   return (
-    <Dialog open={item !== null} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={item !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("edit.dialogTitle")}</DialogTitle>
@@ -205,9 +251,12 @@ function EditServiceDialog({
           onSubmit={(e) => {
             e.preventDefault();
             const fd = new FormData(e.currentTarget);
+            if (!subId) return;
             startTransition(async () => {
               const result = await updateServiceItem({
                 id: item.id,
+                subCategoryId: subId,
+                code: String(fd.get("code") ?? ""),
                 nameEn: String(fd.get("nameEn") ?? ""),
                 nameAr: String(fd.get("nameAr") ?? ""),
                 descEn: String(fd.get("descEn") ?? ""),
@@ -218,6 +267,7 @@ function EditServiceDialog({
                 resubmissionPricePct: String(fd.get("resubmissionPricePct") ?? ""),
                 freeResubmissions: Number(fd.get("freeResubmissions")),
                 maxResubmissions: Number(fd.get("maxResubmissions")),
+                sortOrder: Number(fd.get("sortOrder")),
               });
               if (!result.ok) {
                 toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
@@ -228,6 +278,69 @@ function EditServiceDialog({
             });
           }}
         >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label>{t("edit.mainCategory")}</Label>
+              <Select
+                value={mainId}
+                onValueChange={(v) => {
+                  setMainId(v);
+                  setSubId("");
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("edit.selectMain")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {categoryTree.map((main) => (
+                    <SelectItem key={main.id} value={main.id}>
+                      {locale === "ar" ? main.nameAr : main.nameEn}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{t("edit.subCategory")}</Label>
+              <Select value={subId} onValueChange={setSubId} disabled={!mainId}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("edit.selectSub")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {subCategories.map((sub) => (
+                    <SelectItem key={sub.id} value={sub.id}>
+                      {locale === "ar" ? sub.nameAr : sub.nameEn}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="edit-code">{t("edit.code")}</Label>
+              <Input
+                id="edit-code"
+                name="code"
+                dir="ltr"
+                className="font-data"
+                defaultValue={item.code}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-sortOrder">{t("edit.sortOrder")}</Label>
+              <Input
+                id="edit-sortOrder"
+                name="sortOrder"
+                type="number"
+                min="0"
+                dir="ltr"
+                defaultValue={item.sortOrder}
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="edit-nameEn">{t("edit.nameEn")}</Label>
@@ -349,7 +462,7 @@ function EditServiceDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               {t("edit.cancel")}
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || !subId}>
               {pending ? <Loader2 className="size-4 animate-spin" /> : null}
               {t("edit.save")}
             </Button>

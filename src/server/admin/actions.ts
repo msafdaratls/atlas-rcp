@@ -651,6 +651,8 @@ export async function toggleServiceItemActive(
 
 const updateServiceItemSchema = z.object({
   id: z.string().min(1),
+  subCategoryId: z.string().min(1),
+  code: z.string().trim().min(1).max(40),
   nameEn: z.string().trim().min(2).max(200),
   nameAr: z.string().trim().min(2).max(200),
   descEn: z.string().trim().max(2000).optional(),
@@ -661,6 +663,7 @@ const updateServiceItemSchema = z.object({
   resubmissionPricePct: z.union([z.string(), z.number()]),
   freeResubmissions: z.number().int().min(0),
   maxResubmissions: z.number().int().min(0),
+  sortOrder: z.number().int().min(0),
 });
 
 export type UpdateServiceItemInput = z.infer<typeof updateServiceItemSchema>;
@@ -689,30 +692,52 @@ export async function updateServiceItem(
       where: { id: data.id },
       select: {
         id: true,
+        subCategoryId: true,
+        code: true,
         basePrice: true,
         vatRate: true,
         slaHours: true,
         nameEn: true,
         nameAr: true,
+        sortOrder: true,
       },
     });
     if (!existing) return { ok: false, error: "NOT_FOUND" };
 
-    await prisma.serviceItem.update({
-      where: { id: existing.id },
-      data: {
-        nameEn: data.nameEn,
-        nameAr: data.nameAr,
-        descEn: data.descEn || null,
-        descAr: data.descAr || null,
-        basePrice,
-        vatRate,
-        slaHours: data.slaHours,
-        resubmissionPricePct,
-        freeResubmissions: data.freeResubmissions,
-        maxResubmissions: data.maxResubmissions,
-      },
+    const subCategory = await prisma.subCategory.findUnique({
+      where: { id: data.subCategoryId },
+      select: { id: true },
     });
+    if (!subCategory) return { ok: false, error: "NOT_FOUND" };
+
+    try {
+      await prisma.serviceItem.update({
+        where: { id: existing.id },
+        data: {
+          subCategoryId: data.subCategoryId,
+          code: data.code,
+          nameEn: data.nameEn,
+          nameAr: data.nameAr,
+          descEn: data.descEn || null,
+          descAr: data.descAr || null,
+          basePrice,
+          vatRate,
+          slaHours: data.slaHours,
+          resubmissionPricePct,
+          freeResubmissions: data.freeResubmissions,
+          maxResubmissions: data.maxResubmissions,
+          sortOrder: data.sortOrder,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { ok: false, error: "CODE_TAKEN" };
+      }
+      throw error;
+    }
 
     await writeAuditLog({
       session,
@@ -720,19 +745,70 @@ export async function updateServiceItem(
       entityType: "ServiceItem",
       entityId: existing.id,
       before: {
+        subCategoryId: existing.subCategoryId,
+        code: existing.code,
         basePrice: existing.basePrice.toString(),
         vatRate: existing.vatRate.toString(),
         slaHours: existing.slaHours,
         nameEn: existing.nameEn,
         nameAr: existing.nameAr,
+        sortOrder: existing.sortOrder,
       },
       after: {
+        subCategoryId: data.subCategoryId,
+        code: data.code,
         basePrice: basePrice.toString(),
         vatRate: vatRate.toString(),
         slaHours: data.slaHours,
         nameEn: data.nameEn,
         nameAr: data.nameAr,
+        sortOrder: data.sortOrder,
       },
+    });
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const deleteServiceItemSchema = z.object({
+  id: z.string().min(1),
+});
+
+export async function deleteServiceItem(
+  input: z.infer<typeof deleteServiceItemSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const parsed = deleteServiceItemSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const item = await prisma.serviceItem.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+    });
+    if (!item) return { ok: false, error: "NOT_FOUND" };
+
+    const requestCount = await prisma.request.count({
+      where: { serviceItemId: item.id },
+    });
+    if (requestCount > 0) return { ok: false, error: "HAS_REQUESTS" };
+
+    await prisma.serviceItem.delete({ where: { id: item.id } });
+
+    await writeAuditLog({
+      session,
+      action: "catalogue.serviceItem.delete",
+      entityType: "ServiceItem",
+      entityId: item.id,
+      before: { code: item.code, nameEn: item.nameEn, nameAr: item.nameAr },
     });
 
     revalidatePath("/[locale]/admin/catalogue", "page");
@@ -1062,6 +1138,241 @@ export async function createSubCategory(
 
     revalidatePath("/[locale]/admin/catalogue", "page");
     return { ok: true, data: { subCategoryId } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const updateMainCategorySchema = z.object({
+  id: z.string().min(1),
+  code: z.string().trim().min(1).max(40),
+  nameEn: z.string().trim().min(2).max(200),
+  nameAr: z.string().trim().min(2).max(200),
+  descEn: z.string().trim().max(2000).optional(),
+  descAr: z.string().trim().max(2000).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+/** Renames/updates a top-level catalogue category. Code is globally unique. */
+export async function updateMainCategory(
+  input: z.infer<typeof updateMainCategorySchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const parsed = updateMainCategorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const data = parsed.data;
+
+    const existing = await prisma.mainCategory.findUnique({
+      where: { id: data.id },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+    });
+    if (!existing) return { ok: false, error: "NOT_FOUND" };
+
+    try {
+      await prisma.mainCategory.update({
+        where: { id: existing.id },
+        data: {
+          code: data.code,
+          nameEn: data.nameEn,
+          nameAr: data.nameAr,
+          descEn: data.descEn || null,
+          descAr: data.descAr || null,
+          sortOrder: data.sortOrder ?? 0,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { ok: false, error: "CODE_TAKEN" };
+      }
+      throw error;
+    }
+
+    await writeAuditLog({
+      session,
+      action: "catalogue.mainCategory.update",
+      entityType: "MainCategory",
+      entityId: existing.id,
+      before: { code: existing.code, nameEn: existing.nameEn, nameAr: existing.nameAr },
+      after: { code: data.code, nameEn: data.nameEn, nameAr: data.nameAr },
+    });
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const deleteMainCategorySchema = z.object({
+  id: z.string().min(1),
+});
+
+/**
+ * Deletes a main category. Blocked (not cascaded) if it still has any
+ * subcategories — those must be deleted first, which itself is blocked while
+ * they hold service items. Keeps catalogue teardown an explicit, auditable
+ * two-step process instead of a silent cascade.
+ */
+export async function deleteMainCategory(
+  input: z.infer<typeof deleteMainCategorySchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const parsed = deleteMainCategorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const category = await prisma.mainCategory.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+    });
+    if (!category) return { ok: false, error: "NOT_FOUND" };
+
+    const subCategoryCount = await prisma.subCategory.count({
+      where: { mainCategoryId: category.id },
+    });
+    if (subCategoryCount > 0) return { ok: false, error: "HAS_SUBCATEGORIES" };
+
+    await prisma.mainCategory.delete({ where: { id: category.id } });
+
+    await writeAuditLog({
+      session,
+      action: "catalogue.mainCategory.delete",
+      entityType: "MainCategory",
+      entityId: category.id,
+      before: { code: category.code, nameEn: category.nameEn, nameAr: category.nameAr },
+    });
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const updateSubCategorySchema = z.object({
+  id: z.string().min(1),
+  code: z.string().trim().min(1).max(40),
+  nameEn: z.string().trim().min(2).max(200),
+  nameAr: z.string().trim().min(2).max(200),
+  descEn: z.string().trim().max(2000).optional(),
+  descAr: z.string().trim().max(2000).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+/** Renames/updates a subcategory. Code is unique per parent main category. */
+export async function updateSubCategory(
+  input: z.infer<typeof updateSubCategorySchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const parsed = updateSubCategorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const data = parsed.data;
+
+    const existing = await prisma.subCategory.findUnique({
+      where: { id: data.id },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+    });
+    if (!existing) return { ok: false, error: "NOT_FOUND" };
+
+    try {
+      await prisma.subCategory.update({
+        where: { id: existing.id },
+        data: {
+          code: data.code,
+          nameEn: data.nameEn,
+          nameAr: data.nameAr,
+          descEn: data.descEn || null,
+          descAr: data.descAr || null,
+          sortOrder: data.sortOrder ?? 0,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { ok: false, error: "CODE_TAKEN" };
+      }
+      throw error;
+    }
+
+    await writeAuditLog({
+      session,
+      action: "catalogue.subCategory.update",
+      entityType: "SubCategory",
+      entityId: existing.id,
+      before: { code: existing.code, nameEn: existing.nameEn, nameAr: existing.nameAr },
+      after: { code: data.code, nameEn: data.nameEn, nameAr: data.nameAr },
+    });
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const deleteSubCategorySchema = z.object({
+  id: z.string().min(1),
+});
+
+/** Deletes a subcategory. Blocked (not cascaded) if it still has service items. */
+export async function deleteSubCategory(
+  input: z.infer<typeof deleteSubCategorySchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const parsed = deleteSubCategorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const sub = await prisma.subCategory.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+    });
+    if (!sub) return { ok: false, error: "NOT_FOUND" };
+
+    const serviceItemCount = await prisma.serviceItem.count({
+      where: { subCategoryId: sub.id },
+    });
+    if (serviceItemCount > 0) return { ok: false, error: "HAS_SERVICE_ITEMS" };
+
+    await prisma.subCategory.delete({ where: { id: sub.id } });
+
+    await writeAuditLog({
+      session,
+      action: "catalogue.subCategory.delete",
+      entityType: "SubCategory",
+      entityId: sub.id,
+      before: { code: sub.code, nameEn: sub.nameEn, nameAr: sub.nameAr },
+    });
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: undefined };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {

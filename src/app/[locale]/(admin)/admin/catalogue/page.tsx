@@ -48,7 +48,7 @@ export default async function AdminCataloguePage({ params }: Props) {
         }
       />
       {items ? (
-        <AdminCatalogueTable rows={items} />
+        <AdminCatalogueTable rows={items} categoryTree={categoryTree ?? []} />
       ) : (
         <EmptyState
           icon={Package}
