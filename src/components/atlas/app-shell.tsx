@@ -20,7 +20,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { getNewRequestsCount } from "@/server/admin/queries";
+import { getNewRequestsCount } from "@/server/admin/actions";
 
 const NEW_REQUESTS_POLL_INTERVAL_MS = 30_000;
 

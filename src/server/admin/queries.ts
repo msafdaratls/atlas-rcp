@@ -159,7 +159,7 @@ const EMPTY_SHELL_CHROME: AdminShellChrome = {
 };
 
 /** Requests nobody has started work on yet — drives the sidebar "Requests" badge. */
-const NEW_REQUEST_STATES: RequestState[] = ["SUBMITTED"];
+export const NEW_REQUEST_STATES: RequestState[] = ["SUBMITTED"];
 
 export async function getAdminShellChrome(
   locale: "ar" | "en",
@@ -219,23 +219,6 @@ export async function getAdminShellChrome(
     };
   } catch {
     return EMPTY_SHELL_CHROME;
-  }
-}
-
-/**
- * Lightweight, pollable count of not-yet-started requests, used by the admin
- * sidebar to keep the "Requests" badge fresh between navigations.
- */
-export async function getNewRequestsCount(): Promise<number> {
-  "use server";
-  try {
-    const session = await requireSession();
-    requirePermission(session, "requests:admin");
-    return await prisma.request.count({
-      where: { state: { in: NEW_REQUEST_STATES } },
-    });
-  } catch {
-    return 0;
   }
 }
 

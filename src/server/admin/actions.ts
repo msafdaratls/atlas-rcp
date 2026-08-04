@@ -29,13 +29,33 @@ import {
   type InviteAtlasStaffInput,
   type UpdateAtlasStaffRoleInput,
 } from "@/lib/validators/admin";
-import { allowedTransitionsFor, onHoldResumeTarget } from "@/server/admin/queries";
+import {
+  allowedTransitionsFor,
+  NEW_REQUEST_STATES,
+  onHoldResumeTarget,
+} from "@/server/admin/queries";
 import { appendReversingEntry } from "@/server/finance/ledger";
 import { getEmailAdapter } from "@/server/notifications/email-adapter";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
   | { ok: false; error: string };
+
+/**
+ * Lightweight, pollable count of not-yet-started requests, used by the admin
+ * sidebar to keep the "Requests" badge fresh between navigations.
+ */
+export async function getNewRequestsCount(): Promise<number> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    return await prisma.request.count({
+      where: { state: { in: NEW_REQUEST_STATES } },
+    });
+  } catch {
+    return 0;
+  }
+}
 
 /** Entering these states with no reviewer yet auto-assigns the acting user. */
 const REVIEW_ASSIGNMENT_STATES: RequestState[] = [
