@@ -146,15 +146,20 @@ export async function getAdminQueueCounts(): Promise<AdminQueueCounts | null> {
 
 export type AdminShellChrome = {
   queueDepth: number;
+  newRequestsCount: number;
   requests: Array<{ id: string; requestNo: string; productName: string }>;
   clients: Array<{ id: string; name: string }>;
 };
 
 const EMPTY_SHELL_CHROME: AdminShellChrome = {
   queueDepth: 0,
+  newRequestsCount: 0,
   requests: [],
   clients: [],
 };
+
+/** Requests nobody has started work on yet — drives the sidebar "Requests" badge. */
+const NEW_REQUEST_STATES: RequestState[] = ["SUBMITTED"];
 
 export async function getAdminShellChrome(
   locale: "ar" | "en",
@@ -166,10 +171,15 @@ export async function getAdminShellChrome(
     const canRequests = checkPermission(session, "requests:admin");
     const canClients = checkPermission(session, "clients:read");
 
-    const [queueDepth, requests, clients] = await Promise.all([
+    const [queueDepth, newRequestsCount, requests, clients] = await Promise.all([
       canRequests
         ? prisma.request.count({
             where: { state: { in: QUEUE_DEPTH_STATES } },
+          })
+        : Promise.resolve(0),
+      canRequests
+        ? prisma.request.count({
+            where: { state: { in: NEW_REQUEST_STATES } },
           })
         : Promise.resolve(0),
       canRequests
@@ -196,6 +206,7 @@ export async function getAdminShellChrome(
 
     return {
       queueDepth,
+      newRequestsCount,
       requests: requests.map((r) => ({
         id: r.id,
         requestNo: r.requestNo,
@@ -208,6 +219,23 @@ export async function getAdminShellChrome(
     };
   } catch {
     return EMPTY_SHELL_CHROME;
+  }
+}
+
+/**
+ * Lightweight, pollable count of not-yet-started requests, used by the admin
+ * sidebar to keep the "Requests" badge fresh between navigations.
+ */
+export async function getNewRequestsCount(): Promise<number> {
+  "use server";
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    return await prisma.request.count({
+      where: { state: { in: NEW_REQUEST_STATES } },
+    });
+  } catch {
+    return 0;
   }
 }
 

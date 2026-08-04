@@ -53,6 +53,7 @@ export default async function AdminLayout({ children, params }: Props) {
       unreadCount={unreadCount}
       notifications={notifications}
       queueDepth={chrome.queueDepth}
+      newRequestsCount={chrome.newRequestsCount}
       requests={chrome.requests}
       clients={chrome.clients}
     >

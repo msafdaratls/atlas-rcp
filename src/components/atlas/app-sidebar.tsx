@@ -148,6 +148,8 @@ type AppSidebarProps = {
   collapsed?: boolean;
   onNavigate?: () => void;
   className?: string;
+  /** Count of not-yet-started requests, shown as a badge on the "requests" nav item. */
+  newRequestsCount?: number;
 };
 
 export function AppSidebar({
@@ -157,6 +159,7 @@ export function AppSidebar({
   collapsed = false,
   onNavigate,
   className,
+  newRequestsCount = 0,
 }: AppSidebarProps) {
   const t = useTranslations(mode === "client" ? "nav.client" : "nav.admin");
   const pathname = usePathname();
@@ -194,7 +197,14 @@ export function AppSidebar({
                   : "text-ink-800 hover:bg-surface-alt",
               )}
             >
-              <Icon className="size-5 shrink-0" aria-hidden />
+              <span className="relative inline-flex shrink-0">
+                <Icon className="size-5" aria-hidden />
+                {item.key === "requests" && newRequestsCount > 0 ? (
+                  <span className="absolute -end-1.5 -top-1.5 flex min-w-4 items-center justify-center rounded-full bg-state-bad px-1 font-data text-[10px] font-semibold leading-none text-white">
+                    {newRequestsCount > 99 ? "99+" : newRequestsCount}
+                  </span>
+                ) : null}
+              </span>
               {!collapsed ? <span>{t(item.key)}</span> : null}
             </Link>
           );

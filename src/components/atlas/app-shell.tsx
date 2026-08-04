@@ -2,7 +2,8 @@
 
 import type { Role } from "@prisma/client";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/atlas/app-sidebar";
 import {
   AppTopbar,
@@ -19,6 +20,9 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { getNewRequestsCount } from "@/server/admin/queries";
+
+const NEW_REQUESTS_POLL_INTERVAL_MS = 30_000;
 
 type AppShellProps = {
   mode: "client" | "admin";
@@ -28,6 +32,7 @@ type AppShellProps = {
   unreadCount?: number;
   notifications?: import("@/server/notifications/queries").NotificationListItem[];
   queueDepth?: number;
+  newRequestsCount?: number;
   requests?: CommandPaletteRequest[];
   clients?: CommandPaletteClient[];
   children: React.ReactNode;
@@ -41,6 +46,7 @@ export function AppShell({
   unreadCount = 0,
   notifications = [],
   queueDepth = 0,
+  newRequestsCount = 0,
   requests,
   clients,
   children,
@@ -50,6 +56,7 @@ export function AppShell({
   const basePath = `/${locale}/${mode === "client" ? "client" : "admin"}`;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     function onResize() {
@@ -59,6 +66,20 @@ export function AppShell({
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  const newRequestsCountRef = useRef(newRequestsCount);
+  newRequestsCountRef.current = newRequestsCount;
+
+  useEffect(() => {
+    if (mode !== "admin") return;
+    const interval = setInterval(async () => {
+      const latest = await getNewRequestsCount();
+      if (latest !== newRequestsCountRef.current) {
+        router.refresh();
+      }
+    }, NEW_REQUESTS_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [mode, router]);
 
   const shell = (
     <div className="flex min-h-screen flex-col bg-surface-alt">
@@ -82,6 +103,7 @@ export function AppShell({
             basePath={basePath}
             roles={roles}
             collapsed={collapsed}
+            newRequestsCount={newRequestsCount}
             className="sticky top-14 h-[calc(100vh-3.5rem)]"
           />
         </div>
@@ -109,6 +131,7 @@ export function AppShell({
               basePath={basePath}
               roles={roles}
               onNavigate={() => setMobileOpen(false)}
+              newRequestsCount={newRequestsCount}
               className="border-e-0"
             />
           </SheetContent>
