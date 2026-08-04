@@ -238,96 +238,85 @@ export function CompanyProfileForm({ initial }: Props) {
       <Tabs defaultValue="identity" className="w-full">
         <TabsList>
           <TabsTrigger value="identity">{t("tabs.identity")}</TabsTrigger>
-          <TabsTrigger value="contact">{t("tabs.contact")}</TabsTrigger>
           <TabsTrigger value="users">{t("tabs.users")}</TabsTrigger>
           <TabsTrigger value="preferences">{t("tabs.preferences")}</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="identity" className="space-y-6">
-          <LogoUploader
-            currentUrl={logoUrl}
-            disabled={!initial.canEdit || pending}
-            onCropped={onLogoCropped}
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="nameAr">{t("fields.nameAr")}</Label>
-              <Input
-                id="nameAr"
-                disabled={!initial.canEdit}
-                {...form.register("nameAr")}
-              />
-              {fieldError("nameAr") ? (
-                <p className="text-xs text-state-bad">{fieldError("nameAr")}</p>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="nameEn">{t("fields.nameEn")}</Label>
-              <Input
-                id="nameEn"
-                disabled={!initial.canEdit}
-                {...form.register("nameEn")}
-              />
-              {fieldError("nameEn") ? (
-                <p className="text-xs text-state-bad">{fieldError("nameEn")}</p>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="crNumber">{t("fields.crNumber")}</Label>
-              <Input
-                id="crNumber"
-                className="font-data"
-                dir="ltr"
-                disabled={!initial.canEdit}
-                {...form.register("crNumber")}
-              />
-              {fieldError("crNumber") ? (
-                <p className="text-xs text-state-bad">{fieldError("crNumber")}</p>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="vatNumber">{t("fields.vatNumber")}</Label>
-              <Input
-                id="vatNumber"
-                className="font-data"
-                dir="ltr"
-                disabled={!initial.canEdit}
-                {...form.register("vatNumber")}
-              />
-              {fieldError("vatNumber") ? (
-                <p className="text-xs text-state-bad">{fieldError("vatNumber")}</p>
-              ) : null}
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="website">{t("fields.website")}</Label>
-              <Input
-                id="website"
-                dir="ltr"
-                disabled={!initial.canEdit}
-                {...form.register("website", {
-                  // v can be null when the stored website is empty — guard before trim.
-                  setValueAs: (v: string | null) => {
-                    const trimmed = (v ?? "").trim();
-                    return trimmed === "" ? null : trimmed;
-                  },
-                })}
-              />
-              {fieldError("website") ? (
-                <p className="text-xs text-state-bad">{fieldError("website")}</p>
-              ) : null}
-            </div>
-          </div>
-          {initial.canEdit ? (
-            <Button type="button" disabled={pending} onClick={onSaveProfile}>
-              {t("saveChanges")}
-            </Button>
-          ) : null}
-        </TabsContent>
-
-        <TabsContent value="contact">
+        <TabsContent value="identity">
           <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
-            <div className="space-y-4">
+            <div className="space-y-6">
+              <LogoUploader
+                currentUrl={logoUrl}
+                disabled={!initial.canEdit || pending}
+                onCropped={onLogoCropped}
+              />
               <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="nameAr">{t("fields.nameAr")}</Label>
+                  <Input
+                    id="nameAr"
+                    disabled={!initial.canEdit}
+                    {...form.register("nameAr")}
+                  />
+                  {fieldError("nameAr") ? (
+                    <p className="text-xs text-state-bad">{fieldError("nameAr")}</p>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="nameEn">{t("fields.nameEn")}</Label>
+                  <Input
+                    id="nameEn"
+                    disabled={!initial.canEdit}
+                    {...form.register("nameEn")}
+                  />
+                  {fieldError("nameEn") ? (
+                    <p className="text-xs text-state-bad">{fieldError("nameEn")}</p>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="crNumber">{t("fields.crNumber")}</Label>
+                  <Input
+                    id="crNumber"
+                    className="font-data"
+                    dir="ltr"
+                    disabled={!initial.canEdit}
+                    {...form.register("crNumber")}
+                  />
+                  {fieldError("crNumber") ? (
+                    <p className="text-xs text-state-bad">{fieldError("crNumber")}</p>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vatNumber">{t("fields.vatNumber")}</Label>
+                  <Input
+                    id="vatNumber"
+                    className="font-data"
+                    dir="ltr"
+                    disabled={!initial.canEdit}
+                    {...form.register("vatNumber")}
+                  />
+                  {fieldError("vatNumber") ? (
+                    <p className="text-xs text-state-bad">{fieldError("vatNumber")}</p>
+                  ) : null}
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="website">{t("fields.website")}</Label>
+                  <Input
+                    id="website"
+                    dir="ltr"
+                    disabled={!initial.canEdit}
+                    {...form.register("website", {
+                      // v can be null when the stored website is empty — guard before trim.
+                      setValueAs: (v: string | null) => {
+                        const trimmed = (v ?? "").trim();
+                        return trimmed === "" ? null : trimmed;
+                      },
+                    })}
+                  />
+                  {fieldError("website") ? (
+                    <p className="text-xs text-state-bad">{fieldError("website")}</p>
+                  ) : null}
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">{t("fields.email")}</Label>
                   <Input

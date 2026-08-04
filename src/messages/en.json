@@ -160,8 +160,7 @@
     "saveChanges": "Save changes",
     "cancel": "Cancel",
     "tabs": {
-      "identity": "Identity",
-      "contact": "Contact & address",
+      "identity": "Identity, contact & address",
       "users": "Users",
       "preferences": "Preferences"
     },
