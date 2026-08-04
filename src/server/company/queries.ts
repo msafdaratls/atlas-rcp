@@ -10,6 +10,8 @@ export type CompanyProfileView = {
   canManageUsers: boolean;
   organisation: {
     id: string;
+    clientCategory: string | null;
+    isInternational: boolean;
     nameEn: string;
     nameAr: string;
     logoKey: string | null;
@@ -91,6 +93,8 @@ export async function getCompanyProfilePageData(): Promise<CompanyProfileLoad> {
         canManageUsers,
         organisation: {
           id: organisation.id,
+          clientCategory: organisation.clientCategory,
+          isInternational: organisation.isInternational,
           nameEn: organisation.nameEn,
           nameAr: organisation.nameAr,
           logoKey: organisation.logoKey,

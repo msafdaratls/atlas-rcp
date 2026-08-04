@@ -18,39 +18,53 @@ export const saudiPhoneSchema = z
   .trim()
   .regex(/^\+966[1-9]\d{8}$/, { message: "INVALID_SAUDI_PHONE" });
 
-export const companyProfileSchema = z.object({
-  nameEn: z.string().trim().min(2).max(200),
-  nameAr: z.string().trim().min(2).max(200),
-  crNumber: z.string().trim().min(5).max(20),
-  vatNumber: z
-    .string()
-    .trim()
-    .regex(/^3\d{14}$/, { message: "INVALID_VAT" }),
-  website: z
-    .union([
-      z.literal(""),
-      z.null(),
-      z.string().trim().regex(/^https?:\/\/.+/i, { message: "INVALID_URL" }),
-    ])
-    .transform((v) => (v === "" || v == null ? null : v)),
-  email: z.email(),
-  phone: saudiPhoneSchema,
-  addressLine1: z.string().trim().min(3).max(200),
-  addressLine2: z
-    .union([z.string().trim().max(200), z.null(), z.literal("")])
-    .transform((v) => (v === "" || v == null ? null : v)),
-  city: z.string().trim().min(2).max(100),
-  region: z.enum(regionCodes),
-  postalCode: z
-    .string()
-    .trim()
-    .regex(/^\d{5}$/, { message: "INVALID_POSTAL" }),
-  country: z.literal("SA"),
-  nationalAddress: z
-    .string()
-    .trim()
-    .regex(/^[A-Z]{4}\d{4}$/, { message: "INVALID_NATIONAL_ADDRESS" }),
-});
+/**
+ * Saudi CR/VAT/national-address/country are only mandatory for domestic
+ * (clientCategory = COMPANY, isInternational = false) clients — see the
+ * Organisation.isInternational comment in prisma/schema.prisma. Individual
+ * and international clients store these as null, so the schema must relax
+ * them or their profile update fails validation before it ever reaches the
+ * server action.
+ */
+export function buildCompanyProfileSchema(requiresSaudiFields: boolean) {
+  return z.object({
+    nameEn: z.string().trim().min(2).max(200),
+    nameAr: z.string().trim().min(2).max(200),
+    crNumber: requiresSaudiFields
+      ? z.string().trim().min(5).max(20)
+      : z.string().trim().max(20),
+    vatNumber: requiresSaudiFields
+      ? z.string().trim().regex(/^3\d{14}$/, { message: "INVALID_VAT" })
+      : z.string().trim().max(20),
+    website: z
+      .union([
+        z.literal(""),
+        z.null(),
+        z.string().trim().regex(/^https?:\/\/.+/i, { message: "INVALID_URL" }),
+      ])
+      .transform((v) => (v === "" || v == null ? null : v)),
+    email: z.email(),
+    phone: saudiPhoneSchema,
+    addressLine1: z.string().trim().min(3).max(200),
+    addressLine2: z
+      .union([z.string().trim().max(200), z.null(), z.literal("")])
+      .transform((v) => (v === "" || v == null ? null : v)),
+    city: z.string().trim().min(2).max(100),
+    region: z.enum(regionCodes),
+    postalCode: z
+      .string()
+      .trim()
+      .regex(/^\d{5}$/, { message: "INVALID_POSTAL" }),
+    country: requiresSaudiFields
+      ? z.literal("SA")
+      : z.string().trim().length(2).toUpperCase(),
+    nationalAddress: requiresSaudiFields
+      ? z.string().trim().regex(/^[A-Z]{4}\d{4}$/, { message: "INVALID_NATIONAL_ADDRESS" })
+      : z.string().trim().max(20),
+  });
+}
+
+export const companyProfileSchema = buildCompanyProfileSchema(true);
 
 export type CompanyProfileInput = z.input<typeof companyProfileSchema>;
 export type CompanyProfileValues = z.output<typeof companyProfileSchema>;

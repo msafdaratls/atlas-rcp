@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { SAUDI_REGIONS } from "@/lib/saudi-regions";
 import {
-  companyProfileSchema,
+  buildCompanyProfileSchema,
   inviteUserSchema,
   type CompanyProfileInput,
   type CompanyProfileValues,
@@ -72,6 +72,10 @@ export function CompanyProfileForm({ initial }: Props) {
   const [users, setUsers] = useState(initial.users);
   const [inviteOpen, setInviteOpen] = useState(false);
 
+  const requiresSaudiFields =
+    initial.organisation.clientCategory === "COMPANY" &&
+    !initial.organisation.isInternational;
+
   const defaults: CompanyProfileInput = useMemo(
     () => ({
       nameEn: initial.organisation.nameEn,
@@ -88,14 +92,14 @@ export function CompanyProfileForm({ initial }: Props) {
         (initial.organisation.region as CompanyProfileInput["region"]) ||
         "RIYADH",
       postalCode: initial.organisation.postalCode ?? "",
-      country: "SA",
+      country: initial.organisation.country || "SA",
       nationalAddress: initial.organisation.nationalAddress ?? "",
     }),
     [initial.organisation],
   );
 
   const form = useForm<CompanyProfileInput, unknown, CompanyProfileValues>({
-    resolver: zodResolver(companyProfileSchema),
+    resolver: zodResolver(buildCompanyProfileSchema(requiresSaudiFields)),
     defaultValues: defaults,
     mode: "onBlur",
   });
@@ -251,6 +255,9 @@ export function CompanyProfileForm({ initial }: Props) {
                 disabled={!initial.canEdit}
                 {...form.register("crNumber")}
               />
+              {fieldError("crNumber") ? (
+                <p className="text-xs text-state-bad">{fieldError("crNumber")}</p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="vatNumber">{t("fields.vatNumber")}</Label>
@@ -261,6 +268,9 @@ export function CompanyProfileForm({ initial }: Props) {
                 disabled={!initial.canEdit}
                 {...form.register("vatNumber")}
               />
+              {fieldError("vatNumber") ? (
+                <p className="text-xs text-state-bad">{fieldError("vatNumber")}</p>
+              ) : null}
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="website">{t("fields.website")}</Label>
@@ -276,6 +286,9 @@ export function CompanyProfileForm({ initial }: Props) {
                   },
                 })}
               />
+              {fieldError("website") ? (
+                <p className="text-xs text-state-bad">{fieldError("website")}</p>
+              ) : null}
             </div>
           </div>
           {initial.canEdit ? (
@@ -297,6 +310,9 @@ export function CompanyProfileForm({ initial }: Props) {
                     disabled={!initial.canEdit}
                     {...form.register("email")}
                   />
+                  {fieldError("email") ? (
+                    <p className="text-xs text-state-bad">{fieldError("email")}</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">{t("fields.phone")}</Label>
@@ -313,6 +329,9 @@ export function CompanyProfileForm({ initial }: Props) {
                       })
                     }
                   />
+                  {fieldError("phone") ? (
+                    <p className="text-xs text-state-bad">{fieldError("phone")}</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="addressLine1">{t("fields.addressLine1")}</Label>
@@ -321,6 +340,9 @@ export function CompanyProfileForm({ initial }: Props) {
                     disabled={!initial.canEdit}
                     {...form.register("addressLine1")}
                   />
+                  {fieldError("addressLine1") ? (
+                    <p className="text-xs text-state-bad">{fieldError("addressLine1")}</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="addressLine2">{t("fields.addressLine2")}</Label>
@@ -329,6 +351,9 @@ export function CompanyProfileForm({ initial }: Props) {
                     disabled={!initial.canEdit}
                     {...form.register("addressLine2")}
                   />
+                  {fieldError("addressLine2") ? (
+                    <p className="text-xs text-state-bad">{fieldError("addressLine2")}</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="city">{t("fields.city")}</Label>
@@ -337,6 +362,9 @@ export function CompanyProfileForm({ initial }: Props) {
                     disabled={!initial.canEdit}
                     {...form.register("city")}
                   />
+                  {fieldError("city") ? (
+                    <p className="text-xs text-state-bad">{fieldError("city")}</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label>{t("fields.region")}</Label>
@@ -361,6 +389,9 @@ export function CompanyProfileForm({ initial }: Props) {
                       ))}
                     </SelectContent>
                   </Select>
+                  {fieldError("region") ? (
+                    <p className="text-xs text-state-bad">{fieldError("region")}</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="postalCode">{t("fields.postalCode")}</Label>
@@ -371,6 +402,9 @@ export function CompanyProfileForm({ initial }: Props) {
                     disabled={!initial.canEdit}
                     {...form.register("postalCode")}
                   />
+                  {fieldError("postalCode") ? (
+                    <p className="text-xs text-state-bad">{fieldError("postalCode")}</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="nationalAddress">
@@ -383,10 +417,27 @@ export function CompanyProfileForm({ initial }: Props) {
                     disabled={!initial.canEdit}
                     {...form.register("nationalAddress")}
                   />
+                  {fieldError("nationalAddress") ? (
+                    <p className="text-xs text-state-bad">{fieldError("nationalAddress")}</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label>{t("fields.country")}</Label>
-                  <Input value={t("address.saudiArabia")} disabled readOnly />
+                  {requiresSaudiFields ? (
+                    <Input value={t("address.saudiArabia")} disabled readOnly />
+                  ) : (
+                    <Input
+                      id="country"
+                      className="font-data uppercase"
+                      dir="ltr"
+                      maxLength={2}
+                      disabled={!initial.canEdit}
+                      {...form.register("country")}
+                    />
+                  )}
+                  {fieldError("country") ? (
+                    <p className="text-xs text-state-bad">{fieldError("country")}</p>
+                  ) : null}
                 </div>
               </div>
               {initial.canEdit ? (

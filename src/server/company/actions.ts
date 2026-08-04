@@ -12,8 +12,8 @@ import { requirePermission } from "@/lib/rbac";
 import { scopedDb } from "@/lib/scoped-db";
 import { storage } from "@/lib/storage";
 import {
+  buildCompanyProfileSchema,
   changeUserRoleSchema,
-  companyProfileSchema,
   deactivateUserSchema,
   inviteUserSchema,
   logoUploadMetaSchema,
@@ -62,14 +62,6 @@ export async function saveCompanyProfile(
   try {
     const session = await requireSession();
     requirePermission(session, "company:write");
-    const parsed = companyProfileSchema.safeParse(input);
-    if (!parsed.success) {
-      return {
-        ok: false,
-        error: "VALIDATION",
-        fieldErrors: mapZodError(parsed.error),
-      };
-    }
 
     const { organisationId: orgId } = scopedDb(session);
     const before = await prisma.organisation.findFirst({
@@ -79,14 +71,27 @@ export async function saveCompanyProfile(
       return { ok: false, error: "NOT_FOUND" };
     }
 
+    const requiresSaudiFields =
+      before.clientCategory === "COMPANY" && !before.isInternational;
+    const parsed = buildCompanyProfileSchema(requiresSaudiFields).safeParse(
+      input,
+    );
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: "VALIDATION",
+        fieldErrors: mapZodError(parsed.error),
+      };
+    }
+
     const data = parsed.data;
     const after = await prisma.organisation.update({
       where: { id: orgId },
       data: {
         nameEn: data.nameEn,
         nameAr: data.nameAr,
-        crNumber: data.crNumber,
-        vatNumber: data.vatNumber,
+        crNumber: data.crNumber || null,
+        vatNumber: data.vatNumber || null,
         website: data.website,
         email: data.email,
         phone: data.phone,
@@ -96,7 +101,7 @@ export async function saveCompanyProfile(
         region: data.region,
         postalCode: data.postalCode,
         country: data.country,
-        nationalAddress: data.nationalAddress,
+        nationalAddress: data.nationalAddress || null,
       },
     });
 
