@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { isStaleServerActionError, recoverFromStaleDeploy } from "@/lib/stale-deploy";
 
 /**
  * Locale route error boundary. Deliberately self-contained — it must render
@@ -19,6 +20,10 @@ export default function LocaleError({
   const isAr = !pathname?.startsWith("/en");
 
   useEffect(() => {
+    // A tab left open across a deploy calls a Server Action ID the new
+    // server doesn't recognize — reload once to pick up the current bundle
+    // instead of showing a crash screen for what's really a stale client.
+    if (isStaleServerActionError(error) && recoverFromStaleDeploy()) return;
     // Surface to the browser console; server logs capture the real stack.
     console.error(error);
   }, [error]);

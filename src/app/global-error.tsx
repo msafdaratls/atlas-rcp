@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { isStaleServerActionError, recoverFromStaleDeploy } from "@/lib/stale-deploy";
 
 /**
  * Root error boundary — catches failures in the root layout itself, so it must
@@ -14,6 +15,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
+    if (isStaleServerActionError(error) && recoverFromStaleDeploy()) return;
     console.error(error);
   }, [error]);
 
