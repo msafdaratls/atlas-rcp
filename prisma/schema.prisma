@@ -32,6 +32,7 @@ enum UserStatus {
 
 enum Role {
   CLIENT_OWNER
+  CLIENT_ADMIN
   CLIENT_USER
   CLIENT_FINANCE
   INTAKE_OFFICER

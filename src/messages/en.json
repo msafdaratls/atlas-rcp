@@ -217,6 +217,7 @@
     },
     "roles": {
       "CLIENT_OWNER": "Owner — manages billing and users",
+      "CLIENT_ADMIN": "Admin — manages users and company settings",
       "CLIENT_USER": "Requests — creates and tracks requests",
       "CLIENT_FINANCE": "Finance — sees pro forma invoices and statement only"
     },

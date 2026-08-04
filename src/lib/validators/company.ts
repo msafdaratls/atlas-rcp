@@ -69,18 +69,27 @@ export const companyProfileSchema = buildCompanyProfileSchema(true);
 export type CompanyProfileInput = z.input<typeof companyProfileSchema>;
 export type CompanyProfileValues = z.output<typeof companyProfileSchema>;
 
+/** Roles assignable to client-organisation users via the invite/manage panel. */
+export const CLIENT_ROLES = [
+  "CLIENT_OWNER",
+  "CLIENT_ADMIN",
+  "CLIENT_USER",
+  "CLIENT_FINANCE",
+] as const;
+export type ClientRole = (typeof CLIENT_ROLES)[number];
+
 export const inviteUserSchema = z.object({
   email: z.email(),
   fullNameEn: z.string().trim().min(2).max(120),
   fullNameAr: z.string().trim().min(2).max(120),
-  role: z.enum(["CLIENT_OWNER", "CLIENT_USER", "CLIENT_FINANCE"]),
+  role: z.enum(CLIENT_ROLES),
 });
 
 export type InviteUserInput = z.infer<typeof inviteUserSchema>;
 
 export const changeUserRoleSchema = z.object({
   userId: z.string().min(1),
-  role: z.enum(["CLIENT_OWNER", "CLIENT_USER", "CLIENT_FINANCE"]),
+  role: z.enum(CLIENT_ROLES),
 });
 
 export const deactivateUserSchema = z.object({

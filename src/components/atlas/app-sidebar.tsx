@@ -38,25 +38,25 @@ const CLIENT_NAV: NavItem[] = [
     key: "newRequest",
     href: "/requests/new",
     icon: FilePlus2,
-    roles: ["CLIENT_OWNER", "CLIENT_USER"],
+    roles: ["CLIENT_OWNER", "CLIENT_ADMIN", "CLIENT_USER"],
   },
   {
     key: "myRequests",
     href: "/requests",
     icon: ClipboardList,
-    roles: ["CLIENT_OWNER", "CLIENT_USER"],
+    roles: ["CLIENT_OWNER", "CLIENT_ADMIN", "CLIENT_USER"],
   },
   {
     key: "reports",
     href: "/reports",
     icon: FileText,
-    roles: ["CLIENT_OWNER", "CLIENT_USER"],
+    roles: ["CLIENT_OWNER", "CLIENT_ADMIN", "CLIENT_USER"],
   },
   {
     key: "statement",
     href: "/statement",
     icon: Receipt,
-    roles: ["CLIENT_OWNER", "CLIENT_FINANCE"],
+    roles: ["CLIENT_OWNER", "CLIENT_ADMIN", "CLIENT_FINANCE"],
   },
   { key: "company", href: "/company", icon: Building2 },
   { key: "support", href: "/support", icon: Headphones },
@@ -167,6 +167,22 @@ export function AppSidebar({
     (item) => !item.roles || item.roles.some((role) => roles?.includes(role)),
   );
 
+  // Pick the item with the longest matching href so that e.g. "/requests/new"
+  // only activates "New Request" and not the "/requests" ("My Requests") item.
+  const activeKey = items.reduce<{ key: string | null; len: number }>(
+    (best, item) => {
+      const href = `${basePath}${item.href}`;
+      const matches =
+        item.href === ""
+          ? pathname === href || pathname === `${basePath}/`
+          : pathname === href || pathname.startsWith(`${href}/`);
+      return matches && href.length > best.len
+        ? { key: item.key, len: href.length }
+        : best;
+    },
+    { key: null, len: -1 },
+  ).key;
+
   return (
     <aside
       className={cn(
@@ -178,10 +194,7 @@ export function AppSidebar({
       <nav className="flex-1 space-y-1 p-2" aria-label={mode}>
         {items.map((item) => {
           const href = `${basePath}${item.href}`;
-          const active =
-            item.href === ""
-              ? pathname === href || pathname === `${basePath}/`
-              : pathname === href || pathname.startsWith(`${href}/`);
+          const active = item.key === activeKey;
           const Icon = item.icon;
           return (
             <Link

@@ -106,6 +106,19 @@ describe("requirePermission Atlas role map", () => {
       (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
     );
   });
+
+  it("grants CLIENT_ADMIN the same access as CLIENT_OWNER for users:manage", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(clientSession(["CLIENT_ADMIN"]), "users:manage"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(clientSession(["CLIENT_ADMIN"]), "company:write"),
+    );
+    assert.throws(
+      () => requirePermission(clientSession(["CLIENT_USER"]), "users:manage"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
 });
 
 describe("canTransitionRequest fail closed", () => {

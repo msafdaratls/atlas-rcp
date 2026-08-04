@@ -72,7 +72,7 @@ export async function resolveRecipients(
       if (ctx.organisationId) {
         const owners = await activeUsersByRoles(
           tx,
-          ["CLIENT_OWNER"],
+          ["CLIENT_OWNER", "CLIENT_ADMIN"],
           "CLIENT",
           ctx.organisationId,
         );
@@ -98,7 +98,7 @@ export async function resolveRecipients(
       if (ctx.organisationId) {
         const owners = await activeUsersByRoles(
           tx,
-          ["CLIENT_OWNER"],
+          ["CLIENT_OWNER", "CLIENT_ADMIN"],
           "CLIENT",
           ctx.organisationId,
         );
@@ -147,7 +147,7 @@ export async function resolveRecipients(
       if (!ctx.organisationId) return [];
       return activeUsersByRoles(
         tx,
-        ["CLIENT_FINANCE", "CLIENT_OWNER"],
+        ["CLIENT_FINANCE", "CLIENT_OWNER", "CLIENT_ADMIN"],
         "CLIENT",
         ctx.organisationId,
       );
@@ -157,7 +157,7 @@ export async function resolveRecipients(
       const clientSide = ctx.organisationId
         ? await activeUsersByRoles(
             tx,
-            ["CLIENT_FINANCE", "CLIENT_OWNER"],
+            ["CLIENT_FINANCE", "CLIENT_OWNER", "CLIENT_ADMIN"],
             "CLIENT",
             ctx.organisationId,
           )
@@ -198,7 +198,7 @@ export async function resolveRecipients(
         if (ctx.organisationId) {
           const owners = await activeUsersByRoles(
             tx,
-            ["CLIENT_OWNER"],
+            ["CLIENT_OWNER", "CLIENT_ADMIN"],
             "CLIENT",
             ctx.organisationId,
           );
@@ -240,7 +240,7 @@ export async function resolveRecipients(
       if (!ctx.organisationId) return [];
       return activeUsersByRoles(
         tx,
-        ["CLIENT_FINANCE", "CLIENT_OWNER"],
+        ["CLIENT_FINANCE", "CLIENT_OWNER", "CLIENT_ADMIN"],
         "CLIENT",
         ctx.organisationId,
       );

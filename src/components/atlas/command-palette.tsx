@@ -52,9 +52,14 @@ export function CommandPalette({
   const router = useRouter();
   const [query, setQuery] = useState("");
 
-  const canNewRequest = hasAnyRole(roles, ["CLIENT_OWNER", "CLIENT_USER"]);
+  const canNewRequest = hasAnyRole(roles, [
+    "CLIENT_OWNER",
+    "CLIENT_ADMIN",
+    "CLIENT_USER",
+  ]);
   const canOpenStatement = hasAnyRole(roles, [
     "CLIENT_OWNER",
+    "CLIENT_ADMIN",
     "CLIENT_FINANCE",
   ]);
   const canAdminQueues = hasAnyRole(roles, [

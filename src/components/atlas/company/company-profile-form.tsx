@@ -32,6 +32,7 @@ import {
 import { SAUDI_REGIONS } from "@/lib/saudi-regions";
 import {
   buildCompanyProfileSchema,
+  CLIENT_ROLES,
   inviteUserSchema,
   type CompanyProfileInput,
   type CompanyProfileValues,
@@ -543,15 +544,11 @@ export function CompanyProfileForm({ initial }: Props) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CLIENT_OWNER">
-                      {t("roles.CLIENT_OWNER")}
-                    </SelectItem>
-                    <SelectItem value="CLIENT_USER">
-                      {t("roles.CLIENT_USER")}
-                    </SelectItem>
-                    <SelectItem value="CLIENT_FINANCE">
-                      {t("roles.CLIENT_FINANCE")}
-                    </SelectItem>
+                    {CLIENT_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {t(`roles.${r}` as never)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -637,15 +634,11 @@ export function CompanyProfileForm({ initial }: Props) {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="CLIENT_OWNER">
-                                {t("roles.CLIENT_OWNER")}
-                              </SelectItem>
-                              <SelectItem value="CLIENT_USER">
-                                {t("roles.CLIENT_USER")}
-                              </SelectItem>
-                              <SelectItem value="CLIENT_FINANCE">
-                                {t("roles.CLIENT_FINANCE")}
-                              </SelectItem>
+                              {CLIENT_ROLES.map((r) => (
+                                <SelectItem key={r} value={r}>
+                                  {t(`roles.${r}` as never)}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         ) : (
@@ -707,9 +700,9 @@ export function CompanyProfileForm({ initial }: Props) {
             </table>
           </div>
           <ul className="space-y-1 text-xs text-ink-500">
-            <li>{t("roles.CLIENT_OWNER")}</li>
-            <li>{t("roles.CLIENT_USER")}</li>
-            <li>{t("roles.CLIENT_FINANCE")}</li>
+            {CLIENT_ROLES.map((r) => (
+              <li key={r}>{t(`roles.${r}` as never)}</li>
+            ))}
           </ul>
         </TabsContent>
 

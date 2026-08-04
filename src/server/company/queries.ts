@@ -82,7 +82,9 @@ export async function getCompanyProfilePageData(): Promise<CompanyProfileLoad> {
 
     if (!organisation) return { status: "error", reason: "UNAVAILABLE" };
 
-    const canManageUsers = session.roles.includes("CLIENT_OWNER");
+    const canManageUsers =
+      session.roles.includes("CLIENT_OWNER") ||
+      session.roles.includes("CLIENT_ADMIN");
     const canEdit = canManageUsers;
     const prefMap = new Map(prefs.map((p) => [p.eventType, p]));
 

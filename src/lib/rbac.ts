@@ -83,28 +83,36 @@ export function requirePermission(
       return;
     case "company:write":
     case "users:manage":
-      if (!hasRole(session, "CLIENT_OWNER")) {
+      if (!hasAnyRole(session, ["CLIENT_OWNER", "CLIENT_ADMIN"])) {
         throw new Error("FORBIDDEN");
       }
       return;
     case "preferences:write":
       if (
         !isClient ||
-        !hasAnyRole(session, ["CLIENT_OWNER", "CLIENT_USER", "CLIENT_FINANCE"])
+        !hasAnyRole(session, [
+          "CLIENT_OWNER",
+          "CLIENT_ADMIN",
+          "CLIENT_USER",
+          "CLIENT_FINANCE",
+        ])
       ) {
         throw new Error("FORBIDDEN");
       }
       return;
     case "requests:create":
     case "requests:read":
-      if (!isClient || !hasAnyRole(session, ["CLIENT_OWNER", "CLIENT_USER"])) {
+      if (
+        !isClient ||
+        !hasAnyRole(session, ["CLIENT_OWNER", "CLIENT_ADMIN", "CLIENT_USER"])
+      ) {
         throw new Error("FORBIDDEN");
       }
       return;
     case "finance:client":
       if (
         !isClient ||
-        !hasAnyRole(session, ["CLIENT_OWNER", "CLIENT_FINANCE"])
+        !hasAnyRole(session, ["CLIENT_OWNER", "CLIENT_ADMIN", "CLIENT_FINANCE"])
       ) {
         throw new Error("FORBIDDEN");
       }
