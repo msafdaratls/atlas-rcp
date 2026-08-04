@@ -357,6 +357,116 @@ export async function transitionAdminRequest(
   }
 }
 
+const assignRequestSchema = z.object({
+  requestId: z.string().min(1),
+  userId: z.string().min(1).nullable(),
+});
+
+export type AssignRequestInput = z.infer<typeof assignRequestSchema>;
+
+/** Assigns (or unassigns, when userId is null) a request to any active Atlas staff member. */
+export async function assignRequest(
+  input: AssignRequestInput,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = assignRequestSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { requestId, userId } = parsed.data;
+
+    const request = await prisma.request.findUnique({
+      where: { id: requestId },
+      select: {
+        id: true,
+        state: true,
+        requestNo: true,
+        organisationId: true,
+        assignedToUserId: true,
+      },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+    if (request.state === "DRAFT") return { ok: false, error: "INVALID_STATE" };
+
+    let assignee: { id: string; fullNameEn: string; fullNameAr: string } | null =
+      null;
+    if (userId) {
+      assignee = await prisma.user.findFirst({
+        where: { id: userId, status: "ACTIVE", organisation: { type: "ATLAS" } },
+        select: { id: true, fullNameEn: true, fullNameAr: true },
+      });
+      if (!assignee) return { ok: false, error: "NOT_FOUND" };
+    }
+
+    if (request.assignedToUserId === (assignee?.id ?? null)) {
+      return { ok: true, data: undefined };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.request.update({
+        where: { id: requestId },
+        data: { assignedToUserId: assignee?.id ?? null },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: session.id,
+          actorRole: session.roles[0],
+          organisationId: request.organisationId,
+          action: "request.assign",
+          entityType: "Request",
+          entityId: requestId,
+          before: { assignedToUserId: request.assignedToUserId },
+          after: { assignedToUserId: assignee?.id ?? null },
+        },
+      });
+
+      if (assignee) {
+        try {
+          const { notify } = await import("@/server/notifications/notify");
+          const { notificationCopy } = await import(
+            "@/server/notifications/copy"
+          );
+          const copy = notificationCopy("REQUEST_ASSIGNED", {
+            requestNo: request.requestNo,
+          });
+          await notify(
+            {
+              event: "REQUEST_ASSIGNED",
+              data: {
+                requestId,
+                requestNo: request.requestNo,
+                link: `/admin/requests/${requestId}`,
+                organisationId: request.organisationId,
+                assignedToUserId: assignee.id,
+                ...copy,
+              },
+            },
+            tx,
+          );
+        } catch (error) {
+          log.error("admin.requests.assign", "notification delivery failed", {
+            requestId,
+            error: error instanceof Error ? error.message : "unknown",
+          });
+        }
+      }
+    });
+
+    revalidatePath("/[locale]/admin/requests", "page");
+    revalidatePath(`/[locale]/admin/requests/${requestId}`, "page");
+    revalidatePath("/[locale]/admin/queues", "page");
+
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
 const internalCommentSchema = z.object({
   requestId: z.string().min(1),
   body: z.string().trim().min(1).max(2000),

@@ -1227,6 +1227,40 @@ export async function listAtlasStaff(): Promise<AtlasStaffUser[] | null> {
   }
 }
 
+// ─── listAssignableStaff ─────────────────────────────────────────────────────
+
+export type AssignableStaffUser = {
+  id: string;
+  fullNameEn: string;
+  fullNameAr: string;
+  email: string;
+  roles: Role[];
+};
+
+/** Active Atlas staff a request can be assigned to. Any requests:admin user may list these. */
+export async function listAssignableStaff(): Promise<AssignableStaffUser[] | null> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+
+    const users = await prisma.user.findMany({
+      where: { organisation: { type: "ATLAS" }, status: "ACTIVE" },
+      include: { roles: true },
+      orderBy: { fullNameEn: "asc" },
+    });
+
+    return users.map((u) => ({
+      id: u.id,
+      fullNameEn: u.fullNameEn,
+      fullNameAr: u.fullNameAr,
+      email: u.email,
+      roles: u.roles.map((r) => r.role),
+    }));
+  } catch {
+    return null;
+  }
+}
+
 // ─── getAtlasSettings ────────────────────────────────────────────────────────
 
 export type AtlasSettings = {

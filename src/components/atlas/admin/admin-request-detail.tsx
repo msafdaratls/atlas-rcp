@@ -26,10 +26,11 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   addAdminInternalComment,
   addAtlasClientComment,
+  assignRequest,
   transitionAdminRequest,
 } from "@/server/admin/actions";
 import { hasCheckItems } from "@/lib/assessment";
-import type { AdminRequestDetail } from "@/server/admin/queries";
+import type { AdminRequestDetail, AssignableStaffUser } from "@/server/admin/queries";
 import type { FaultAttribution, RequestState, ReturnReasonCode } from "@prisma/client";
 
 const ASSESSMENT_SHOW_STATES: RequestState[] = [
@@ -57,6 +58,7 @@ import {
   PauseCircle,
   RotateCcw,
   Send,
+  UserRoundCog,
   type LucideIcon,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -107,9 +109,9 @@ function transitionIcon(target: RequestState): LucideIcon {
   }
 }
 
-type Props = { data: AdminRequestDetail };
+type Props = { data: AdminRequestDetail; assignableStaff: AssignableStaffUser[] };
 
-export function AdminRequestDetailPanel({ data }: Props) {
+export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const t = useTranslations("adminOps.requestDetail");
   const tStates = useTranslations("states");
   const tReasons = useTranslations("returnReasons");
@@ -117,6 +119,26 @@ export function AdminRequestDetailPanel({ data }: Props) {
   const locale = useLocale();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assignUserId, setAssignUserId] = useState<string>(
+    data.assignedTo?.id ?? "",
+  );
+  const [assignPending, startAssignTransition] = useTransition();
+  const canAssign = data.state !== "DRAFT";
+
+  function submitAssign(userId: string | null) {
+    startAssignTransition(async () => {
+      const result = await assignRequest({ requestId: data.id, userId });
+      if (!result.ok) {
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("success"));
+      setAssignDialogOpen(false);
+      router.refresh();
+    });
+  }
 
   const [returnReason, setReturnReason] = useState<ReturnReasonCode | "">("");
   const [returnFault, setReturnFault] = useState<FaultAttribution | "">("");
@@ -255,13 +277,30 @@ export function AdminRequestDetailPanel({ data }: Props) {
           </div>
           <div>
             <p className="text-xs text-ink-500">{t("assign")}</p>
-            <p className="text-sm text-ink-800">
-              {data.assignedTo
-                ? locale === "ar"
-                  ? data.assignedTo.fullNameAr
-                  : data.assignedTo.fullNameEn
-                : t("unassigned")}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-ink-800">
+                {data.assignedTo
+                  ? locale === "ar"
+                    ? data.assignedTo.fullNameAr
+                    : data.assignedTo.fullNameEn
+                  : t("unassigned")}
+              </p>
+              {canAssign ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => {
+                    setAssignUserId(data.assignedTo?.id ?? "");
+                    setAssignDialogOpen(true);
+                  }}
+                >
+                  <UserRoundCog className="size-3.5" />
+                  {t("assignAction")}
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
         <SlaMeter
@@ -392,6 +431,57 @@ export function AdminRequestDetailPanel({ data }: Props) {
                   <RotateCcw className="size-4" />
                 )}
                 {t("returnSubmit")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {canAssign ? (
+        <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("assignAction")}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label>{t("assignTo")}</Label>
+                <Select value={assignUserId} onValueChange={setAssignUserId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("assignTo")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assignableStaff.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {locale === "ar" ? u.fullNameAr : u.fullNameEn}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              {data.assignedTo ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={assignPending}
+                  onClick={() => submitAssign(null)}
+                >
+                  {t("unassignAction")}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                disabled={assignPending || !assignUserId}
+                onClick={() => submitAssign(assignUserId)}
+              >
+                {assignPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <UserRoundCog className="size-4" />
+                )}
+                {t("assignSubmit")}
               </Button>
             </DialogFooter>
           </DialogContent>
