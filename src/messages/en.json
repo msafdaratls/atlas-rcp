@@ -661,6 +661,7 @@
       "returnFault": "Fault",
       "returnNote": "Note",
       "returnSubmit": "Return to client",
+      "returnCancel": "Cancel",
       "hold": "Put on hold",
       "resume": "Resume intake",
       "issueReport": "Issue report",

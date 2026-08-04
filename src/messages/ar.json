@@ -661,6 +661,7 @@
       "returnFault": "المسؤولية",
       "returnNote": "ملاحظة",
       "returnSubmit": "إرجاع للعميل",
+      "returnCancel": "إلغاء",
       "hold": "تعليق",
       "resume": "استئناف الاستلام",
       "issueReport": "إصدار التقرير",

@@ -6,6 +6,13 @@ import { MoneyValue } from "@/components/atlas/money-value";
 import { SlaMeter } from "@/components/atlas/sla-meter";
 import { StatusRail } from "@/components/atlas/status-rail";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -114,6 +121,7 @@ export function AdminRequestDetailPanel({ data }: Props) {
   const [returnReason, setReturnReason] = useState<ReturnReasonCode | "">("");
   const [returnFault, setReturnFault] = useState<FaultAttribution | "">("");
   const [returnNote, setReturnNote] = useState("");
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
 
   const [commentBody, setCommentBody] = useState("");
   const [commentPending, startCommentTransition] = useTransition();
@@ -163,6 +171,7 @@ export function AdminRequestDetailPanel({ data }: Props) {
         setReturnReason("");
         setReturnFault("");
         setReturnNote("");
+        setReturnDialogOpen(false);
       }
       router.refresh();
     });
@@ -292,10 +301,29 @@ export function AdminRequestDetailPanel({ data }: Props) {
           ) : null}
 
           {canReturn ? (
-            <div className="space-y-3 rounded-md border border-state-warn/40 bg-[color-mix(in_srgb,var(--state-warn)_6%,white)] p-3">
-              <h3 className="text-sm font-semibold text-state-warn">
+            <div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="border-state-warn/40 text-state-warn hover:bg-[color-mix(in_srgb,var(--state-warn)_6%,white)]"
+                onClick={() => setReturnDialogOpen(true)}
+              >
+                <RotateCcw className="size-4" />
                 {t("returnTitle")}
-              </h3>
+              </Button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {canReturn ? (
+        <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("returnTitle")}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label>{t("returnReason")}</Label>
@@ -343,10 +371,18 @@ export function AdminRequestDetailPanel({ data }: Props) {
                   className="mt-1"
                 />
               </div>
+            </div>
+            <DialogFooter>
               <Button
                 type="button"
-                size="sm"
                 variant="outline"
+                disabled={pending}
+                onClick={() => setReturnDialogOpen(false)}
+              >
+                {t("returnCancel")}
+              </Button>
+              <Button
+                type="button"
                 disabled={pending}
                 onClick={submitReturn}
               >
@@ -357,9 +393,9 @@ export function AdminRequestDetailPanel({ data }: Props) {
                 )}
                 {t("returnSubmit")}
               </Button>
-            </div>
-          ) : null}
-        </section>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       ) : null}
 
       {ASSESSMENT_SHOW_STATES.includes(data.state) &&
