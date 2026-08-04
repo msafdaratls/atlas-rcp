@@ -5,19 +5,35 @@ import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { COUNTRY_CODES, DEFAULT_DIAL_CODE, countryLabel } from "@/lib/country-codes";
 import { signupAction, resendVerificationAction } from "@/server/auth/signup";
 
 const ERROR_CODES = new Set([
   "VALIDATION",
   "EMAIL_TAKEN",
+  "CR_TAKEN",
+  "PHONE_TAKEN",
   "PASSWORD_MISMATCH",
   "WEAK_PASSWORD",
-  "INVALID_SAUDI_PHONE",
+  "INVALID_PHONE",
+  "INVALID_VAT",
+  "INVALID_NATIONAL_ADDRESS",
+  "REQUIRED",
   "RATE_LIMITED",
   "SIGNUP_FAILED",
 ]);
+
+type AccountType = "COMPANY" | "INDIVIDUAL";
 
 export function SignupForm({ locale }: { locale: "ar" | "en" }) {
   const t = useTranslations("signup");
@@ -27,9 +43,15 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [resent, setResent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [accountType, setAccountType] = useState<AccountType>("COMPANY");
+  const [isInternational, setIsInternational] = useState(false);
+  const [phoneCountry, setPhoneCountry] = useState<string>(DEFAULT_DIAL_CODE);
 
   function onSubmit(formData: FormData) {
     setError(null);
+    formData.set("accountType", accountType);
+    formData.set("isInternational", isInternational ? "true" : "false");
+    formData.set("phoneCountry", phoneCountry);
     startTransition(async () => {
       const result = await signupAction(formData);
       if (!result.ok) {
@@ -87,6 +109,8 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
 
   const hasError = Boolean(error);
   const describedBy = hasError ? "signup-error" : undefined;
+  const isCompany = accountType === "COMPANY";
+  const requiresSaudiFields = isCompany && !isInternational;
 
   return (
     <form action={onSubmit} className="space-y-5" noValidate>
@@ -94,19 +118,108 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
 
       <fieldset className="space-y-3" disabled={pending}>
         <legend className="mb-1 font-mono text-xs uppercase tracking-wide text-[var(--ink-500)]">
-          {t("sectionCompany")}
+          {t("sectionAccountType")}
         </legend>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="companyNameEn">{t("companyNameEn")}</Label>
-            <Input id="companyNameEn" name="companyNameEn" required dir="ltr" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="companyNameAr">{t("companyNameAr")}</Label>
-            <Input id="companyNameAr" name="companyNameAr" required dir="rtl" />
-          </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            aria-pressed={isCompany}
+            onClick={() => setAccountType("COMPANY")}
+            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              isCompany
+                ? "border-[var(--atlas-green)] bg-surface-alt text-ink-900"
+                : "border-line text-ink-500 hover:text-ink-800"
+            }`}
+          >
+            {t("accountTypeCompany")}
+          </button>
+          <button
+            type="button"
+            aria-pressed={!isCompany}
+            onClick={() => setAccountType("INDIVIDUAL")}
+            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              !isCompany
+                ? "border-[var(--atlas-green)] bg-surface-alt text-ink-900"
+                : "border-line text-ink-500 hover:text-ink-800"
+            }`}
+          >
+            {t("accountTypeIndividual")}
+          </button>
         </div>
       </fieldset>
+
+      {isCompany ? (
+        <fieldset className="space-y-3" disabled={pending}>
+          <legend className="mb-1 font-mono text-xs uppercase tracking-wide text-[var(--ink-500)]">
+            {t("sectionCompany")}
+          </legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="companyNameEn">{t("companyNameEn")}</Label>
+              <Input id="companyNameEn" name="companyNameEn" required dir="ltr" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="companyNameAr">{t("companyNameAr")}</Label>
+              <Input id="companyNameAr" name="companyNameAr" required dir="rtl" />
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 rounded-lg border border-line bg-surface-alt p-3">
+            <Checkbox
+              id="isInternational"
+              checked={isInternational}
+              onCheckedChange={(checked) => setIsInternational(Boolean(checked))}
+            />
+            <div>
+              <Label htmlFor="isInternational" className="cursor-pointer">
+                {t("internationalLabel")}
+              </Label>
+              <p className="text-xs text-[var(--ink-500)]">
+                {t("internationalHint")}
+              </p>
+            </div>
+          </div>
+
+          {requiresSaudiFields ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="crNumber">{t("crNumber")}</Label>
+                <Input
+                  id="crNumber"
+                  name="crNumber"
+                  className="font-data"
+                  dir="ltr"
+                  required
+                  aria-invalid={hasError}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vatNumber">{t("vatNumber")}</Label>
+                <Input
+                  id="vatNumber"
+                  name="vatNumber"
+                  className="font-data"
+                  dir="ltr"
+                  required
+                  aria-invalid={hasError}
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="nationalAddress">{t("nationalAddress")}</Label>
+                <Input
+                  id="nationalAddress"
+                  name="nationalAddress"
+                  className="font-data uppercase"
+                  dir="ltr"
+                  required
+                  aria-invalid={hasError}
+                  placeholder="RIYD2342"
+                />
+              </div>
+            </div>
+          ) : null}
+        </fieldset>
+      ) : null}
 
       <fieldset className="space-y-3" disabled={pending}>
         <legend className="mb-1 font-mono text-xs uppercase tracking-wide text-[var(--ink-500)]">
@@ -138,18 +251,33 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="phone">{t("phone")}</Label>
-          <Input
-            id="phone"
-            name="phone"
-            type="tel"
-            autoComplete="tel"
-            required
-            dir="ltr"
-            placeholder="+9665XXXXXXXX"
-            aria-invalid={hasError}
-            aria-describedby="phone-hint"
-          />
+          <Label htmlFor="phoneNumber">{t("phone")}</Label>
+          <div className="flex gap-2" dir="ltr">
+            <Select value={phoneCountry} onValueChange={setPhoneCountry}>
+              <SelectTrigger className="w-32 shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COUNTRY_CODES.map((country) => (
+                  <SelectItem key={country.iso} value={country.dialCode}>
+                    {country.dialCode} {countryLabel(country, locale)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              id="phoneNumber"
+              name="phoneNumber"
+              type="tel"
+              autoComplete="tel-national"
+              required
+              dir="ltr"
+              className="flex-1"
+              placeholder="5XXXXXXXX"
+              aria-invalid={hasError}
+              aria-describedby="phone-hint"
+            />
+          </div>
           <p id="phone-hint" className="text-xs text-[var(--ink-500)]">
             {t("phoneHint")}
           </p>

@@ -1557,6 +1557,7 @@ export async function createClientAction(
         const organisation = await tx.organisation.create({
           data: {
             type: "CLIENT",
+            clientCategory: "COMPANY",
             nameEn: data.companyNameEn,
             nameAr: data.companyNameAr,
             email,

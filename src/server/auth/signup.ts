@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { consumeRateLimitAsync } from "@/lib/rate-limit";
 import { issueVerificationToken } from "@/lib/auth/tokens";
 import { sendVerificationEmail } from "@/lib/auth/auth-email";
-import { signupSchema } from "@/lib/validators/auth";
+import { composeSignupPhone, signupSchema } from "@/lib/validators/auth";
 
 export type SignupActionResult =
   | { ok: true; requiresVerification: true; email: string }
@@ -41,12 +41,18 @@ export async function signupAction(
   formData: FormData,
 ): Promise<SignupActionResult> {
   const parsed = signupSchema.safeParse({
-    companyNameEn: formData.get("companyNameEn"),
-    companyNameAr: formData.get("companyNameAr"),
+    accountType: formData.get("accountType") || "COMPANY",
+    isInternational: formData.get("isInternational") === "true",
+    companyNameEn: formData.get("companyNameEn") || "",
+    companyNameAr: formData.get("companyNameAr") || "",
+    crNumber: formData.get("crNumber") || "",
+    vatNumber: formData.get("vatNumber") || "",
+    nationalAddress: formData.get("nationalAddress") || "",
     fullNameEn: formData.get("fullNameEn"),
     fullNameAr: formData.get("fullNameAr"),
     email: formData.get("email"),
-    phone: formData.get("phone"),
+    phoneCountry: formData.get("phoneCountry"),
+    phoneNumber: formData.get("phoneNumber"),
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword"),
     locale: formData.get("locale") || "ar",
@@ -54,7 +60,14 @@ export async function signupAction(
 
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    const known = ["PASSWORD_MISMATCH", "INVALID_SAUDI_PHONE", "WEAK_PASSWORD"];
+    const known = [
+      "PASSWORD_MISMATCH",
+      "INVALID_PHONE",
+      "WEAK_PASSWORD",
+      "REQUIRED",
+      "INVALID_VAT",
+      "INVALID_NATIONAL_ADDRESS",
+    ];
     const code =
       issue && known.includes(issue.message) ? issue.message : "VALIDATION";
     return { ok: false, error: code };
@@ -62,7 +75,14 @@ export async function signupAction(
 
   const data = parsed.data;
   const email = data.email.toLowerCase();
-  const phone = data.phone.trim();
+  const phone = composeSignupPhone(data);
+  const isCompany = data.accountType === "COMPANY";
+  const crNumber = isCompany && !data.isInternational ? data.crNumber.trim() : null;
+  const vatNumber = isCompany && !data.isInternational ? data.vatNumber.trim() : null;
+  const nationalAddress =
+    isCompany && !data.isInternational ? data.nationalAddress.trim() : null;
+  const nameEn = isCompany ? data.companyNameEn.trim() : data.fullNameEn.trim();
+  const nameAr = isCompany ? data.companyNameAr.trim() : data.fullNameAr.trim();
 
   const hdrs = await headers();
   const forwarded = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -78,12 +98,30 @@ export async function signupAction(
   let verificationToken: string | null = null;
 
   try {
-    const existing = await prisma.user.findUnique({
+    const existingEmail = await prisma.user.findUnique({
       where: { email },
       select: { id: true },
     });
-    if (existing) {
+    if (existingEmail) {
       return { ok: false, error: "EMAIL_TAKEN" };
+    }
+
+    if (!isCompany) {
+      const existingPhone = await prisma.user.findUnique({
+        where: { phone },
+        select: { id: true },
+      });
+      if (existingPhone) {
+        return { ok: false, error: "PHONE_TAKEN" };
+      }
+    } else if (!data.isInternational && crNumber) {
+      const existingCr = await prisma.organisation.findUnique({
+        where: { crNumber },
+        select: { id: true },
+      });
+      if (existingCr) {
+        return { ok: false, error: "CR_TAKEN" };
+      }
     }
 
     const username = await uniqueUsername(email);
@@ -93,10 +131,15 @@ export async function signupAction(
       const organisation = await tx.organisation.create({
         data: {
           type: "CLIENT",
-          nameEn: data.companyNameEn,
-          nameAr: data.companyNameAr,
+          clientCategory: isCompany ? "COMPANY" : "INDIVIDUAL",
+          isInternational: isCompany ? data.isInternational : false,
+          nameEn,
+          nameAr,
           email,
           phone,
+          crNumber,
+          vatNumber,
+          nationalAddress,
           status: "ACTIVE",
         },
       });
@@ -141,12 +184,24 @@ export async function signupAction(
       );
     });
   } catch (error) {
-    // Unique-constraint race on email/username → treat as taken.
+    // Unique-constraint race on email/username/phone/crNumber → map to the right code.
     const code =
       error && typeof error === "object" && "code" in error
         ? String((error as { code: string }).code)
         : "";
     if (code === "P2002") {
+      const target =
+        error &&
+        typeof error === "object" &&
+        "meta" in error &&
+        error.meta &&
+        typeof error.meta === "object" &&
+        "target" in error.meta
+          ? (error.meta as { target?: unknown }).target
+          : undefined;
+      const fields = Array.isArray(target) ? target.map(String) : [];
+      if (fields.includes("crNumber")) return { ok: false, error: "CR_TAKEN" };
+      if (fields.includes("phone")) return { ok: false, error: "PHONE_TAKEN" };
       return { ok: false, error: "EMAIL_TAKEN" };
     }
     return { ok: false, error: "SIGNUP_FAILED" };

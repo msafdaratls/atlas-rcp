@@ -14,6 +14,11 @@ enum OrganisationType {
   ATLAS
 }
 
+enum ClientCategory {
+  COMPANY
+  INDIVIDUAL
+}
+
 enum OrganisationStatus {
   ACTIVE
   SUSPENDED
@@ -158,6 +163,11 @@ enum OutboxStatus {
 model Organisation {
   id              String             @id @default(cuid())
   type            OrganisationType
+  /// Only meaningful when type = CLIENT; null for the ATLAS organisation itself.
+  clientCategory  ClientCategory?
+  /// Company clients only: skips the Saudi CR/VAT/national-address requirement
+  /// and is unique by email instead of by crNumber.
+  isInternational Boolean            @default(false)
   nameEn          String
   nameAr          String
   logoKey         String?
@@ -190,7 +200,7 @@ model Organisation {
   auditLogs          AuditLog[]
 
   @@index([type, status])
-  @@index([crNumber])
+  @@unique([crNumber])
 }
 
 model User {
@@ -201,7 +211,7 @@ model User {
   passwordHash     String
   fullNameEn       String
   fullNameAr       String
-  phone            String?
+  phone            String?    @unique
   avatarKey        String?
   locale           String     @default("ar")
   status           UserStatus @default(ACTIVE)
