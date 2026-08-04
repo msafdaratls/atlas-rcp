@@ -4,7 +4,6 @@ import { isLocale, type Locale } from "@/lib/i18n/config";
 import { getAtlasSupportContacts } from "@/server/requests/queries";
 import { Headphones, Mail, Phone } from "lucide-react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +36,7 @@ export default async function SupportPage({ params }: Props) {
         breadcrumbs={[{ label: tNav("support") }]}
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4">
         <section className="rounded-lg border border-line bg-surface p-5">
           <div className="mb-3 flex size-10 items-center justify-center rounded-md border border-line bg-surface-alt text-atlas-green">
             <Headphones className="size-5" />
@@ -79,39 +78,6 @@ export default async function SupportPage({ params }: Props) {
               {t("emailCta")}
             </a>
           </Button>
-        </section>
-
-        <section className="rounded-lg border border-line bg-surface p-5">
-          <h2 className="text-sm font-semibold text-ink-900">{t("helpTitle")}</h2>
-          <ul className="mt-3 space-y-3 text-sm text-ink-800">
-            <li>
-              <Link
-                href={`/${locale}/client/requests?state=RETURNED_TO_CLIENT`}
-                className="font-medium text-atlas-green-600"
-              >
-                {t("helpReturned")}
-              </Link>
-              <p className="text-ink-500">{t("helpReturnedBody")}</p>
-            </li>
-            <li>
-              <Link
-                href={`/${locale}/client/statement`}
-                className="font-medium text-atlas-green-600"
-              >
-                {t("helpStatement")}
-              </Link>
-              <p className="text-ink-500">{t("helpStatementBody")}</p>
-            </li>
-            <li>
-              <Link
-                href={`/${locale}/client/company`}
-                className="font-medium text-atlas-green-600"
-              >
-                {t("helpCompany")}
-              </Link>
-              <p className="text-ink-500">{t("helpCompanyBody")}</p>
-            </li>
-          </ul>
         </section>
       </div>
     </div>
