@@ -71,7 +71,7 @@ export function getEmailAdapter(): EmailAdapter {
     port,
     // Default secure on the implicit-TLS port (465) unless overridden.
     secure: envBool(process.env.SMTP_SECURE, port === 465),
-    from: process.env.SMTP_FROM ?? "Atlas COC <noreply@localhost>",
+    from: process.env.SMTP_FROM ?? "Atlas Support & Services <noreply@localhost>",
     user: process.env.SMTP_USER || undefined,
     pass: process.env.SMTP_PASS || undefined,
     // Verify certificates in production; relax for the local Mailpit sink.

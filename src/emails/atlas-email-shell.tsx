@@ -92,7 +92,7 @@ export function AtlasEmailShell({
                         textAlign: align,
                       }}
                     >
-                      Atlas COC
+                      Atlas Support & Services
                     </Text>
                   </Section>
 
