@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import type { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth/session";
@@ -13,9 +14,12 @@ export async function writeAuditLog(input: {
   after?: Prisma.InputJsonValue;
   ip?: string | null;
   userAgent?: string | null;
+  /** Run inside an in-flight transaction so the log commits atomically with its triggering write. */
+  tx?: Prisma.TransactionClient;
 }): Promise<void> {
   const primaryRole = input.session.roles[0] as Role | undefined;
-  await prisma.auditLog.create({
+  const db = input.tx ?? prisma;
+  await db.auditLog.create({
     data: {
       actorUserId: input.session.id,
       actorRole: primaryRole,
@@ -30,6 +34,17 @@ export async function writeAuditLog(input: {
       userAgent: input.userAgent ?? undefined,
     },
   });
+}
+
+/** Best-effort actor IP/user-agent for audit entries written from a server action. */
+export async function requestMeta(): Promise<{
+  ip?: string;
+  userAgent?: string;
+}> {
+  const hdrs = await headers();
+  const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined;
+  const userAgent = hdrs.get("user-agent") || undefined;
+  return { ip, userAgent };
 }
 
 export function diffKeys<T extends Record<string, unknown>>(

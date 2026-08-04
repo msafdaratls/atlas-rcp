@@ -6,13 +6,15 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
+import { sendInviteEmail } from "@/lib/auth/auth-email";
+import { issueVerificationToken } from "@/lib/auth/tokens";
 import {
   computeAssessment,
   hasCheckItems,
   parseCheckSets,
   type AssessmentState,
 } from "@/lib/assessment";
-import { writeAuditLog } from "@/lib/audit";
+import { writeAuditLog, requestMeta } from "@/lib/audit";
 import { parsePercentCouponValue } from "@/lib/billing-helpers";
 import { prisma } from "@/lib/db";
 import { log } from "@/lib/logger";
@@ -35,7 +37,6 @@ import {
   onHoldResumeTarget,
 } from "@/server/admin/queries";
 import { appendReversingEntry } from "@/server/finance/ledger";
-import { getEmailAdapter } from "@/server/notifications/email-adapter";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
@@ -1749,9 +1750,11 @@ export async function updateAtlasOrganisation(
   }
 }
 
+const STAFF_INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function inviteAtlasStaff(
   input: InviteAtlasStaffInput,
-): Promise<ActionResult<{ userId: string; emailed: true }>> {
+): Promise<ActionResult<{ userId: string; emailed: boolean }>> {
   try {
     const session = await requireSession();
     requirePermission(session, "staff:manage");
@@ -1770,55 +1773,73 @@ export async function inviteAtlasStaff(
             ?.id;
     if (!atlasOrgId) return { ok: false, error: "NOT_FOUND" };
 
-    const temporaryPassword = randomBytes(9).toString("base64url");
-    const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+    // No password is generated or emailed here: the invitee sets their own
+    // via the invite-link flow below, so this hash is never usable.
+    const passwordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 12);
     const usernameBase = parsed.data.email
       .split("@")[0]
       ?.replace(/[^a-zA-Z0-9._-]/g, ".")
       .slice(0, 40);
     const username = `${usernameBase}.${Date.now().toString(36)}`;
+    const { ip, userAgent } = await requestMeta();
 
-    const user = await prisma.user.create({
-      data: {
-        organisationId: atlasOrgId,
-        email: parsed.data.email,
-        username,
-        passwordHash,
-        fullNameEn: parsed.data.fullNameEn,
-        fullNameAr: parsed.data.fullNameAr,
-        locale: "ar",
-        status: "ACTIVE",
-        // Created by an authenticated admin — treated as a trusted invite.
-        emailVerifiedAt: new Date(),
-        roles: { create: [{ role: parsed.data.role }] },
-      },
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          organisationId: atlasOrgId,
+          email: parsed.data.email,
+          username,
+          passwordHash,
+          fullNameEn: parsed.data.fullNameEn,
+          fullNameAr: parsed.data.fullNameAr,
+          locale: "ar",
+          status: "ACTIVE",
+          // Stays unverified/unusable for login until the invitee completes
+          // the invite link, which sets their password and verifies email.
+          roles: { create: [{ role: parsed.data.role }] },
+        },
+      });
+
+      await writeAuditLog({
+        session,
+        tx,
+        action: "staff.invite",
+        entityType: "User",
+        entityId: created.id,
+        ip,
+        userAgent,
+        after: {
+          email: created.email,
+          role: parsed.data.role,
+          organisationId: atlasOrgId,
+        },
+      });
+
+      return created;
     });
 
-    const adapter = getEmailAdapter();
-    await adapter.send({
-      to: user.email,
-      subject: "Atlas RCP — staff invite / دعوة موظف",
-      text: `Your temporary password is: ${temporaryPassword}\n\nكلمة المرور المؤقتة: ${temporaryPassword}`,
-      html: `<p>Your temporary password is: <code>${temporaryPassword}</code></p><p dir="rtl">كلمة المرور المؤقتة: <code>${temporaryPassword}</code></p>`,
-    });
-
-    await writeAuditLog({
-      session,
-      action: "staff.invite",
-      entityType: "User",
-      entityId: user.id,
-      after: {
-        email: user.email,
-        role: parsed.data.role,
-        organisationId: atlasOrgId,
-        emailed: true,
-      },
-    });
+    // The account and audit trail are already committed above; a failure
+    // here only means the invite link needs to be resent, not data loss.
+    let emailed = false;
+    try {
+      const token = await issueVerificationToken(
+        user.id,
+        "PASSWORD_RESET",
+        STAFF_INVITE_TOKEN_TTL_MS,
+      );
+      emailed = await sendInviteEmail({
+        to: user.email,
+        locale: user.locale,
+        token,
+      });
+    } catch {
+      emailed = false;
+    }
 
     revalidatePath("/[locale]/admin/settings", "page");
     return {
       ok: true,
-      data: { userId: user.id, emailed: true },
+      data: { userId: user.id, emailed },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";

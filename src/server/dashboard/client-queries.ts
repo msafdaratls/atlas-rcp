@@ -240,7 +240,6 @@ export async function getClientDashboard(): Promise<ClientDashboardView | null> 
       prisma.mainCategory.findMany({
         where: { active: true },
         orderBy: { sortOrder: "asc" },
-        take: 2,
       }),
       prisma.invoice.findMany({
         where: {

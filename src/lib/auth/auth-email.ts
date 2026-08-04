@@ -1,7 +1,7 @@
 import { getEmailAdapter } from "@/server/notifications/email-adapter";
 import { log } from "@/lib/logger";
 
-type AuthEmailKind = "verify" | "reset";
+type AuthEmailKind = "verify" | "reset" | "invite";
 
 const COPY: Record<
   AuthEmailKind,
@@ -37,6 +37,22 @@ const COPY: Record<
       body: "تلقّينا طلبًا لإعادة تعيين كلمة مرورك. تنتهي صلاحية الرابط خلال ساعة.",
       cta: "إعادة تعيين كلمة المرور",
       ignore: "إذا لم تطلب ذلك، تجاهل الرسالة — لم تتغير كلمة مرورك.",
+    },
+  },
+  invite: {
+    en: {
+      subject: "You've been invited to Atlas",
+      heading: "Set up your account",
+      body: "An administrator created an Atlas account for you. Choose a password to activate it. This link expires in 7 days.",
+      cta: "Set password",
+      ignore: "If you weren't expecting this, you can ignore this email.",
+    },
+    ar: {
+      subject: "دعوة للانضمام إلى أطلس",
+      heading: "إعداد حسابك",
+      body: "قام أحد المسؤولين بإنشاء حساب أطلس لك. اختر كلمة مرور لتفعيله. تنتهي صلاحية الرابط خلال 7 أيام.",
+      cta: "تعيين كلمة المرور",
+      ignore: "إذا لم تكن تتوقع هذه الرسالة، يمكنك تجاهلها.",
     },
   },
 };
@@ -97,6 +113,32 @@ export async function sendVerificationEmail(input: {
     return true;
   } catch (error) {
     log.error("auth-email", "verification email failed", {
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return false;
+  }
+}
+
+/**
+ * Invite emails reuse the reset-password page/flow: the invitee "resets"
+ * a password they never had, which also verifies their email and activates
+ * the account (see resetPasswordAction). No temporary password is ever
+ * generated or transmitted.
+ */
+export async function sendInviteEmail(input: {
+  to: string;
+  locale: string;
+  token: string;
+}): Promise<boolean> {
+  try {
+    await sendAuthEmail("invite", {
+      to: input.to,
+      locale: input.locale,
+      path: `/${input.locale}/reset-password?token=${input.token}`,
+    });
+    return true;
+  } catch (error) {
+    log.error("auth-email", "invite email failed", {
       error: error instanceof Error ? error.message : "unknown",
     });
     return false;

@@ -121,7 +121,10 @@ export function NewRequestWizard({
 
   const selectedMain = catalogue.mains.find((m) => m.id === mainId) ?? null;
   const subs = catalogue.subs.filter((s) => s.mainCategoryId === mainId);
-  const items = catalogue.items.filter((i) => subIds.includes(i.subCategoryId));
+  const items = useMemo(
+    () => catalogue.items.filter((i) => subIds.includes(i.subCategoryId)),
+    [catalogue.items, subIds],
+  );
 
   const [slots, setSlots] = useState<UploadSlotState[]>([]);
 
@@ -268,6 +271,15 @@ export function NewRequestWizard({
       setCouponCode("");
     });
   }
+
+  useEffect(() => {
+    if (items.length === 1 && items[0].id !== itemId) {
+      void selectServiceItem(items[0]);
+    }
+    // Only re-run when the resolved item list changes; selectServiceItem is
+    // stable for this purpose and itemId is checked inside the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
 
   function goStep2() {
     if (!selectedItem || !requestId) {
