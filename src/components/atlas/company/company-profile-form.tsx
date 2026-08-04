@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { arSA, enGB } from "date-fns/locale";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { AddressPreviewCard } from "@/components/atlas/company/address-preview-card";
@@ -104,7 +104,32 @@ export function CompanyProfileForm({ initial }: Props) {
     mode: "onBlur",
   });
 
+  const draftKey = `atlas.companyProfileDraft:${initial.organisation.id}`;
+
+  // Restore any unsaved edits (e.g. lost to an accidental refresh) once on mount.
+  useEffect(() => {
+    const raw = window.localStorage.getItem(draftKey);
+    if (!raw) return;
+    try {
+      const draft = JSON.parse(raw) as Partial<CompanyProfileInput>;
+      form.reset({ ...defaults, ...draft }, { keepDefaultValues: true });
+    } catch {
+      window.localStorage.removeItem(draftKey);
+    }
+    // Only ever run on mount for this organisation.
+  }, [draftKey, defaults, form]);
+
   const watched = form.watch();
+
+  // Autosave dirty edits so an accidental refresh (manual, or the stale-deploy
+  // auto-reload) doesn't wipe out what the user typed.
+  useEffect(() => {
+    if (!form.formState.isDirty) return;
+    const handle = setTimeout(() => {
+      window.localStorage.setItem(draftKey, JSON.stringify(watched));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [watched, draftKey, form.formState.isDirty]);
 
   const [prefs, setPrefs] = useState<PreferencesInput>({
     locale: initial.preferences.locale === "en" ? "en" : "ar",
@@ -160,6 +185,7 @@ export function CompanyProfileForm({ initial }: Props) {
           toast.error(t(`errors.${result.error}` as never));
           return;
         }
+        window.localStorage.removeItem(draftKey);
         showSavedToast(result.updatedFields);
         router.refresh();
       });
