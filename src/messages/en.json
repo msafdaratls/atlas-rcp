@@ -83,7 +83,7 @@
     "TECHNICAL_REVIEW": "Technical review",
     "DECISION": "Decision",
     "REPORT_ISSUED": "Report issued",
-    "CLOSED": "Closed",
+    "CLOSED": "Done",
     "CANCELLED": "Cancelled",
     "ON_HOLD": "On hold"
   },
@@ -664,7 +664,7 @@
       "hold": "Put on hold",
       "resume": "Resume intake",
       "issueReport": "Issue report",
-      "close": "Close request",
+      "close": "Mark as done",
       "cancel": "Cancel request",
       "comment": "Internal note",
       "commentPlaceholder": "Visible to Atlas staff only.",

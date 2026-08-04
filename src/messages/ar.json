@@ -83,7 +83,7 @@
     "TECHNICAL_REVIEW": "المراجعة الفنية",
     "DECISION": "القرار",
     "REPORT_ISSUED": "صدر التقرير",
-    "CLOSED": "مغلق",
+    "CLOSED": "تم",
     "CANCELLED": "ملغى",
     "ON_HOLD": "معلّق"
   },
@@ -664,7 +664,7 @@
       "hold": "تعليق",
       "resume": "استئناف الاستلام",
       "issueReport": "إصدار التقرير",
-      "close": "إغلاق الطلب",
+      "close": "وضع علامة تم",
       "cancel": "إلغاء الطلب",
       "comment": "ملاحظة داخلية",
       "commentPlaceholder": "تظهر لموظفي أطلس فقط.",
