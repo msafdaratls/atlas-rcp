@@ -627,6 +627,7 @@
         "state": "State",
         "sla": "SLA",
         "updated": "Updated",
+        "messages": "Messages",
         "actions": "Actions"
       },
       "newRequest": "New request",

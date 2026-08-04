@@ -227,6 +227,7 @@ export type AdminRequestListItem = {
   orgNameAr: string;
   serviceNameEn: string;
   serviceNameAr: string;
+  unreadClientMessages: number;
 };
 
 export type AdminRequestListResult = {
@@ -284,6 +285,28 @@ export async function listAdminRequests(input: {
       }),
     ]);
 
+    const unreadCounts = rows.length
+      ? await prisma.$queryRaw<Array<{ requestId: string; unread: bigint }>>`
+          SELECT c."requestId" AS "requestId", COUNT(*)::bigint AS unread
+          FROM "RequestComment" c
+          WHERE c."requestId" IN (${Prisma.join(rows.map((r) => r.id))})
+            AND c.direction = 'CLIENT_TO_ATLAS'
+            AND c."createdAt" > COALESCE(
+              (
+                SELECT MAX(c2."createdAt")
+                FROM "RequestComment" c2
+                WHERE c2."requestId" = c."requestId"
+                  AND c2.direction = 'ATLAS_TO_CLIENT'
+              ),
+              '-infinity'::timestamp
+            )
+          GROUP BY c."requestId"
+        `
+      : [];
+    const unreadByRequestId = new Map(
+      unreadCounts.map((u) => [u.requestId, Number(u.unread)]),
+    );
+
     return {
       total,
       page,
@@ -303,6 +326,7 @@ export async function listAdminRequests(input: {
         orgNameAr: r.organisation.nameAr,
         serviceNameEn: r.serviceItem.nameEn,
         serviceNameAr: r.serviceItem.nameAr,
+        unreadClientMessages: unreadByRequestId.get(r.id) ?? 0,
       })),
     };
   } catch {

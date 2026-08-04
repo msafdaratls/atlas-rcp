@@ -1,6 +1,7 @@
 "use client";
 
 import { DataTable } from "@/components/atlas/data-table";
+import { MessageSquare } from "lucide-react";
 import { RequestNumber } from "@/components/atlas/request-number";
 import { StateBadge } from "@/components/atlas/state-badge";
 import { Button } from "@/components/ui/button";
@@ -161,6 +162,22 @@ export function AdminRequestsTable({
             {row.original.updatedAt.slice(0, 16).replace("T", " ")}
           </time>
         ),
+      },
+      {
+        id: "messages",
+        header: t("columns.messages"),
+        cell: ({ row }) => {
+          const unread = row.original.unreadClientMessages;
+          if (!unread) return null;
+          return (
+            <span className="relative inline-flex">
+              <MessageSquare className="size-5 text-ink-500" />
+              <span className="absolute -end-1.5 -top-1.5 flex min-w-4 items-center justify-center rounded-full bg-state-bad px-1 font-data text-[10px] font-semibold leading-none text-white">
+                {unread > 99 ? "99+" : unread}
+              </span>
+            </span>
+          );
+        },
       },
       {
         id: "actions",
