@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/rbac";
 import { toNumber } from "@/lib/pricing";
 import { scopedDb } from "@/lib/scoped-db";
 import { invoiceOpenBalance } from "@/server/finance/queries";
+import { exceedsMaxResubmissions } from "@/lib/billing-helpers";
 
 export type CatalogueMain = {
   id: string;
@@ -571,7 +572,10 @@ export async function getClientRequestDetail(
       maxResubmissions: request.serviceItem.maxResubmissions,
       canResubmit:
         request.state === "RETURNED_TO_CLIENT" &&
-        request.submissionNo < request.serviceItem.maxResubmissions,
+        !exceedsMaxResubmissions(
+          request.submissionNo,
+          request.serviceItem.maxResubmissions,
+        ),
       invoices: request.invoices.map((inv) => ({
         id: inv.id,
         invoiceNo: inv.invoiceNo,
