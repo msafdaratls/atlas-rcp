@@ -686,6 +686,11 @@
       "sendToClient": "Send to client",
       "messagePlaceholder": "Write a message the client will see...",
       "messageSent": "Message sent",
+      "messageCharCount": "{count}/2000",
+      "confirmSendTitle": "Send this message to the client?",
+      "confirmSendBody": "This will be emailed to the client immediately and cannot be recalled or edited afterward.",
+      "confirmSendCancel": "Keep editing",
+      "confirmSendConfirm": "Send message",
       "errors": {
         "FORBIDDEN": "You do not have permission.",
         "UNAUTHORIZED": "Sign in again to continue.",

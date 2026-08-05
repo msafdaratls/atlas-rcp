@@ -686,6 +686,11 @@
       "sendToClient": "إرسال إلى العميل",
       "messagePlaceholder": "اكتب رسالة سيراها العميل...",
       "messageSent": "تم إرسال الرسالة",
+      "messageCharCount": "{count}/2000",
+      "confirmSendTitle": "هل تريد إرسال هذه الرسالة إلى العميل؟",
+      "confirmSendBody": "سيتم إرسال هذه الرسالة بالبريد الإلكتروني إلى العميل فورًا، ولا يمكن سحبها أو تعديلها بعد الإرسال.",
+      "confirmSendCancel": "متابعة التحرير",
+      "confirmSendConfirm": "إرسال الرسالة",
       "errors": {
         "FORBIDDEN": "ليس لديك صلاحية.",
         "UNAUTHORIZED": "سجّل الدخول مجدداً للاستمرار.",

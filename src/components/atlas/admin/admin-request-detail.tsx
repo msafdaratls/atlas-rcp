@@ -150,6 +150,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
 
   const [clientMessageBody, setClientMessageBody] = useState("");
   const [clientMessagePending, startClientMessageTransition] = useTransition();
+  const [clientMessageConfirmOpen, setClientMessageConfirmOpen] = useState(false);
 
   const canMessage = data.state !== "DRAFT" && data.state !== "CANCELLED";
 
@@ -237,6 +238,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
       }
       toast.success(t("messageSent"));
       setClientMessageBody("");
+      setClientMessageConfirmOpen(false);
       router.refresh();
     });
   }
@@ -588,16 +590,54 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
             <Textarea
               id="client-message"
               value={clientMessageBody}
-              onChange={(e) => setClientMessageBody(e.target.value)}
+              onChange={(e) => setClientMessageBody(e.target.value.slice(0, 2000))}
               placeholder={t("messagePlaceholder")}
+              maxLength={2000}
               rows={3}
             />
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-data text-xs text-ink-500" dir="ltr">
+                {t("messageCharCount", { count: clientMessageBody.length })}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                disabled={
+                  clientMessagePending || clientMessageBody.trim().length === 0
+                }
+                onClick={() => setClientMessageConfirmOpen(true)}
+              >
+                <Send className="size-4" />
+                {t("sendToClient")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <Dialog open={clientMessageConfirmOpen} onOpenChange={setClientMessageConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("confirmSendTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-ink-600">{t("confirmSendBody")}</p>
+            <p className="whitespace-pre-wrap rounded-lg border border-line bg-atlas-green-tint/40 p-3 text-sm text-ink-900">
+              {clientMessageBody}
+            </p>
+          </div>
+          <DialogFooter>
             <Button
               type="button"
-              size="sm"
-              disabled={
-                clientMessagePending || clientMessageBody.trim().length === 0
-              }
+              variant="outline"
+              disabled={clientMessagePending}
+              onClick={() => setClientMessageConfirmOpen(false)}
+            >
+              {t("confirmSendCancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={clientMessagePending}
               onClick={submitClientMessage}
             >
               {clientMessagePending ? (
@@ -605,11 +645,11 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
               ) : (
                 <Send className="size-4" />
               )}
-              {t("sendToClient")}
+              {t("confirmSendConfirm")}
             </Button>
-          </div>
-        ) : null}
-      </section>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-ink-900">
