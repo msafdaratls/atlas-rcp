@@ -32,6 +32,8 @@ import {
   uploadRequestDocument,
 } from "@/server/requests/actions";
 import type { ClientRequestDetail } from "@/server/requests/queries";
+import { format } from "date-fns";
+import { arSA, enGB } from "date-fns/locale";
 import {
   FilePlus2,
   Loader2,
@@ -64,6 +66,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
   const tFields = useTranslations("newRequest.fields");
   const tEnums = useTranslations("newRequest.enums");
   const locale = useLocale();
+  const dateLocale = locale === "ar" ? arSA : enGB;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState("");
@@ -212,6 +215,15 @@ export function ClientRequestDetailPanel({ data }: Props) {
             {t("submission", { n: data.submissionNo })}
             {" · "}
             <MoneyValue amount={data.priceCharged} />
+          </p>
+          <p className="mt-1 text-xs text-ink-500">
+            {t("submittedAt", {
+              date: format(
+                new Date(data.submittedAt ?? data.createdAt),
+                "PPp",
+                { locale: dateLocale },
+              ),
+            })}
           </p>
         </div>
         <SlaMeter

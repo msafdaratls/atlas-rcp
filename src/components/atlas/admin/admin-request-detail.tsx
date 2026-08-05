@@ -33,6 +33,8 @@ import {
 import { hasCheckItems } from "@/lib/assessment";
 import type { AdminRequestDetail, AssignableStaffUser } from "@/server/admin/queries";
 import type { FaultAttribution, RequestState, ReturnReasonCode } from "@prisma/client";
+import { format } from "date-fns";
+import { arSA, enGB } from "date-fns/locale";
 
 const ASSESSMENT_SHOW_STATES: RequestState[] = [
   "ACCEPTED",
@@ -118,6 +120,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const tReasons = useTranslations("returnReasons");
   const tFault = useTranslations("statusRail");
   const locale = useLocale();
+  const dateLocale = locale === "ar" ? arSA : enGB;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -299,6 +302,15 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
               {t("submission", { n: data.submissionNo })}
               {" · "}
               <MoneyValue amount={data.priceCharged} />
+            </p>
+            <p className="mt-1 text-xs text-ink-500">
+              {t("submittedAt", {
+                date: format(
+                  new Date(data.submittedAt ?? data.createdAt),
+                  "PPp",
+                  { locale: dateLocale },
+                ),
+              })}
             </p>
           </div>
           <div>

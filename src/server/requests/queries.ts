@@ -415,6 +415,7 @@ export type ClientRequestDetail = {
   productAttrSchema: unknown;
   submissionNo: number;
   submittedAt: string | null;
+  createdAt: string;
   slaDueAt: string | null;
   closedAt: string | null;
   priceCharged: number;
@@ -564,6 +565,7 @@ export async function getClientRequestDetail(
       productAttrSchema: request.serviceItem.productAttrSchema,
       submissionNo: request.submissionNo,
       submittedAt: request.submittedAt?.toISOString() ?? null,
+      createdAt: request.createdAt.toISOString(),
       slaDueAt: request.slaDueAt?.toISOString() ?? null,
       closedAt: request.closedAt?.toISOString() ?? null,
       priceCharged: toNumber(request.priceCharged),
