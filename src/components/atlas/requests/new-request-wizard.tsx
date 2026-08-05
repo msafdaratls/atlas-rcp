@@ -748,19 +748,28 @@ export function NewRequestWizard({
     <div className="flex flex-col gap-6 lg:flex-row">
       <div className="min-w-0 flex-1 space-y-6">
         <ol className="flex flex-wrap gap-2 text-xs font-semibold">
-          {[1, 2, 3, 4].map((n) => (
-            <li
-              key={n}
-              className={cn(
-                "rounded-full border px-3 py-1",
-                step === n
-                  ? "border-atlas-green bg-atlas-green-tint text-atlas-green-600"
-                  : "border-line text-ink-500",
-              )}
-            >
-              {t(`steps.${n}` as never)}
-            </li>
-          ))}
+          {[1, 2, 3, 4].map((n) => {
+            const reachable = n <= step;
+            return (
+              <li key={n}>
+                <button
+                  type="button"
+                  disabled={!reachable}
+                  onClick={() => reachable && setStep(n)}
+                  className={cn(
+                    "rounded-full border px-3 py-1",
+                    step === n
+                      ? "border-atlas-green bg-atlas-green-tint text-atlas-green-600"
+                      : reachable
+                        ? "border-line text-ink-500 hover:border-atlas-green-600 hover:text-atlas-green-600"
+                        : "cursor-not-allowed border-line text-ink-300",
+                  )}
+                >
+                  {t(`steps.${n}` as never)}
+                </button>
+              </li>
+            );
+          })}
         </ol>
 
         {step === 1 ? (
