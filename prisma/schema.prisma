@@ -159,84 +159,93 @@ enum OutboxStatus {
   FAILED
 }
 
+enum ReopenRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ─── Organisation & users ────────────────────────────────────────────────────
 
 model Organisation {
-  id              String             @id @default(cuid())
-  type            OrganisationType
+  id                    String             @id @default(cuid())
+  type                  OrganisationType
   /// Only meaningful when type = CLIENT; null for the ATLAS organisation itself.
-  clientCategory  ClientCategory?
+  clientCategory        ClientCategory?
   /// Company clients only: skips the Saudi CR/VAT/national-address requirement
   /// and is unique by email instead of by crNumber.
-  isInternational Boolean            @default(false)
-  nameEn          String
-  nameAr          String
-  logoKey         String?
-  email           String
-  phone           String?
-  website         String?
-  crNumber        String?
-  vatNumber       String?
-  addressLine1    String?
-  addressLine2    String?
-  city            String?
-  region          String?
-  postalCode      String?
-  country         String             @default("SA")
-  nationalAddress String?
-  creditLimit     Decimal            @default(0) @db.Decimal(14, 2)
+  isInternational       Boolean            @default(false)
+  nameEn                String
+  nameAr                String
+  logoKey               String?
+  email                 String
+  phone                 String?
+  website               String?
+  crNumber              String?
+  vatNumber             String?
+  addressLine1          String?
+  addressLine2          String?
+  city                  String?
+  region                String?
+  postalCode            String?
+  country               String             @default("SA")
+  nationalAddress       String?
+  creditLimit           Decimal            @default(0) @db.Decimal(14, 2)
   /// When true, new client submissions should be blocked once balance exceeds creditLimit.
-  autoHoldWhenOverLimit Boolean      @default(false)
-  paymentTermsDays Int               @default(0)
-  status          OrganisationStatus @default(ACTIVE)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  autoHoldWhenOverLimit Boolean            @default(false)
+  paymentTermsDays      Int                @default(0)
+  status                OrganisationStatus @default(ACTIVE)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
-  users              User[]
-  requests           Request[]
-  invoices           Invoice[]
-  ledgerEntries      LedgerEntry[]
-  payments           Payment[]
-  couponRedemptions  CouponRedemption[]
-  auditLogs          AuditLog[]
+  users             User[]
+  requests          Request[]
+  invoices          Invoice[]
+  ledgerEntries     LedgerEntry[]
+  payments          Payment[]
+  couponRedemptions CouponRedemption[]
+  auditLogs         AuditLog[]
 
-  @@index([type, status])
   @@unique([crNumber])
+  @@index([type, status])
 }
 
 model User {
-  id               String     @id @default(cuid())
-  organisationId   String
-  email            String     @unique
-  username         String     @unique
-  passwordHash     String
-  fullNameEn       String
-  fullNameAr       String
-  phone            String?    @unique
-  avatarKey        String?
-  locale           String     @default("ar")
-  status           UserStatus @default(ACTIVE)
-  lastLoginAt      DateTime?
-  emailVerifiedAt  DateTime?
-  failedLoginAttempts Int      @default(0)
-  lockedUntil      DateTime?
-  createdAt        DateTime   @default(now())
+  id                  String     @id @default(cuid())
+  organisationId      String
+  email               String     @unique
+  username            String     @unique
+  passwordHash        String
+  fullNameEn          String
+  fullNameAr          String
+  phone               String?    @unique
+  avatarKey           String?
+  locale              String     @default("ar")
+  status              UserStatus @default(ACTIVE)
+  lastLoginAt         DateTime?
+  emailVerifiedAt     DateTime?
+  failedLoginAttempts Int        @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime   @default(now())
 
-  organisation Organisation @relation(fields: [organisationId], references: [id])
-  roles        UserRole[]
+  organisation       Organisation        @relation(fields: [organisationId], references: [id])
+  roles              UserRole[]
   verificationTokens VerificationToken[]
 
-  createdRequests   Request[]          @relation("RequestCreatedBy")
-  assignedRequests  Request[]          @relation("RequestAssignedTo")
-  uploadedVersions  DocumentVersion[]
-  requestEvents     RequestEvent[]
-  requestComments   RequestComment[]
-  ledgerEntries     LedgerEntry[]
-  confirmedPayments Payment[]          @relation("PaymentConfirmedBy")
-  createdCoupons    Coupon[]
-  notifications     Notification[]
+  createdRequests         Request[]                @relation("RequestCreatedBy")
+  assignedRequests        Request[]                @relation("RequestAssignedTo")
+  uploadedVersions        DocumentVersion[]
+  requestEvents           RequestEvent[]
+  requestComments         RequestComment[]
+  commentMentions         RequestCommentMention[]
+  reopenRequestsMade      RequestReopenRequest[]   @relation("ReopenRequestedBy")
+  reopenRequestsDecided   RequestReopenRequest[]   @relation("ReopenRequestDecidedBy")
+  ledgerEntries           LedgerEntry[]
+  confirmedPayments       Payment[]                @relation("PaymentConfirmedBy")
+  createdCoupons          Coupon[]
+  notifications           Notification[]
   notificationPreferences NotificationPreference[]
-  auditLogs         AuditLog[]
+  auditLogs               AuditLog[]
 
   @@index([organisationId])
   @@index([status])
@@ -253,11 +262,11 @@ model UserRole {
 }
 
 model NotificationPreference {
-  id            String  @id @default(cuid())
-  userId        String
-  eventType     String
-  emailEnabled  Boolean @default(true)
-  inAppEnabled  Boolean @default(true)
+  id           String  @id @default(cuid())
+  userId       String
+  eventType    String
+  emailEnabled Boolean @default(true)
+  inAppEnabled Boolean @default(true)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -300,25 +309,25 @@ model SubCategory {
 }
 
 model ServiceItem {
-  id                    String  @id @default(cuid())
-  subCategoryId         String
-  code                  String
-  nameEn                String
-  nameAr                String
-  descEn                String?
-  descAr                String?
-  basePrice             Decimal @db.Decimal(14, 2)
-  vatRate               Decimal @default(0.15) @db.Decimal(5, 4)
-  resubmissionPricePct  Decimal @default(0.50) @db.Decimal(5, 4)
-  slaHours              Int
-  freeResubmissions     Int     @default(0)
-  maxResubmissions      Int     @default(3)
+  id                   String  @id @default(cuid())
+  subCategoryId        String
+  code                 String
+  nameEn               String
+  nameAr               String
+  descEn               String?
+  descAr               String?
+  basePrice            Decimal @db.Decimal(14, 2)
+  vatRate              Decimal @default(0.15) @db.Decimal(5, 4)
+  resubmissionPricePct Decimal @default(0.50) @db.Decimal(5, 4)
+  slaHours             Int
+  freeResubmissions    Int     @default(0)
+  maxResubmissions     Int     @default(3)
   /// JSON Schema describing product attributes collected at request time.
-  productAttrSchema     Json    @default("{}")
+  productAttrSchema    Json    @default("{}")
   /// Requirement sets shown in "What we check" [{ code, titleEn, titleAr }]
-  checkSets             Json    @default("[]")
-  sortOrder             Int     @default(0)
-  active                Boolean @default(true)
+  checkSets            Json    @default("[]")
+  sortOrder            Int     @default(0)
+  active               Boolean @default(true)
 
   subCategory       SubCategory        @relation(fields: [subCategoryId], references: [id])
   requiredDocuments RequiredDocument[]
@@ -351,44 +360,45 @@ model RequiredDocument {
 // ─── Requests ────────────────────────────────────────────────────────────────
 
 model Request {
-  id               String       @id @default(cuid())
-  requestNo        String       @unique
+  id               String        @id @default(cuid())
+  requestNo        String        @unique
   organisationId   String
   serviceItemId    String
   createdByUserId  String
   assignedToUserId String?
-  state            RequestState @default(DRAFT)
+  state            RequestState  @default(DRAFT)
   /// Prior state when moved to ON_HOLD; resume must return here.
   heldFromState    RequestState?
-  productNameEn    String       @default("")
-  productNameAr    String       @default("")
+  productNameEn    String        @default("")
+  productNameAr    String        @default("")
   brand            String?
-  productAttrs     Json         @default("{}")
+  productAttrs     Json          @default("{}")
   /// Technical-review verdicts per check item: { verdicts, notes, updatedAt, updatedByUserId }.
-  assessment       Json         @default("{}")
-  submissionNo     Int          @default(1)
-  priceCharged     Decimal      @default(0) @db.Decimal(14, 2)
-  discountApplied  Decimal      @default(0) @db.Decimal(14, 2)
+  assessment       Json          @default("{}")
+  submissionNo     Int           @default(1)
+  priceCharged     Decimal       @default(0) @db.Decimal(14, 2)
+  discountApplied  Decimal       @default(0) @db.Decimal(14, 2)
   couponCode       String?
   /// Client-supplied key; submitRequest is idempotent on this value.
-  idempotencyKey   String?      @unique
+  idempotencyKey   String?       @unique
   slaDueAt         DateTime?
   /// When set, SLA clock is paused (ON_HOLD / RETURNED_TO_CLIENT).
   slaPausedAt      DateTime?
   submittedAt      DateTime?
   closedAt         DateTime?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  organisation  Organisation       @relation(fields: [organisationId], references: [id])
-  serviceItem   ServiceItem        @relation(fields: [serviceItemId], references: [id])
-  createdBy     User               @relation("RequestCreatedBy", fields: [createdByUserId], references: [id])
-  assignedTo    User?              @relation("RequestAssignedTo", fields: [assignedToUserId], references: [id])
-  documents     RequestDocument[]
-  events        RequestEvent[]
-  comments      RequestComment[]
-  invoices      Invoice[]
-  redemptions   CouponRedemption[]
+  organisation   Organisation           @relation(fields: [organisationId], references: [id])
+  serviceItem    ServiceItem            @relation(fields: [serviceItemId], references: [id])
+  createdBy      User                   @relation("RequestCreatedBy", fields: [createdByUserId], references: [id])
+  assignedTo     User?                  @relation("RequestAssignedTo", fields: [assignedToUserId], references: [id])
+  documents      RequestDocument[]
+  events         RequestEvent[]
+  comments       RequestComment[]
+  invoices       Invoice[]
+  redemptions    CouponRedemption[]
+  reopenRequests RequestReopenRequest[]
 
   @@index([organisationId, state])
   @@index([state, slaDueAt])
@@ -426,9 +436,9 @@ model DocumentVersion {
   avStatus         AvStatus @default(PENDING)
   uploadedAt       DateTime @default(now())
 
-  document       RequestDocument  @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
-  uploadedBy     User             @relation(fields: [uploadedByUserId], references: [id])
-  currentFor     RequestDocument? @relation("CurrentDocumentVersion")
+  document   RequestDocument  @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedBy User             @relation(fields: [uploadedByUserId], references: [id])
+  currentFor RequestDocument? @relation("CurrentDocumentVersion")
 
   @@unique([documentId, version])
   @@index([documentId, uploadedAt])
@@ -456,21 +466,60 @@ model RequestEvent {
 }
 
 model RequestComment {
-  id           String             @id @default(cuid())
+  id           String            @id @default(cuid())
   requestId    String
   authorUserId String
   direction    CommentDirection
   reasonCode   ReturnReasonCode?
   bodyEn       String?
   bodyAr       String?
-  attachments  Json               @default("[]")
+  attachments  Json              @default("[]")
   readAt       DateTime?
-  createdAt    DateTime           @default(now())
+  createdAt    DateTime          @default(now())
 
   request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
   author  User    @relation(fields: [authorUserId], references: [id])
+  mentions RequestCommentMention[]
 
   @@index([requestId, createdAt])
+}
+
+/// A user mentioned via @[Name](userId) inside an internal note's body.
+model RequestCommentMention {
+  id        String   @id @default(cuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  comment RequestComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+}
+
+/// Client-initiated request to reopen a CLOSED/CANCELLED request; admin approves
+/// (choosing the destination stage) or rejects. A direct admin-initiated reopen
+/// (no prior client request) is recorded here too, pre-set to APPROVED.
+model RequestReopenRequest {
+  id                String              @id @default(cuid())
+  requestId         String
+  status            ReopenRequestStatus @default(PENDING)
+  reason            String
+  requestedByUserId String
+  decidedByUserId   String?
+  decisionNote      String?
+  /// Stage the request is moved to once approved.
+  targetState       RequestState?
+  createdAt         DateTime            @default(now())
+  decidedAt         DateTime?
+
+  request     Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestedBy User    @relation("ReopenRequestedBy", fields: [requestedByUserId], references: [id])
+  decidedBy   User?   @relation("ReopenRequestDecidedBy", fields: [decidedByUserId], references: [id])
+
+  @@index([requestId, status])
+  @@index([status, createdAt])
 }
 
 // ─── Commerce ────────────────────────────────────────────────────────────────
@@ -490,8 +539,8 @@ model Invoice {
   dueAt          DateTime?
   createdAt      DateTime      @default(now())
 
-  organisation Organisation       @relation(fields: [organisationId], references: [id])
-  request      Request?           @relation(fields: [requestId], references: [id])
+  organisation Organisation        @relation(fields: [organisationId], references: [id])
+  request      Request?            @relation(fields: [requestId], references: [id])
   lines        InvoiceLine[]
   allocations  PaymentAllocation[]
 
@@ -515,24 +564,24 @@ model InvoiceLine {
 /// APPEND ONLY. Corrections are reversing entries, never edits.
 /// There is no update/delete API for ledger rows in application code.
 model LedgerEntry {
-  id             String          @id @default(cuid())
-  organisationId String
-  entryDate      DateTime        @default(now())
-  type           LedgerEntryType
-  referenceType  String
-  referenceId    String
-  debit          Decimal         @default(0) @db.Decimal(14, 2)
-  credit         Decimal         @default(0) @db.Decimal(14, 2)
-  descriptionEn  String
-  descriptionAr  String
+  id              String          @id @default(cuid())
+  organisationId  String
+  entryDate       DateTime        @default(now())
+  type            LedgerEntryType
+  referenceType   String
+  referenceId     String
+  debit           Decimal         @default(0) @db.Decimal(14, 2)
+  credit          Decimal         @default(0) @db.Decimal(14, 2)
+  descriptionEn   String
+  descriptionAr   String
   createdByUserId String
   /// When set, this row reverses `reversesEntry` (append-only correction).
   reversesEntryId String?
-  createdAt      DateTime        @default(now())
+  createdAt       DateTime        @default(now())
 
-  organisation  Organisation @relation(fields: [organisationId], references: [id])
-  createdBy     User         @relation(fields: [createdByUserId], references: [id])
-  reversesEntry LedgerEntry? @relation("LedgerReversal", fields: [reversesEntryId], references: [id])
+  organisation  Organisation  @relation(fields: [organisationId], references: [id])
+  createdBy     User          @relation(fields: [createdByUserId], references: [id])
+  reversesEntry LedgerEntry?  @relation("LedgerReversal", fields: [reversesEntryId], references: [id])
   reversedBy    LedgerEntry[] @relation("LedgerReversal")
 
   @@index([organisationId, entryDate])
@@ -576,28 +625,28 @@ model PaymentAllocation {
 }
 
 model Coupon {
-  id                   String             @id @default(cuid())
-  code                 String             @unique
-  nameEn               String
-  nameAr               String
-  discountType         CouponDiscountType
-  value                Decimal            @db.Decimal(14, 2)
-  maxDiscountAmount    Decimal?           @db.Decimal(14, 2)
-  minOrderAmount       Decimal?           @db.Decimal(14, 2)
-  appliesTo            CouponAppliesTo    @default(ALL)
-  appliesToIds         String[]           @default([])
-  clientScope          CouponClientScope  @default(ALL)
-  clientIds            String[]           @default([])
-  validFrom            DateTime
-  validTo              DateTime
-  totalUsageLimit      Int?
-  perClientLimit       Int?
-  usedCount            Int                @default(0)
-  stackable            Boolean            @default(false)
-  excludesResubmissions Boolean           @default(true)
-  status               CouponStatus       @default(ACTIVE)
-  createdByUserId      String
-  createdAt            DateTime           @default(now())
+  id                    String             @id @default(cuid())
+  code                  String             @unique
+  nameEn                String
+  nameAr                String
+  discountType          CouponDiscountType
+  value                 Decimal            @db.Decimal(14, 2)
+  maxDiscountAmount     Decimal?           @db.Decimal(14, 2)
+  minOrderAmount        Decimal?           @db.Decimal(14, 2)
+  appliesTo             CouponAppliesTo    @default(ALL)
+  appliesToIds          String[]           @default([])
+  clientScope           CouponClientScope  @default(ALL)
+  clientIds             String[]           @default([])
+  validFrom             DateTime
+  validTo               DateTime
+  totalUsageLimit       Int?
+  perClientLimit        Int?
+  usedCount             Int                @default(0)
+  stackable             Boolean            @default(false)
+  excludesResubmissions Boolean            @default(true)
+  status                CouponStatus       @default(ACTIVE)
+  createdByUserId       String
+  createdAt             DateTime           @default(now())
 
   createdBy   User               @relation(fields: [createdByUserId], references: [id])
   redemptions CouponRedemption[]
@@ -680,7 +729,7 @@ model NotificationLog {
 }
 
 model AuditLog {
-  id             String  @id @default(cuid())
+  id             String   @id @default(cuid())
   actorUserId    String?
   actorRole      Role?
   organisationId String?

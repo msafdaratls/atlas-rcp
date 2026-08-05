@@ -18,6 +18,7 @@ import {
 } from "@/lib/credit-limit";
 import { evaluateCoupon } from "@/lib/coupon";
 import { prisma } from "@/lib/db";
+import { log } from "@/lib/logger";
 import { computePriceBreakdown, toNumber } from "@/lib/pricing";
 import { requirePermission } from "@/lib/rbac";
 import { resolveResubmissionPricePct } from "@/lib/resubmission-price";
@@ -1586,6 +1587,108 @@ export async function resubmitReturnedRequest(
   }
 }
 
+const requestReopenSchema = z.object({
+  requestId: z.string().min(1),
+  reason: z.string().trim().min(10).max(1000),
+});
+
+/**
+ * Client-initiated ask to reopen a CLOSED/CANCELLED request. Does not change
+ * the request's state by itself — it only creates a PENDING
+ * `RequestReopenRequest` for Atlas staff to approve (choosing the resume
+ * stage) or reject via `decideReopenRequest`.
+ */
+export async function requestReopen(
+  input: z.infer<typeof requestReopenSchema>,
+): Promise<ActionResult<{ reopenRequestId: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:create");
+    const parsed = requestReopenSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const { organisationId: orgId } = scopedDb(session);
+    const { REOPENABLE_STATES } = await import("@/server/admin/queries");
+
+    const request = await prisma.request.findFirst({
+      where: {
+        organisationId: orgId,
+        id: parsed.data.requestId,
+        state: { in: REOPENABLE_STATES },
+      },
+      select: { id: true, requestNo: true, organisationId: true },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+
+    const pending = await prisma.requestReopenRequest.findFirst({
+      where: { requestId: request.id, status: "PENDING" },
+      select: { id: true },
+    });
+    if (pending) return { ok: false, error: "ALREADY_PENDING" };
+
+    const reopenRequestId = await prisma.$transaction(async (tx) => {
+      const created = await tx.requestReopenRequest.create({
+        data: {
+          requestId: request.id,
+          reason: parsed.data.reason,
+          requestedByUserId: session.id,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: session.id,
+          actorRole: session.roles[0],
+          organisationId: orgId,
+          action: "request.reopen.request",
+          entityType: "Request",
+          entityId: request.id,
+          after: { reopenRequestId: created.id, reason: parsed.data.reason },
+        },
+      });
+
+      try {
+        const { notify } = await import("@/server/notifications/notify");
+        const { notificationCopy } = await import(
+          "@/server/notifications/copy"
+        );
+        await notify(
+          {
+            event: "REOPEN_REQUESTED",
+            data: {
+              requestId: request.id,
+              requestNo: request.requestNo,
+              link: `/admin/requests/${request.id}`,
+              organisationId: orgId,
+              ...notificationCopy("REOPEN_REQUESTED", {
+                requestNo: request.requestNo,
+              }),
+            },
+          },
+          tx,
+        );
+      } catch (error) {
+        log.error("requests.reopen.request", "notification delivery failed", {
+          requestId: request.id,
+          error: error instanceof Error ? error.message : "unknown",
+        });
+      }
+
+      return created.id;
+    });
+
+    revalidatePath(`/[locale]/client/requests/${request.id}`, "page");
+
+    return { ok: true, data: { reopenRequestId } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
 const clientCommentSchema = z.object({
   requestId: z.string().min(1),
   body: z.string().trim().min(1).max(2000),
@@ -1672,6 +1775,55 @@ export async function addClientRequestComment(
     revalidatePath(`/[locale]/admin/requests/${request.id}`, "page");
 
     return { ok: true, data: { commentId: comment.id } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const markRequestCommentsReadSchema = z.object({ requestId: z.string().min(1) });
+
+/** Marks Atlas's replies and the matching in-app notification read once the client opens the chat thread. */
+export async function markClientRequestCommentsRead(
+  input: z.infer<typeof markRequestCommentsReadSchema>,
+): Promise<ActionResult<{ ok: true }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:create");
+    const parsed = markRequestCommentsReadSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const { organisationId: orgId } = scopedDb(session);
+    const request = await prisma.request.findFirst({
+      where: { organisationId: orgId, id: parsed.data.requestId },
+      select: { id: true },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+
+    await prisma.$transaction([
+      prisma.requestComment.updateMany({
+        where: {
+          requestId: request.id,
+          direction: "ATLAS_TO_CLIENT",
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      }),
+      prisma.notification.updateMany({
+        where: {
+          userId: session.id,
+          link: `/client/requests/${request.id}`,
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      }),
+    ]);
+
+    revalidatePath(`/[locale]/client/requests/${request.id}`, "page");
+    return { ok: true, data: { ok: true } };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {

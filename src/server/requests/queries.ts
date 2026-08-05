@@ -423,6 +423,16 @@ export type ClientRequestDetail = {
   serviceNameAr: string;
   maxResubmissions: number;
   canResubmit: boolean;
+  canRequestReopen: boolean;
+  reopenRequest: {
+    id: string;
+    status: import("@prisma/client").ReopenRequestStatus;
+    reason: string;
+    decisionNote: string | null;
+    targetState: import("@prisma/client").RequestState | null;
+    createdAt: string;
+    decidedAt: string | null;
+  } | null;
   invoices: Array<{
     id: string;
     invoiceNo: string;
@@ -543,9 +553,16 @@ export async function getClientRequestDetail(
           include: { allocations: true },
           orderBy: { createdAt: "asc" },
         },
+        reopenRequests: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
     });
     if (!request) return null;
+
+    const { REOPENABLE_STATES } = await import("@/server/admin/queries");
+    const latestReopenRequest = request.reopenRequests[0] ?? null;
 
     const lastReturn = [...request.events]
       .reverse()
@@ -578,6 +595,20 @@ export async function getClientRequestDetail(
           request.submissionNo,
           request.serviceItem.maxResubmissions,
         ),
+      canRequestReopen:
+        REOPENABLE_STATES.includes(request.state) &&
+        latestReopenRequest?.status !== "PENDING",
+      reopenRequest: latestReopenRequest
+        ? {
+            id: latestReopenRequest.id,
+            status: latestReopenRequest.status,
+            reason: latestReopenRequest.reason,
+            decisionNote: latestReopenRequest.decisionNote,
+            targetState: latestReopenRequest.targetState,
+            createdAt: latestReopenRequest.createdAt.toISOString(),
+            decidedAt: latestReopenRequest.decidedAt?.toISOString() ?? null,
+          }
+        : null,
       invoices: request.invoices.map((inv) => ({
         id: inv.id,
         invoiceNo: inv.invoiceNo,

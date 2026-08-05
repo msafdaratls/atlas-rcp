@@ -33,8 +33,10 @@ import {
 } from "@/lib/validators/admin";
 import {
   allowedTransitionsFor,
+  canReopenRequest,
   NEW_REQUEST_STATES,
   onHoldResumeTarget,
+  REOPEN_TARGET_STATES,
 } from "@/server/admin/queries";
 import { appendReversingEntry } from "@/server/finance/ledger";
 
@@ -383,6 +385,331 @@ export async function transitionAdminRequest(
   }
 }
 
+const REOPEN_TARGET_STATE_VALUES = [
+  "SUBMITTED",
+  "UNDER_INTAKE_REVIEW",
+  "RETURNED_TO_CLIENT",
+  "ACCEPTED",
+  "ASSESSMENT_QUEUED",
+  "ASSESSMENT_RUNNING",
+  "TECHNICAL_REVIEW",
+  "DECISION",
+] as const;
+
+/** Fresh SLA clock for a request coming out of a terminal state (CLOSED/CANCELLED never leaves a resumable pause). */
+function freshSlaDueAt(now: Date, slaHours: number): Date {
+  return new Date(now.getTime() + slaHours * 60 * 60 * 1000);
+}
+
+async function notifyReopenDecided(
+  tx: Prisma.TransactionClient,
+  input: {
+    approved: boolean;
+    requestId: string;
+    requestNo: string;
+    organisationId: string;
+    createdByUserId: string;
+    decisionNote: string | null;
+  },
+): Promise<void> {
+  try {
+    const { notify } = await import("@/server/notifications/notify");
+    const { notificationCopy } = await import("@/server/notifications/copy");
+    const copy = notificationCopy(
+      input.approved ? "REOPEN_DECIDED_APPROVED" : "REOPEN_DECIDED_REJECTED",
+      { requestNo: input.requestNo, reason: input.decisionNote ?? "" },
+    );
+    await notify(
+      {
+        event: "REOPEN_DECIDED",
+        data: {
+          requestId: input.requestId,
+          requestNo: input.requestNo,
+          link: `/client/requests/${input.requestId}`,
+          organisationId: input.organisationId,
+          createdByUserId: input.createdByUserId,
+          ...copy,
+        },
+      },
+      tx,
+    );
+  } catch (error) {
+    log.error("admin.requests.reopen", "notification delivery failed", {
+      requestId: input.requestId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+  }
+}
+
+const decideReopenRequestSchema = z.object({
+  reopenRequestId: z.string().min(1),
+  decision: z.enum(["APPROVE", "REJECT"]),
+  targetState: z.enum(REOPEN_TARGET_STATE_VALUES).optional(),
+  note: z.string().trim().max(1000).optional(),
+});
+
+/**
+ * Approves or rejects a client's pending request to reopen a CLOSED/CANCELLED
+ * request. Approval requires an active destination stage and moves the
+ * request there with a fresh SLA clock; rejection requires an explanation and
+ * leaves the request untouched.
+ */
+export async function decideReopenRequest(
+  input: z.infer<typeof decideReopenRequestSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = decideReopenRequestSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { reopenRequestId, decision, targetState, note } = parsed.data;
+
+    if (decision === "APPROVE" && !targetState) {
+      return { ok: false, error: "TARGET_STATE_REQUIRED" };
+    }
+    if (decision === "REJECT" && !note) {
+      return { ok: false, error: "REJECT_NOTE_REQUIRED" };
+    }
+
+    const reopenRequest = await prisma.requestReopenRequest.findUnique({
+      where: { id: reopenRequestId },
+      include: {
+        request: {
+          include: { serviceItem: { select: { slaHours: true } } },
+        },
+      },
+    });
+    if (!reopenRequest || reopenRequest.status !== "PENDING") {
+      return { ok: false, error: "NOT_FOUND" };
+    }
+    const request = reopenRequest.request;
+    if (!canReopenRequest(request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+    if (decision === "APPROVE" && !REOPEN_TARGET_STATES.includes(targetState!)) {
+      return { ok: false, error: "INVALID_TARGET_STATE" };
+    }
+
+    const now = new Date();
+
+    await prisma.$transaction(async (tx) => {
+      if (decision === "REJECT") {
+        await tx.requestReopenRequest.update({
+          where: { id: reopenRequestId },
+          data: {
+            status: "REJECTED",
+            decidedByUserId: session.id,
+            decisionNote: note ?? null,
+            decidedAt: now,
+          },
+        });
+      } else {
+        const updated = await tx.request.updateMany({
+          where: { id: request.id, state: request.state },
+          data: {
+            state: targetState!,
+            closedAt: null,
+            heldFromState: null,
+            slaPausedAt: null,
+            slaDueAt: freshSlaDueAt(now, request.serviceItem.slaHours),
+          },
+        });
+        if (updated.count === 0) {
+          throw new Error("CONFLICT");
+        }
+
+        await tx.requestEvent.create({
+          data: {
+            requestId: request.id,
+            fromState: request.state,
+            toState: targetState!,
+            actorUserId: session.id,
+            actorRole: session.roles[0] ?? "SYSTEM_ADMIN",
+            note: note ?? "Reopened after client request",
+            metadata: { reopenRequestId },
+          },
+        });
+
+        await tx.requestReopenRequest.update({
+          where: { id: reopenRequestId },
+          data: {
+            status: "APPROVED",
+            decidedByUserId: session.id,
+            decisionNote: note ?? null,
+            targetState: targetState!,
+            decidedAt: now,
+          },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: session.id,
+          actorRole: session.roles[0],
+          organisationId: request.organisationId,
+          action:
+            decision === "APPROVE" ? "request.reopen.approve" : "request.reopen.reject",
+          entityType: "Request",
+          entityId: request.id,
+          before: { state: request.state },
+          after: {
+            reopenRequestId,
+            decision,
+            targetState: decision === "APPROVE" ? targetState : undefined,
+            note,
+          },
+        },
+      });
+
+      await notifyReopenDecided(tx, {
+        approved: decision === "APPROVE",
+        requestId: request.id,
+        requestNo: request.requestNo,
+        organisationId: request.organisationId,
+        createdByUserId: request.createdByUserId,
+        decisionNote: note ?? null,
+      });
+    });
+
+    revalidatePath("/[locale]/admin/requests", "page");
+    revalidatePath(`/[locale]/admin/requests/${request.id}`, "page");
+    revalidatePath(`/[locale]/client/requests/${request.id}`, "page");
+
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    if (message === "CONFLICT") {
+      return { ok: false, error: "CONFLICT" };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const reopenRequestByAdminSchema = z.object({
+  requestId: z.string().min(1),
+  targetState: z.enum(REOPEN_TARGET_STATE_VALUES),
+  reason: z.string().trim().min(10).max(1000),
+});
+
+/**
+ * Direct admin override: reopens a CLOSED/CANCELLED request without waiting
+ * on a client ask. Recorded as a self-approved `RequestReopenRequest` so the
+ * override shows up in the same audit trail as client-initiated reopens.
+ */
+export async function reopenRequestByAdmin(
+  input: z.infer<typeof reopenRequestByAdminSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = reopenRequestByAdminSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { requestId, targetState, reason } = parsed.data;
+
+    if (!REOPEN_TARGET_STATES.includes(targetState)) {
+      return { ok: false, error: "INVALID_TARGET_STATE" };
+    }
+
+    const request = await prisma.request.findUnique({
+      where: { id: requestId },
+      include: { serviceItem: { select: { slaHours: true } } },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+    if (!canReopenRequest(request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    const pending = await prisma.requestReopenRequest.findFirst({
+      where: { requestId, status: "PENDING" },
+      select: { id: true },
+    });
+    if (pending) return { ok: false, error: "PENDING_REQUEST_EXISTS" };
+
+    const now = new Date();
+
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.request.updateMany({
+        where: { id: requestId, state: request.state },
+        data: {
+          state: targetState,
+          closedAt: null,
+          heldFromState: null,
+          slaPausedAt: null,
+          slaDueAt: freshSlaDueAt(now, request.serviceItem.slaHours),
+        },
+      });
+      if (updated.count === 0) {
+        throw new Error("CONFLICT");
+      }
+
+      const reopenRequest = await tx.requestReopenRequest.create({
+        data: {
+          requestId,
+          status: "APPROVED",
+          reason,
+          requestedByUserId: session.id,
+          decidedByUserId: session.id,
+          decisionNote: reason,
+          targetState,
+          decidedAt: now,
+        },
+      });
+
+      await tx.requestEvent.create({
+        data: {
+          requestId,
+          fromState: request.state,
+          toState: targetState,
+          actorUserId: session.id,
+          actorRole: session.roles[0] ?? "SYSTEM_ADMIN",
+          note: reason,
+          metadata: { reopenRequestId: reopenRequest.id, adminInitiated: true },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: session.id,
+          actorRole: session.roles[0],
+          organisationId: request.organisationId,
+          action: "request.reopen.admin",
+          entityType: "Request",
+          entityId: requestId,
+          before: { state: request.state },
+          after: { targetState, reason },
+        },
+      });
+
+      await notifyReopenDecided(tx, {
+        approved: true,
+        requestId,
+        requestNo: request.requestNo,
+        organisationId: request.organisationId,
+        createdByUserId: request.createdByUserId,
+        decisionNote: reason,
+      });
+    });
+
+    revalidatePath("/[locale]/admin/requests", "page");
+    revalidatePath(`/[locale]/admin/requests/${requestId}`, "page");
+    revalidatePath(`/[locale]/client/requests/${requestId}`, "page");
+
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    if (message === "CONFLICT") {
+      return { ok: false, error: "CONFLICT" };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
 const assignRequestSchema = z.object({
   requestId: z.string().min(1),
   userId: z.string().min(1).nullable(),
@@ -498,6 +825,15 @@ const internalCommentSchema = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 
+/** Extract distinct mentioned user IDs from `@[Full Name](userId)` tokens. */
+function extractMentionedUserIds(body: string): string[] {
+  const ids = new Set<string>();
+  for (const match of body.matchAll(/@\[[^\]]+\]\(([a-zA-Z0-9_-]+)\)/g)) {
+    ids.add(match[1]);
+  }
+  return [...ids];
+}
+
 export async function addAdminInternalComment(
   input: z.infer<typeof internalCommentSchema>,
 ): Promise<ActionResult<{ commentId: string }>> {
@@ -509,18 +845,68 @@ export async function addAdminInternalComment(
 
     const request = await prisma.request.findUnique({
       where: { id: parsed.data.requestId },
-      select: { id: true, organisationId: true },
+      select: { id: true, requestNo: true, organisationId: true },
     });
     if (!request) return { ok: false, error: "NOT_FOUND" };
 
-    const comment = await prisma.requestComment.create({
-      data: {
-        requestId: request.id,
-        authorUserId: session.id,
-        direction: "INTERNAL",
-        bodyEn: parsed.data.body,
-        bodyAr: parsed.data.body,
-      },
+    const candidateIds = extractMentionedUserIds(parsed.data.body).filter(
+      (id) => id !== session.id,
+    );
+    const mentionedUsers = candidateIds.length
+      ? await prisma.user.findMany({
+          where: {
+            id: { in: candidateIds },
+            status: "ACTIVE",
+            organisation: { type: "ATLAS" },
+          },
+          select: { id: true },
+        })
+      : [];
+
+    const comment = await prisma.$transaction(async (tx) => {
+      const created = await tx.requestComment.create({
+        data: {
+          requestId: request.id,
+          authorUserId: session.id,
+          direction: "INTERNAL",
+          bodyEn: parsed.data.body,
+          bodyAr: parsed.data.body,
+        },
+      });
+
+      if (mentionedUsers.length > 0) {
+        await tx.requestCommentMention.createMany({
+          data: mentionedUsers.map((u) => ({
+            commentId: created.id,
+            userId: u.id,
+          })),
+        });
+
+        const { notify } = await import("@/server/notifications/notify");
+        const { notificationCopy } = await import(
+          "@/server/notifications/copy"
+        );
+        const copy = notificationCopy("NOTE_MENTION", {
+          requestNo: request.requestNo,
+          authorName: session.fullNameEn,
+        });
+        await notify(
+          {
+            event: "NOTE_MENTION",
+            recipients: mentionedUsers.map((u) => u.id),
+            data: {
+              requestId: request.id,
+              requestNo: request.requestNo,
+              link: `/admin/requests/${request.id}`,
+              organisationId: request.organisationId,
+              ...copy,
+            },
+          },
+          tx,
+        );
+      }
+
+      return created;
     });
 
     await writeAuditLog({
@@ -731,6 +1117,55 @@ export async function addAtlasClientComment(
     revalidatePath(`/[locale]/client/requests/${request.id}`, "page");
 
     return { ok: true, data: { commentId: comment.id } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const markRequestCommentsReadSchema = z.object({ requestId: z.string().min(1) });
+
+/** Marks the client's messages and the matching in-app notification read once staff open the chat thread. */
+export async function markAdminRequestCommentsRead(
+  input: z.infer<typeof markRequestCommentsReadSchema>,
+): Promise<ActionResult<{ ok: true }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = markRequestCommentsReadSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const request = await prisma.request.findUnique({
+      where: { id: parsed.data.requestId },
+      select: { id: true },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+
+    await prisma.$transaction([
+      prisma.requestComment.updateMany({
+        where: {
+          requestId: request.id,
+          direction: "CLIENT_TO_ATLAS",
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      }),
+      prisma.notification.updateMany({
+        where: {
+          userId: session.id,
+          link: `/admin/requests/${request.id}`,
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      }),
+    ]);
+
+    revalidatePath(`/[locale]/admin/requests/${request.id}`, "page");
+    revalidatePath("/[locale]/admin/requests", "page");
+    return { ok: true, data: { ok: true } };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {

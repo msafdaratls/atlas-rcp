@@ -62,6 +62,30 @@ export const REQUEST_TRANSITIONS: Record<RequestState, RequestState[]> = {
 const ON_HOLD_RESUME_FALLBACK: RequestState = "UNDER_INTAKE_REVIEW";
 
 /**
+ * Terminal states from which a request may be reopened. Reopening is a
+ * deliberate exception to the forward-only `REQUEST_TRANSITIONS` graph —
+ * modeled separately (via `RequestReopenRequest`) rather than folded into it,
+ * so ordinary staff transitions stay auditable and simple.
+ */
+export const REOPENABLE_STATES: RequestState[] = ["CLOSED", "CANCELLED"];
+
+/** Active stages a reopened request may resume into. Excludes DRAFT, ON_HOLD, and the terminal states themselves. */
+export const REOPEN_TARGET_STATES: RequestState[] = [
+  "SUBMITTED",
+  "UNDER_INTAKE_REVIEW",
+  "RETURNED_TO_CLIENT",
+  "ACCEPTED",
+  "ASSESSMENT_QUEUED",
+  "ASSESSMENT_RUNNING",
+  "TECHNICAL_REVIEW",
+  "DECISION",
+];
+
+export function canReopenRequest(state: RequestState): boolean {
+  return REOPENABLE_STATES.includes(state);
+}
+
+/**
  * Resolves staff-visible transition targets for a request, including ON_HOLD
  * resume (heldFromState or UNDER_INTAKE_REVIEW) plus CANCELLED.
  */
@@ -297,25 +321,18 @@ export async function listAdminRequests(input: {
     ]);
 
     const unreadCounts = rows.length
-      ? await prisma.$queryRaw<Array<{ requestId: string; unread: bigint }>>`
-          SELECT c."requestId" AS "requestId", COUNT(*)::bigint AS unread
-          FROM "RequestComment" c
-          WHERE c."requestId" IN (${Prisma.join(rows.map((r) => r.id))})
-            AND c.direction = 'CLIENT_TO_ATLAS'
-            AND c."createdAt" > COALESCE(
-              (
-                SELECT MAX(c2."createdAt")
-                FROM "RequestComment" c2
-                WHERE c2."requestId" = c."requestId"
-                  AND c2.direction = 'ATLAS_TO_CLIENT'
-              ),
-              '-infinity'::timestamp
-            )
-          GROUP BY c."requestId"
-        `
+      ? await prisma.requestComment.groupBy({
+          by: ["requestId"],
+          where: {
+            requestId: { in: rows.map((r) => r.id) },
+            direction: "CLIENT_TO_ATLAS",
+            readAt: null,
+          },
+          _count: { _all: true },
+        })
       : [];
     const unreadByRequestId = new Map(
-      unreadCounts.map((u) => [u.requestId, Number(u.unread)]),
+      unreadCounts.map((u) => [u.requestId, u._count._all]),
     );
 
     return {
@@ -366,6 +383,15 @@ export type AdminRequestDetail = {
   updatedAt: string;
   heldFromState: RequestState | null;
   allowedTransitions: RequestState[];
+  canReopen: boolean;
+  reopenTargetStates: RequestState[];
+  pendingReopenRequest: {
+    id: string;
+    reason: string;
+    requestedAt: string;
+    requestedByNameEn: string;
+    requestedByNameAr: string;
+  } | null;
   organisation: {
     id: string;
     nameEn: string;
@@ -437,6 +463,7 @@ export type AdminRequestDetail = {
     authorNameEn: string;
     authorNameAr: string;
     createdAt: string;
+    mentions: Array<{ userId: string; nameEn: string; nameAr: string }>;
   }>;
 };
 
@@ -493,12 +520,27 @@ export async function getAdminRequestDetail(
         comments: {
           include: {
             author: { select: { fullNameEn: true, fullNameAr: true } },
+            mentions: {
+              include: {
+                user: { select: { id: true, fullNameEn: true, fullNameAr: true } },
+              },
+            },
           },
           orderBy: { createdAt: "asc" },
+        },
+        reopenRequests: {
+          where: { status: "PENDING" },
+          include: {
+            requestedBy: { select: { fullNameEn: true, fullNameAr: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 1,
         },
       },
     });
     if (!request) return null;
+
+    const pendingReopenRequest = request.reopenRequests[0] ?? null;
 
     return {
       id: request.id,
@@ -530,6 +572,17 @@ export async function getAdminRequestDetail(
           heldFromState: request.heldFromState,
         }),
       ),
+      canReopen: canReopenRequest(request.state) && !pendingReopenRequest,
+      reopenTargetStates: REOPEN_TARGET_STATES,
+      pendingReopenRequest: pendingReopenRequest
+        ? {
+            id: pendingReopenRequest.id,
+            reason: pendingReopenRequest.reason,
+            requestedAt: pendingReopenRequest.createdAt.toISOString(),
+            requestedByNameEn: pendingReopenRequest.requestedBy.fullNameEn,
+            requestedByNameAr: pendingReopenRequest.requestedBy.fullNameAr,
+          }
+        : null,
       organisation: request.organisation,
       serviceItem: {
         id: request.serviceItem.id,
@@ -592,6 +645,11 @@ export async function getAdminRequestDetail(
         authorNameEn: c.author.fullNameEn,
         authorNameAr: c.author.fullNameAr,
         createdAt: c.createdAt.toISOString(),
+        mentions: c.mentions.map((m) => ({
+          userId: m.userId,
+          nameEn: m.user.fullNameEn,
+          nameAr: m.user.fullNameAr,
+        })),
       })),
     };
   } catch {

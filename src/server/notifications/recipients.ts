@@ -234,6 +234,34 @@ export async function resolveRecipients(
       return [];
     }
 
+    case "REOPEN_REQUESTED":
+      return activeUsersByRoles(tx, ["INTAKE_OFFICER", "SYSTEM_ADMIN"], "ATLAS");
+
+    case "REOPEN_DECIDED": {
+      const ids = new Set<string>();
+      if (ctx.createdByUserId) ids.add(ctx.createdByUserId);
+      if (ctx.organisationId) {
+        const owners = await activeUsersByRoles(
+          tx,
+          ["CLIENT_OWNER", "CLIENT_ADMIN"],
+          "CLIENT",
+          ctx.organisationId,
+        );
+        for (const o of owners) ids.add(o.id);
+      }
+      if (ids.size === 0) return [];
+      return tx.user.findMany({
+        where: { id: { in: [...ids] }, status: "ACTIVE" },
+        select: {
+          id: true,
+          email: true,
+          locale: true,
+          fullNameEn: true,
+          fullNameAr: true,
+        },
+      });
+    }
+
     case "PAYMENT_REJECTED":
     case "STATEMENT_OVERDUE":
     case "CREDIT_LIMIT": {

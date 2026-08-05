@@ -18,8 +18,12 @@ export type NotificationCopyKey =
   | "SLA_BREACHED"
   | "COMMENT_ADDED_FROM_CLIENT"
   | "COMMENT_ADDED_FROM_ATLAS"
+  | "NOTE_MENTION"
   | "CREDIT_LIMIT"
-  | "STATEMENT_OVERDUE";
+  | "STATEMENT_OVERDUE"
+  | "REOPEN_REQUESTED"
+  | "REOPEN_DECIDED_APPROVED"
+  | "REOPEN_DECIDED_REJECTED";
 
 export type NotificationCopyVars = {
   requestNo?: string;
@@ -28,6 +32,7 @@ export type NotificationCopyVars = {
   reason?: string;
   message?: string;
   slaHours?: string;
+  authorName?: string;
 };
 
 export type NotificationCopy = {
@@ -149,6 +154,14 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
     ctaLabelEn: "Open request",
     ctaLabelAr: "فتح الطلب",
   },
+  NOTE_MENTION: {
+    titleEn: "You were mentioned",
+    titleAr: "تمت الإشارة إليك",
+    bodyEn: "{authorName} mentioned you in a note on {requestNo}.",
+    bodyAr: "أشار إليك {authorName} في ملاحظة على الطلب {requestNo}.",
+    ctaLabelEn: "Open request",
+    ctaLabelAr: "فتح الطلب",
+  },
   CREDIT_LIMIT: {
     titleEn: "Credit limit reached",
     titleAr: "تم الوصول إلى الحد الائتماني",
@@ -166,6 +179,30 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
     bodyAr: "الفاتورة المبدئية {invoiceNo} متأخرة (الرصيد المفتوح {amount} ر.س).",
     ctaLabelEn: "View statement",
     ctaLabelAr: "عرض كشف الحساب",
+  },
+  REOPEN_REQUESTED: {
+    titleEn: "Reopen requested",
+    titleAr: "طلب إعادة فتح",
+    bodyEn: "{requestNo}: The client asked to reopen this closed request.",
+    bodyAr: "{requestNo}: طلب العميل إعادة فتح هذا الطلب المغلق.",
+    ctaLabelEn: "Review request",
+    ctaLabelAr: "مراجعة الطلب",
+  },
+  REOPEN_DECIDED_APPROVED: {
+    titleEn: "Reopen approved",
+    titleAr: "تمت الموافقة على إعادة الفتح",
+    bodyEn: "{requestNo}: Your reopen request was approved. The request is active again.",
+    bodyAr: "{requestNo}: تمت الموافقة على طلب إعادة الفتح. الطلب نشط من جديد.",
+    ctaLabelEn: "Open request",
+    ctaLabelAr: "فتح الطلب",
+  },
+  REOPEN_DECIDED_REJECTED: {
+    titleEn: "Reopen declined",
+    titleAr: "تم رفض إعادة الفتح",
+    bodyEn: "{requestNo}: Your reopen request was declined. {reason}",
+    bodyAr: "{requestNo}: تم رفض طلب إعادة الفتح. {reason}",
+    ctaLabelEn: "Open request",
+    ctaLabelAr: "فتح الطلب",
   },
 };
 

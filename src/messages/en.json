@@ -677,8 +677,9 @@
       "cancelNotePlaceholder": "Explain why this request is being cancelled...",
       "cancelSubmit": "Cancel request",
       "comment": "Internal note",
-      "commentPlaceholder": "Visible to Atlas staff only.",
+      "commentPlaceholder": "Visible to Atlas staff only. Type @ to mention a colleague.",
       "commentSubmit": "Add note",
+      "commentMentionEmpty": "No matching staff.",
       "success": "Request updated",
       "documents": "Documents",
       "documentsEmpty": "No documents.",
@@ -687,6 +688,7 @@
       "submittedAt": "Submitted {date}",
       "clientComments": "Client communication",
       "internalComments": "Internal notes",
+      "message": "Message",
       "commentsEmpty": "No messages with the client yet.",
       "internalCommentsEmpty": "No internal notes yet.",
       "sendToClient": "Send to client",
@@ -697,6 +699,20 @@
       "confirmSendBody": "This will be emailed to the client immediately and cannot be recalled or edited afterward.",
       "confirmSendCancel": "Keep editing",
       "confirmSendConfirm": "Send message",
+      "reopen": {
+        "title": "Reopen request",
+        "requestedBy": "Requested by {name}",
+        "approve": "Approve & reopen",
+        "reject": "Reject",
+        "adminAction": "Reopen request",
+        "approveTitle": "Approve reopen request",
+        "rejectTitle": "Reject reopen request",
+        "adminTitle": "Reopen this request",
+        "targetState": "Resume at stage",
+        "noteOptional": "Note to client (optional)",
+        "rejectNote": "Reason for rejecting",
+        "reasonLabel": "Reason"
+      },
       "errors": {
         "FORBIDDEN": "You do not have permission.",
         "UNAUTHORIZED": "Sign in again to continue.",
@@ -707,7 +723,11 @@
         "VALIDATION": "Check the form and try again.",
         "SAVE_FAILED": "Could not save. Try again.",
         "INVALID_STATE": "You can't message on this request yet.",
-        "CONFLICT": "This request changed while you were working. Refresh and try again."
+        "CONFLICT": "This request changed while you were working. Refresh and try again.",
+        "TARGET_STATE_REQUIRED": "Choose a stage to resume this request at.",
+        "REJECT_NOTE_REQUIRED": "Explain why the reopen request is being rejected.",
+        "INVALID_TARGET_STATE": "That stage is not a valid reopen destination.",
+        "PENDING_REQUEST_EXISTS": "There is already a pending reopen request to decide."
       },
       "assessment": {
         "title": "Technical assessment",
@@ -1229,6 +1249,7 @@
     "documentsEmpty": "No documents uploaded yet.",
     "comments": "Messages",
     "commentsEmpty": "No messages yet.",
+    "message": "Message",
     "sendMessage": "Send message",
     "messagePlaceholder": "Write a message to Atlas...",
     "messageSent": "Message sent",
@@ -1255,6 +1276,21 @@
       "save": "Save changes",
       "saved": "Product details updated"
     },
+    "reopen": {
+      "title": "Reopen this request",
+      "body": "This request is closed. You can ask Atlas to reopen it if you need to resubmit or correct something.",
+      "action": "Request reopening",
+      "pending": "Your reopen request is awaiting Atlas review.",
+      "rejected": "Your last reopen request was declined.",
+      "submitted": "Reopen request sent to Atlas",
+      "dialogTitle": "Request reopening",
+      "dialogBody": "Explain why this closed request should be reopened. Atlas staff will review and decide.",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Describe why this request needs to be reopened",
+      "reasonTooShort": "Please write at least 10 characters.",
+      "cancel": "Cancel",
+      "submit": "Send request"
+    },
     "errors": {
       "SAVE_FAILED": "Could not save. Try again.",
       "NOT_FOUND": "Request not found.",
@@ -1274,7 +1310,8 @@
       "FAULT_MISSING": "Cannot resubmit — the return is missing fault attribution. Contact Atlas.",
       "NON_STACKABLE": "Remove the existing coupon before applying another.",
       "INFECTED_FILE": "A document failed security scanning. Remove it and upload again.",
-      "AV_UNAVAILABLE": "Security scanning is temporarily unavailable. Try again in a moment."
+      "AV_UNAVAILABLE": "Security scanning is temporarily unavailable. Try again in a moment.",
+      "ALREADY_PENDING": "You already have a reopen request awaiting review."
     }
   },
   "reports": {

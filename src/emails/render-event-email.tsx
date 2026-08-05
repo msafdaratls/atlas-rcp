@@ -120,6 +120,8 @@ export function emailSubject(
         return `تجاوز مستوى الخدمة${no}`;
       case "COMMENT_ADDED":
         return `تعليق جديد${no}`;
+      case "NOTE_MENTION":
+        return `تمت الإشارة إليك${no}`;
       default:
         return `${payload.titleAr}${no}`;
     }
@@ -151,6 +153,8 @@ export function emailSubject(
       return `SLA breached${no}`;
     case "COMMENT_ADDED":
       return `New comment${no}`;
+    case "NOTE_MENTION":
+      return `You were mentioned${no}`;
     default:
       return `${payload.titleEn}${no}`;
   }

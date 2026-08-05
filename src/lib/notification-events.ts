@@ -12,8 +12,11 @@ export const NOTIFICATION_EVENTS = [
   { type: "SLA_AT_RISK", legalFinancial: false },
   { type: "SLA_BREACHED", legalFinancial: false },
   { type: "COMMENT_ADDED", legalFinancial: false },
+  { type: "NOTE_MENTION", legalFinancial: false },
   { type: "STATEMENT_OVERDUE", legalFinancial: true },
   { type: "CREDIT_LIMIT", legalFinancial: true },
+  { type: "REOPEN_REQUESTED", legalFinancial: false },
+  { type: "REOPEN_DECIDED", legalFinancial: false },
 ] as const;
 
 export type NotificationEventType =

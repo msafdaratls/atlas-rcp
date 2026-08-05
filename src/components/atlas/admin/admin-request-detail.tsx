@@ -1,6 +1,8 @@
 "use client";
 
 import { AssessmentPanel } from "@/components/atlas/admin/assessment-panel";
+import { MentionTextarea } from "@/components/atlas/admin/mention-textarea";
+import { renderMentionBody } from "@/components/atlas/admin/mention-text";
 import { DocumentCard, type DocumentVersionView } from "@/components/atlas/document-card";
 import { MoneyValue } from "@/components/atlas/money-value";
 import { SlaMeter } from "@/components/atlas/sla-meter";
@@ -28,6 +30,9 @@ import {
   addAdminInternalComment,
   addAtlasClientComment,
   assignRequest,
+  decideReopenRequest,
+  markAdminRequestCommentsRead,
+  reopenRequestByAdmin,
   transitionAdminRequest,
 } from "@/server/admin/actions";
 import { hasCheckItems } from "@/lib/assessment";
@@ -52,21 +57,34 @@ const ASSESSMENT_EDIT_STATES: RequestState[] = [
   "TECHNICAL_REVIEW",
   "DECISION",
 ];
+
+type ReopenTargetState =
+  | "SUBMITTED"
+  | "UNDER_INTAKE_REVIEW"
+  | "RETURNED_TO_CLIENT"
+  | "ACCEPTED"
+  | "ASSESSMENT_QUEUED"
+  | "ASSESSMENT_RUNNING"
+  | "TECHNICAL_REVIEW"
+  | "DECISION";
 import {
   Ban,
   CheckCircle2,
   FileCheck2,
   Loader2,
+  MessageSquare,
   MessageSquarePlus,
   PauseCircle,
   RotateCcw,
   Send,
+  Unlock,
   UserRoundCog,
+  XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 const RETURN_REASON_CODES: ReturnReasonCode[] = [
@@ -152,14 +170,36 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const [cancelNote, setCancelNote] = useState("");
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
+  const [reopenDecidePending, startReopenDecideTransition] = useTransition();
+  const [approveReopenOpen, setApproveReopenOpen] = useState(false);
+  const [approveReopenTarget, setApproveReopenTarget] = useState<ReopenTargetState | "">("");
+  const [approveReopenNote, setApproveReopenNote] = useState("");
+  const [rejectReopenOpen, setRejectReopenOpen] = useState(false);
+  const [rejectReopenNote, setRejectReopenNote] = useState("");
+
+  const [adminReopenOpen, setAdminReopenOpen] = useState(false);
+  const [adminReopenTarget, setAdminReopenTarget] = useState<ReopenTargetState | "">("");
+  const [adminReopenReason, setAdminReopenReason] = useState("");
+  const [adminReopenPending, startAdminReopenTransition] = useTransition();
+
   const [commentBody, setCommentBody] = useState("");
   const [commentPending, startCommentTransition] = useTransition();
 
   const [clientMessageBody, setClientMessageBody] = useState("");
   const [clientMessagePending, startClientMessageTransition] = useTransition();
   const [clientMessageConfirmOpen, setClientMessageConfirmOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const canMessage = data.state !== "DRAFT" && data.state !== "CANCELLED";
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    void markAdminRequestCommentsRead({ requestId: data.id }).then(
+      (result) => {
+        if (result.ok) router.refresh();
+      },
+    );
+  }, [chatOpen, data.id, router]);
 
   const canReturn = data.allowedTransitions.includes("RETURNED_TO_CLIENT");
   const canCancel = data.allowedTransitions.includes("CANCELLED");
@@ -237,6 +277,75 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
       return;
     }
     runTransition("CANCELLED", { note });
+  }
+
+  function submitApproveReopen() {
+    if (!data.pendingReopenRequest || !approveReopenTarget) {
+      toast.error(t("errors.TARGET_STATE_REQUIRED"));
+      return;
+    }
+    startReopenDecideTransition(async () => {
+      const result = await decideReopenRequest({
+        reopenRequestId: data.pendingReopenRequest!.id,
+        decision: "APPROVE",
+        targetState: approveReopenTarget,
+        note: approveReopenNote.trim() || undefined,
+      });
+      if (!result.ok) {
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("success"));
+      setApproveReopenOpen(false);
+      setApproveReopenTarget("");
+      setApproveReopenNote("");
+      router.refresh();
+    });
+  }
+
+  function submitRejectReopen() {
+    if (!data.pendingReopenRequest || rejectReopenNote.trim().length === 0) {
+      toast.error(t("errors.REJECT_NOTE_REQUIRED"));
+      return;
+    }
+    startReopenDecideTransition(async () => {
+      const result = await decideReopenRequest({
+        reopenRequestId: data.pendingReopenRequest!.id,
+        decision: "REJECT",
+        note: rejectReopenNote.trim(),
+      });
+      if (!result.ok) {
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("success"));
+      setRejectReopenOpen(false);
+      setRejectReopenNote("");
+      router.refresh();
+    });
+  }
+
+  function submitAdminReopen() {
+    if (!adminReopenTarget || adminReopenReason.trim().length < 10) {
+      toast.error(t("errors.VALIDATION"));
+      return;
+    }
+    startAdminReopenTransition(async () => {
+      const result = await reopenRequestByAdmin({
+        requestId: data.id,
+        targetState: adminReopenTarget,
+        reason: adminReopenReason.trim(),
+      });
+      if (!result.ok) {
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("success"));
+      setAdminReopenOpen(false);
+      setAdminReopenTarget("");
+      setAdminReopenReason("");
+      router.refresh();
+    });
   }
 
   function submitComment() {
@@ -341,12 +450,90 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
             </div>
           </div>
         </div>
-        <SlaMeter
-          dueAt={data.slaDueAt}
-          state={data.state}
-          startedAt={data.submittedAt}
-        />
+        <div className="flex flex-col items-end justify-between gap-3">
+          <SlaMeter
+            dueAt={data.slaDueAt}
+            state={data.state}
+            startedAt={data.submittedAt}
+          />
+          {canMessage ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setChatOpen(true)}
+            >
+              <MessageSquare className="size-4" />
+              {t("message")}
+            </Button>
+          ) : null}
+        </div>
       </div>
+
+      <Dialog open={chatOpen} onOpenChange={setChatOpen}>
+        <DialogContent className="flex max-h-[80vh] flex-col sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("clientComments")}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 space-y-3 overflow-y-auto">
+            {clientComments.length === 0 ? (
+              <p className="text-sm text-ink-500">{t("commentsEmpty")}</p>
+            ) : (
+              <ul className="space-y-3">
+                {clientComments.map((c) => (
+                  <li
+                    key={c.id}
+                    className="rounded-lg border border-line bg-surface p-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-ink-900">
+                        {locale === "ar" ? c.authorNameAr : c.authorNameEn}
+                      </p>
+                      <time className="font-data text-xs text-ink-500" dir="ltr">
+                        {c.createdAt.slice(0, 16).replace("T", " ")}
+                      </time>
+                    </div>
+                    <p className="mt-2 text-sm text-ink-800">
+                      {locale === "ar"
+                        ? (c.bodyAr ?? c.bodyEn)
+                        : (c.bodyEn ?? c.bodyAr)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {canMessage ? (
+            <div className="space-y-2 border-t border-line pt-3">
+              <Textarea
+                id="chat-message"
+                value={clientMessageBody}
+                onChange={(e) =>
+                  setClientMessageBody(e.target.value.slice(0, 2000))
+                }
+                placeholder={t("messagePlaceholder")}
+                maxLength={2000}
+                rows={2}
+              />
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-data text-xs text-ink-500" dir="ltr">
+                  {t("messageCharCount", { count: clientMessageBody.length })}
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    clientMessagePending || clientMessageBody.trim().length === 0
+                  }
+                  onClick={() => setClientMessageConfirmOpen(true)}
+                >
+                  <Send className="size-4" />
+                  {t("sendToClient")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       {data.allowedTransitions.length > 0 ? (
         <section className="space-y-4 rounded-lg border border-line bg-surface p-4">
@@ -407,6 +594,221 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
           ) : null}
         </section>
       ) : null}
+
+      {data.pendingReopenRequest || data.canReopen ? (
+        <section className="space-y-3 rounded-lg border border-line bg-surface p-4">
+          <h2 className="text-sm font-semibold text-ink-900">
+            {t("reopen.title")}
+          </h2>
+
+          {data.pendingReopenRequest ? (
+            <div className="space-y-2 rounded-md border border-state-warn/40 bg-[color-mix(in_srgb,var(--state-warn)_8%,white)] p-3">
+              <p className="text-sm text-ink-800">
+                {t("reopen.requestedBy", {
+                  name:
+                    locale === "ar"
+                      ? data.pendingReopenRequest.requestedByNameAr
+                      : data.pendingReopenRequest.requestedByNameEn,
+                })}
+              </p>
+              <p className="text-sm text-ink-800">
+                {data.pendingReopenRequest.reason}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setApproveReopenOpen(true)}
+                >
+                  <Unlock className="size-4" />
+                  {t("reopen.approve")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-state-bad/40 text-state-bad hover:bg-[color-mix(in_srgb,var(--state-bad)_6%,white)]"
+                  onClick={() => setRejectReopenOpen(true)}
+                >
+                  <XCircle className="size-4" />
+                  {t("reopen.reject")}
+                </Button>
+              </div>
+            </div>
+          ) : data.canReopen ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setAdminReopenOpen(true)}
+            >
+              <Unlock className="size-4" />
+              {t("reopen.adminAction")}
+            </Button>
+          ) : null}
+        </section>
+      ) : null}
+
+      <Dialog open={approveReopenOpen} onOpenChange={setApproveReopenOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("reopen.approveTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>{t("reopen.targetState")}</Label>
+              <Select
+                value={approveReopenTarget}
+                onValueChange={(v) => setApproveReopenTarget(v as ReopenTargetState)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("reopen.targetState")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.reopenTargetStates.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {tStates(s)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="approve-reopen-note">{t("reopen.noteOptional")}</Label>
+              <Textarea
+                id="approve-reopen-note"
+                value={approveReopenNote}
+                onChange={(e) => setApproveReopenNote(e.target.value)}
+                rows={3}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={reopenDecidePending}
+              onClick={() => setApproveReopenOpen(false)}
+            >
+              {t("returnCancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={reopenDecidePending || !approveReopenTarget}
+              onClick={submitApproveReopen}
+            >
+              {reopenDecidePending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Unlock className="size-4" />
+              )}
+              {t("reopen.approve")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectReopenOpen} onOpenChange={setRejectReopenOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("reopen.rejectTitle")}</DialogTitle>
+          </DialogHeader>
+          <div>
+            <Label htmlFor="reject-reopen-note">{t("reopen.rejectNote")}</Label>
+            <Textarea
+              id="reject-reopen-note"
+              value={rejectReopenNote}
+              onChange={(e) => setRejectReopenNote(e.target.value)}
+              rows={3}
+              className="mt-1"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={reopenDecidePending}
+              onClick={() => setRejectReopenOpen(false)}
+            >
+              {t("returnCancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={reopenDecidePending || rejectReopenNote.trim().length === 0}
+              onClick={submitRejectReopen}
+            >
+              {reopenDecidePending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <XCircle className="size-4" />
+              )}
+              {t("reopen.reject")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={adminReopenOpen} onOpenChange={setAdminReopenOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("reopen.adminTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>{t("reopen.targetState")}</Label>
+              <Select
+                value={adminReopenTarget}
+                onValueChange={(v) => setAdminReopenTarget(v as ReopenTargetState)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("reopen.targetState")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.reopenTargetStates.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {tStates(s)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="admin-reopen-reason">{t("reopen.reasonLabel")}</Label>
+              <Textarea
+                id="admin-reopen-reason"
+                value={adminReopenReason}
+                onChange={(e) => setAdminReopenReason(e.target.value)}
+                rows={3}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={adminReopenPending}
+              onClick={() => setAdminReopenOpen(false)}
+            >
+              {t("returnCancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={adminReopenPending || !adminReopenTarget}
+              onClick={submitAdminReopen}
+            >
+              {adminReopenPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Unlock className="size-4" />
+              )}
+              {t("reopen.adminAction")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {canReturn ? (
         <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
@@ -769,7 +1171,11 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                   </time>
                 </div>
                 <p className="mt-2 text-sm text-ink-800">
-                  {locale === "ar" ? (c.bodyAr ?? c.bodyEn) : (c.bodyEn ?? c.bodyAr)}
+                  {renderMentionBody(
+                    locale === "ar" ? (c.bodyAr ?? c.bodyEn ?? "") : (c.bodyEn ?? c.bodyAr ?? ""),
+                    c.mentions,
+                    locale === "ar" ? "ar" : "en",
+                  )}
                 </p>
               </li>
             ))}
@@ -777,12 +1183,15 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
         )}
         <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
           <Label htmlFor="internal-comment">{t("comment")}</Label>
-          <Textarea
+          <MentionTextarea
             id="internal-comment"
             value={commentBody}
-            onChange={(e) => setCommentBody(e.target.value)}
+            onChange={setCommentBody}
+            staff={assignableStaff}
             placeholder={t("commentPlaceholder")}
             rows={3}
+            locale={locale === "ar" ? "ar" : "en"}
+            emptyLabel={t("commentMentionEmpty")}
           />
           <Button
             type="button"

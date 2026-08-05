@@ -27,6 +27,8 @@ import { parseAttrSchema } from "@/lib/attr-schema";
 import {
   addClientRequestComment,
   discardDraftRequest,
+  markClientRequestCommentsRead,
+  requestReopen,
   resubmitReturnedRequest,
   saveDraftProductDetails,
   uploadRequestDocument,
@@ -37,6 +39,8 @@ import { arSA, enGB } from "date-fns/locale";
 import {
   FilePlus2,
   Loader2,
+  Lock,
+  MessageSquare,
   Receipt,
   RotateCcw,
   Send,
@@ -46,7 +50,7 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 type Props = { data: ClientRequestDetail };
@@ -78,6 +82,11 @@ export function ClientRequestDetailPanel({ data }: Props) {
 
   const [messageBody, setMessageBody] = useState("");
   const [messagePending, startMessageTransition] = useTransition();
+  const [chatOpen, setChatOpen] = useState(false);
+
+  const [reopenOpen, setReopenOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [reopenPending, setReopenPending] = useState(false);
 
   const [productNameEn, setProductNameEn] = useState(data.productNameEn);
   const [productNameAr, setProductNameAr] = useState(data.productNameAr);
@@ -159,6 +168,29 @@ export function ClientRequestDetailPanel({ data }: Props) {
     });
   };
 
+  const handleRequestReopen = () => {
+    if (reopenReason.trim().length < 10) {
+      toast.error(t("reopen.reasonTooShort"));
+      return;
+    }
+    setReopenPending(true);
+    startTransition(async () => {
+      const result = await requestReopen({
+        requestId: data.id,
+        reason: reopenReason.trim(),
+      });
+      setReopenPending(false);
+      if (!result.ok) {
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+        return;
+      }
+      setReopenOpen(false);
+      setReopenReason("");
+      toast.success(t("reopen.submitted"));
+      router.refresh();
+    });
+  };
+
   const canMessage = data.state !== "DRAFT" && data.state !== "CANCELLED";
 
   const handleSendMessage = () => {
@@ -178,6 +210,15 @@ export function ClientRequestDetailPanel({ data }: Props) {
       router.refresh();
     });
   };
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    void markClientRequestCommentsRead({ requestId: data.id }).then(
+      (result) => {
+        if (result.ok) router.refresh();
+      },
+    );
+  }, [chatOpen, data.id, router]);
 
   const handleUpload = async (requiredDocumentId: string, label: string) => {
     const input = fileRefs.current[requiredDocumentId];
@@ -226,12 +267,82 @@ export function ClientRequestDetailPanel({ data }: Props) {
             })}
           </p>
         </div>
-        <SlaMeter
-          dueAt={data.slaDueAt}
-          state={data.state}
-          startedAt={data.submittedAt}
-        />
+        <div className="flex items-center gap-3">
+          <SlaMeter
+            dueAt={data.slaDueAt}
+            state={data.state}
+            startedAt={data.submittedAt}
+          />
+          {canMessage ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setChatOpen(true)}
+            >
+              <MessageSquare className="size-4" />
+              {t("message")}
+            </Button>
+          ) : null}
+        </div>
       </div>
+
+      <Dialog open={chatOpen} onOpenChange={setChatOpen}>
+        <DialogContent className="flex max-h-[80vh] flex-col sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("comments")}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 space-y-3 overflow-y-auto">
+            {data.comments.length === 0 ? (
+              <p className="text-sm text-ink-500">{t("commentsEmpty")}</p>
+            ) : (
+              <ul className="space-y-3">
+                {data.comments.map((c) => (
+                  <li
+                    key={c.id}
+                    className="rounded-lg border border-line bg-surface p-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-ink-900">
+                        {locale === "ar" ? c.authorNameAr : c.authorNameEn}
+                      </p>
+                      <time className="font-data text-xs text-ink-500" dir="ltr">
+                        {c.createdAt.slice(0, 16).replace("T", " ")}
+                      </time>
+                    </div>
+                    <p className="mt-2 text-sm text-ink-800">
+                      {locale === "ar"
+                        ? (c.bodyAr ?? c.bodyEn)
+                        : (c.bodyEn ?? c.bodyAr)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="space-y-2 border-t border-line pt-3">
+            <Textarea
+              id="chat-message"
+              value={messageBody}
+              onChange={(e) => setMessageBody(e.target.value)}
+              placeholder={t("messagePlaceholder")}
+              rows={2}
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={messagePending || messageBody.trim().length === 0}
+              onClick={handleSendMessage}
+            >
+              {messagePending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+              {t("sendMessage")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {data.state === "DRAFT" ? (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-alt p-4">
@@ -646,6 +757,83 @@ export function ClientRequestDetailPanel({ data }: Props) {
           </Button>
         </div>
       ) : null}
+
+      {data.state === "CLOSED" || data.state === "CANCELLED" ? (
+        <section className="rounded-lg border border-line bg-surface-alt p-4">
+          <div className="flex items-center gap-2">
+            <Lock className="size-4 text-ink-500" />
+            <h2 className="text-sm font-semibold text-ink-900">
+              {t("reopen.title")}
+            </h2>
+          </div>
+
+          {data.reopenRequest?.status === "PENDING" ? (
+            <p className="mt-2 text-sm text-ink-500">{t("reopen.pending")}</p>
+          ) : (
+            <>
+              {data.reopenRequest?.status === "REJECTED" ? (
+                <p className="mt-2 text-sm text-state-warn">
+                  {t("reopen.rejected")}
+                  {data.reopenRequest.decisionNote
+                    ? ` ${data.reopenRequest.decisionNote}`
+                    : ""}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-ink-500">{t("reopen.body")}</p>
+              )}
+              {data.canRequestReopen ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => setReopenOpen(true)}
+                >
+                  {t("reopen.action")}
+                </Button>
+              ) : null}
+            </>
+          )}
+        </section>
+      ) : null}
+
+      <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("reopen.dialogTitle")}</DialogTitle>
+            <DialogDescription>{t("reopen.dialogBody")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="reopen-reason">{t("reopen.reasonLabel")}</Label>
+            <Textarea
+              id="reopen-reason"
+              value={reopenReason}
+              onChange={(e) => setReopenReason(e.target.value)}
+              placeholder={t("reopen.reasonPlaceholder")}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setReopenOpen(false)}
+            >
+              {t("reopen.cancel")}
+            </Button>
+            <Button
+              type="button"
+              onClick={handleRequestReopen}
+              disabled={reopenPending}
+            >
+              {reopenPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
+              {t("reopen.submit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
