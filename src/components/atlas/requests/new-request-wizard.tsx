@@ -334,18 +334,29 @@ export function NewRequestWizard({
     artworkFinal,
   ]);
 
+  // On step 1 the server draft (`items`) hasn't been created/updated yet, so
+  // the summary must reflect the live cart selection instead or it looks
+  // stuck while the user is still picking service items.
+  const summaryCatalogueItems = useMemo(() => {
+    if (step === 1) {
+      return cartIds
+        .map((id) => catalogueItemById.get(id))
+        .filter((i): i is CatalogueServiceItem => Boolean(i));
+    }
+    return items
+      .map((i) => catalogueItemById.get(i.serviceItemId))
+      .filter((i): i is CatalogueServiceItem => Boolean(i));
+  }, [step, cartIds, items, catalogueItemById]);
+
   const breakdown = useMemo(() => {
-    if (items.length === 0) {
+    if (summaryCatalogueItems.length === 0) {
       return { subtotal: 0, discount: 0, vatAmount: 0, total: 0 };
     }
     const b = computeOrderBreakdown(
-      items.map((i) => {
-        const catalogueItem = catalogueItemById.get(i.serviceItemId);
-        return {
-          basePrice: catalogueItem?.basePrice ?? 0,
-          vatRate: catalogueItem?.vatRate ?? 0.15,
-        };
-      }),
+      summaryCatalogueItems.map((catalogueItem) => ({
+        basePrice: catalogueItem.basePrice ?? 0,
+        vatRate: catalogueItem.vatRate ?? 0.15,
+      })),
       discount,
     );
     return {
@@ -354,7 +365,7 @@ export function NewRequestWizard({
       vatAmount: Number(b.vatAmount),
       total: Number(b.total),
     };
-  }, [items, discount, catalogueItemById]);
+  }, [summaryCatalogueItems, discount]);
 
   const mandatoryTotal = items.reduce(
     (sum, i) => sum + i.slots.filter((s) => s.mandatory).length,
@@ -1297,15 +1308,11 @@ export function NewRequestWizard({
           <div className="flex justify-between gap-3">
             <dt className="text-ink-500">{t("summary.service")}</dt>
             <dd className="text-end text-ink-800">
-              {items.length > 0
-                ? items
-                    .map((i) => {
-                      const catalogueItem = catalogueItemById.get(i.serviceItemId);
-                      if (!catalogueItem) return "";
-                      return locale === "ar"
-                        ? catalogueItem.nameAr
-                        : catalogueItem.nameEn;
-                    })
+              {summaryCatalogueItems.length > 0
+                ? summaryCatalogueItems
+                    .map((catalogueItem) =>
+                      locale === "ar" ? catalogueItem.nameAr : catalogueItem.nameEn,
+                    )
                     .filter(Boolean)
                     .join(", ")
                 : "—"}
