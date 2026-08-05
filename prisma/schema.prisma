@@ -331,7 +331,7 @@ model ServiceItem {
 
   subCategory       SubCategory        @relation(fields: [subCategoryId], references: [id])
   requiredDocuments RequiredDocument[]
-  requests          Request[]
+  requestItems      RequestItem[]
 
   @@unique([subCategoryId, code])
   @@index([subCategoryId, active, sortOrder])
@@ -363,19 +363,14 @@ model Request {
   id               String        @id @default(cuid())
   requestNo        String        @unique
   organisationId   String
-  serviceItemId    String
   createdByUserId  String
   assignedToUserId String?
   state            RequestState  @default(DRAFT)
   /// Prior state when moved to ON_HOLD; resume must return here.
   heldFromState    RequestState?
-  productNameEn    String        @default("")
-  productNameAr    String        @default("")
-  brand            String?
-  productAttrs     Json          @default("{}")
-  /// Technical-review verdicts per check item: { verdicts, notes, updatedAt, updatedByUserId }.
-  assessment       Json          @default("{}")
   submissionNo     Int           @default(1)
+  /// Order-level totals: sum of all RequestItem prices, minus the single
+  /// order-wide coupon discount (a coupon applies once to the whole order).
   priceCharged     Decimal       @default(0) @db.Decimal(14, 2)
   discountApplied  Decimal       @default(0) @db.Decimal(14, 2)
   couponCode       String?
@@ -390,9 +385,9 @@ model Request {
   updatedAt        DateTime      @updatedAt
 
   organisation   Organisation           @relation(fields: [organisationId], references: [id])
-  serviceItem    ServiceItem            @relation(fields: [serviceItemId], references: [id])
   createdBy      User                   @relation("RequestCreatedBy", fields: [createdByUserId], references: [id])
   assignedTo     User?                  @relation("RequestAssignedTo", fields: [assignedToUserId], references: [id])
+  items          RequestItem[]
   documents      RequestDocument[]
   events         RequestEvent[]
   comments       RequestComment[]
@@ -402,25 +397,54 @@ model Request {
 
   @@index([organisationId, state])
   @@index([state, slaDueAt])
-  @@index([serviceItemId])
   @@index([createdByUserId])
   @@index([assignedToUserId])
+}
+
+/// One service item within a request's cart. A request always has at least
+/// one item; multiple items let a client bundle several services (possibly
+/// from different subcategories) into a single request/invoice.
+model RequestItem {
+  id            String  @id @default(cuid())
+  requestId     String
+  serviceItemId String
+  productNameEn String  @default("")
+  productNameAr String  @default("")
+  brand         String?
+  productAttrs  Json    @default("{}")
+  /// Technical-review verdicts per check item: { verdicts, notes, updatedAt, updatedByUserId }.
+  assessment    Json    @default("{}")
+  /// Snapshot of the service item's price/VAT at the time it was added, so
+  /// later catalogue price changes don't retroactively alter an open draft.
+  basePrice     Decimal @db.Decimal(14, 2)
+  vatRate       Decimal @db.Decimal(5, 4)
+  sortOrder     Int     @default(0)
+
+  request     Request           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  serviceItem ServiceItem       @relation(fields: [serviceItemId], references: [id])
+  documents   RequestDocument[]
+
+  @@index([requestId])
+  @@index([serviceItemId])
 }
 
 model RequestDocument {
   id                 String   @id @default(cuid())
   requestId          String
+  requestItemId      String
   requiredDocumentId String?
   label              String
   currentVersionId   String?  @unique
   createdAt          DateTime @default(now())
 
   request          Request           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestItem      RequestItem       @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
   requiredDocument RequiredDocument? @relation(fields: [requiredDocumentId], references: [id])
   currentVersion   DocumentVersion?  @relation("CurrentDocumentVersion", fields: [currentVersionId], references: [id])
   versions         DocumentVersion[] @relation("DocumentVersions")
 
   @@index([requestId])
+  @@index([requestItemId])
 }
 
 model DocumentVersion {

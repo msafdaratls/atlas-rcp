@@ -26,7 +26,8 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 type Props = {
-  requestId: string;
+  requestItemId: string;
+  title?: string;
   checkSets: CheckSet[];
   initial: AssessmentState;
   editable: boolean;
@@ -65,7 +66,8 @@ function pct(rate: number | null): string {
 }
 
 export function AssessmentPanel({
-  requestId,
+  requestItemId,
+  title: panelTitle,
   checkSets,
   initial,
   editable,
@@ -112,7 +114,11 @@ export function AssessmentPanel({
       for (const [code, n] of Object.entries(notes)) {
         if (n.trim()) cleanNotes[code] = n.trim();
       }
-      const result = await saveAssessment({ requestId, verdicts, notes: cleanNotes });
+      const result = await saveAssessment({
+        requestItemId,
+        verdicts,
+        notes: cleanNotes,
+      });
       if (!result.ok) {
         toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
         return;
@@ -128,7 +134,9 @@ export function AssessmentPanel({
     <section className="space-y-4 rounded-lg border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-ink-900">{t("title")}</h2>
+          <h2 className="text-sm font-semibold text-ink-900">
+            {panelTitle ? `${t("title")} — ${panelTitle}` : t("title")}
+          </h2>
           <p className="text-xs text-ink-500">{t("subtitle")}</p>
         </div>
         <span

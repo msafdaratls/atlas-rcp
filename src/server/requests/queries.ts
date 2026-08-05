@@ -174,30 +174,53 @@ export async function getOpenDraftRequestId(): Promise<string | null> {
   }
 }
 
-export type DraftRequestView = {
+export type DraftRequestDocumentView = {
   id: string;
-  requestNo: string;
+  requiredDocumentId: string | null;
+  label: string;
+  currentVersion: {
+    id: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    storageKey: string;
+    version: number;
+  } | null;
+};
+
+export type DraftRequestItemView = {
+  id: string;
   serviceItemId: string;
+  serviceNameEn: string;
+  serviceNameAr: string;
+  basePrice: number;
+  vatRate: number;
   productNameEn: string;
   productNameAr: string;
   brand: string | null;
   productAttrs: Record<string, unknown>;
+  productAttrSchema: unknown;
+  requiredDocuments: Array<{
+    id: string;
+    code: string;
+    nameEn: string;
+    nameAr: string;
+    mandatory: boolean;
+    acceptedMimeTypes: string[];
+    maxSizeMb: number;
+    helpEn: string | null;
+    helpAr: string | null;
+  }>;
+  documents: DraftRequestDocumentView[];
+};
+
+export type DraftRequestView = {
+  id: string;
+  requestNo: string;
   couponCode: string | null;
   discountApplied: number;
   priceCharged: number;
-  documents: Array<{
-    id: string;
-    requiredDocumentId: string | null;
-    label: string;
-    currentVersion: {
-      id: string;
-      fileName: string;
-      mimeType: string;
-      sizeBytes: number;
-      storageKey: string;
-      version: number;
-    } | null;
-  }>;
+  items: DraftRequestItemView[];
 };
 
 export async function getDraftRequest(
@@ -212,9 +235,17 @@ export async function getDraftRequest(
         state: "DRAFT",
       },
       include: {
-        documents: {
-          include: { currentVersion: true },
-          orderBy: { createdAt: "asc" },
+        items: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            serviceItem: {
+              include: { requiredDocuments: { orderBy: { sortOrder: "asc" } } },
+            },
+            documents: {
+              include: { currentVersion: true },
+              orderBy: { createdAt: "asc" },
+            },
+          },
         },
       },
     });
@@ -223,31 +254,50 @@ export async function getDraftRequest(
     return {
       id: draft.id,
       requestNo: draft.requestNo,
-      serviceItemId: draft.serviceItemId,
-      productNameEn: draft.productNameEn,
-      productNameAr: draft.productNameAr,
-      brand: draft.brand,
-      productAttrs:
-        draft.productAttrs && typeof draft.productAttrs === "object"
-          ? (draft.productAttrs as Record<string, unknown>)
-          : {},
       couponCode: draft.couponCode,
       discountApplied: toNumber(draft.discountApplied),
       priceCharged: toNumber(draft.priceCharged),
-      documents: draft.documents.map((d) => ({
-        id: d.id,
-        requiredDocumentId: d.requiredDocumentId,
-        label: d.label,
-        currentVersion: d.currentVersion
-          ? {
-              id: d.currentVersion.id,
-              fileName: d.currentVersion.fileName,
-              mimeType: d.currentVersion.mimeType,
-              sizeBytes: d.currentVersion.sizeBytes,
-              storageKey: d.currentVersion.storageKey,
-              version: d.currentVersion.version,
-            }
-          : null,
+      items: draft.items.map((item) => ({
+        id: item.id,
+        serviceItemId: item.serviceItemId,
+        serviceNameEn: item.serviceItem.nameEn,
+        serviceNameAr: item.serviceItem.nameAr,
+        basePrice: toNumber(item.basePrice),
+        vatRate: toNumber(item.vatRate),
+        productNameEn: item.productNameEn,
+        productNameAr: item.productNameAr,
+        brand: item.brand,
+        productAttrs:
+          item.productAttrs && typeof item.productAttrs === "object"
+            ? (item.productAttrs as Record<string, unknown>)
+            : {},
+        productAttrSchema: item.serviceItem.productAttrSchema,
+        requiredDocuments: item.serviceItem.requiredDocuments.map((d) => ({
+          id: d.id,
+          code: d.code,
+          nameEn: d.nameEn,
+          nameAr: d.nameAr,
+          mandatory: d.mandatory,
+          acceptedMimeTypes: d.acceptedMimeTypes,
+          maxSizeMb: d.maxSizeMb,
+          helpEn: d.helpEn,
+          helpAr: d.helpAr,
+        })),
+        documents: item.documents.map((d) => ({
+          id: d.id,
+          requiredDocumentId: d.requiredDocumentId,
+          label: d.label,
+          currentVersion: d.currentVersion
+            ? {
+                id: d.currentVersion.id,
+                fileName: d.currentVersion.fileName,
+                mimeType: d.currentVersion.mimeType,
+                sizeBytes: d.currentVersion.sizeBytes,
+                storageKey: d.currentVersion.storageKey,
+                version: d.currentVersion.version,
+              }
+            : null,
+        })),
       })),
     };
   } catch {
@@ -272,6 +322,8 @@ export type ClientRequestListItem = {
   updatedAt: string;
   serviceNameEn: string;
   serviceNameAr: string;
+  /** Count of additional items beyond the first, for a "+N more" badge. */
+  extraItemCount: number;
 };
 
 export type ClientRequestListResult = {
@@ -307,9 +359,17 @@ export async function listClientRequests(input: {
         ? {
             OR: [
               { requestNo: { contains: q, mode: "insensitive" } },
-              { productNameEn: { contains: q, mode: "insensitive" } },
-              { productNameAr: { contains: q, mode: "insensitive" } },
-              { brand: { contains: q, mode: "insensitive" } },
+              {
+                items: {
+                  some: {
+                    OR: [
+                      { productNameEn: { contains: q, mode: "insensitive" } },
+                      { productNameAr: { contains: q, mode: "insensitive" } },
+                      { brand: { contains: q, mode: "insensitive" } },
+                    ],
+                  },
+                },
+              },
             ],
           }
         : {}),
@@ -320,7 +380,10 @@ export async function listClientRequests(input: {
       prisma.request.findMany({
         where,
         include: {
-          serviceItem: { select: { nameEn: true, nameAr: true } },
+          items: {
+            orderBy: { sortOrder: "asc" },
+            include: { serviceItem: { select: { nameEn: true, nameAr: true } } },
+          },
         },
         orderBy: { updatedAt: "desc" },
         skip: (page - 1) * pageSize,
@@ -333,20 +396,24 @@ export async function listClientRequests(input: {
       page,
       pageSize,
       pageCount: Math.max(1, Math.ceil(total / pageSize)),
-      rows: rows.map((r) => ({
-        id: r.id,
-        requestNo: r.requestNo,
-        productNameEn: r.productNameEn,
-        productNameAr: r.productNameAr,
-        brand: r.brand,
-        state: r.state,
-        submissionNo: r.submissionNo,
-        submittedAt: r.submittedAt?.toISOString() ?? null,
-        slaDueAt: r.slaDueAt?.toISOString() ?? null,
-        updatedAt: r.updatedAt.toISOString(),
-        serviceNameEn: r.serviceItem.nameEn,
-        serviceNameAr: r.serviceItem.nameAr,
-      })),
+      rows: rows.map((r) => {
+        const first = r.items[0];
+        return {
+          id: r.id,
+          requestNo: r.requestNo,
+          productNameEn: first?.productNameEn ?? "",
+          productNameAr: first?.productNameAr ?? "",
+          brand: first?.brand ?? null,
+          state: r.state,
+          submissionNo: r.submissionNo,
+          submittedAt: r.submittedAt?.toISOString() ?? null,
+          slaDueAt: r.slaDueAt?.toISOString() ?? null,
+          updatedAt: r.updatedAt.toISOString(),
+          serviceNameEn: first?.serviceItem.nameEn ?? "",
+          serviceNameAr: first?.serviceItem.nameAr ?? "",
+          extraItemCount: Math.max(0, r.items.length - 1),
+        };
+      }),
     };
   } catch {
     return null;
@@ -391,37 +458,88 @@ export async function getClientShellRequests(
       },
       orderBy: { updatedAt: "desc" },
       take: 10,
-      select: { id: true, requestNo: true, productNameEn: true, productNameAr: true },
+      select: {
+        id: true,
+        requestNo: true,
+        items: {
+          orderBy: { sortOrder: "asc" },
+          take: 1,
+          select: { productNameEn: true, productNameAr: true },
+        },
+      },
     });
 
     return requests.map((r) => ({
       id: r.id,
       requestNo: r.requestNo,
-      productName: locale === "ar" ? r.productNameAr : r.productNameEn,
+      productName:
+        (locale === "ar" ? r.items[0]?.productNameAr : r.items[0]?.productNameEn) ??
+        "",
     }));
   } catch {
     return [];
   }
 }
 
-export type ClientRequestDetail = {
+export type ClientRequestDetailItem = {
   id: string;
-  requestNo: string;
-  state: import("@prisma/client").RequestState;
+  serviceItemId: string;
+  serviceNameEn: string;
+  serviceNameAr: string;
   productNameEn: string;
   productNameAr: string;
   brand: string | null;
   productAttrs: Record<string, unknown>;
   productAttrSchema: unknown;
+  maxResubmissions: number;
+  documents: Array<{
+    id: string;
+    label: string;
+    requiredDocumentId: string | null;
+    currentVersion: {
+      id: string;
+      version: number;
+      fileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      storageKey: string;
+      uploadedByNameEn: string;
+      uploadedByNameAr: string;
+      uploadedAt: string;
+    } | null;
+    versions: Array<{
+      id: string;
+      version: number;
+      fileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      storageKey: string;
+      uploadedByNameEn: string;
+      uploadedByNameAr: string;
+      uploadedAt: string;
+    }>;
+  }>;
+  requiredDocuments: Array<{
+    id: string;
+    nameEn: string;
+    nameAr: string;
+    mandatory: boolean;
+    acceptedMimeTypes: string[];
+    maxSizeMb: number;
+  }>;
+};
+
+export type ClientRequestDetail = {
+  id: string;
+  requestNo: string;
+  state: import("@prisma/client").RequestState;
   submissionNo: number;
   submittedAt: string | null;
   createdAt: string;
   slaDueAt: string | null;
   closedAt: string | null;
   priceCharged: number;
-  serviceNameEn: string;
-  serviceNameAr: string;
-  maxResubmissions: number;
+  items: ClientRequestDetailItem[];
   canResubmit: boolean;
   canRequestReopen: boolean;
   reopenRequest: {
@@ -458,34 +576,7 @@ export type ClientRequestDetail = {
     faultAttribution: import("@prisma/client").FaultAttribution | null;
     createdAt: string;
   }>;
-  documents: Array<{
-    id: string;
-    label: string;
-    requiredDocumentId: string | null;
-    currentVersion: {
-      id: string;
-      version: number;
-      fileName: string;
-      mimeType: string;
-      sizeBytes: number;
-      storageKey: string;
-      uploadedByNameEn: string;
-      uploadedByNameAr: string;
-      uploadedAt: string;
-    } | null;
-    versions: Array<{
-      id: string;
-      version: number;
-      fileName: string;
-      mimeType: string;
-      sizeBytes: number;
-      storageKey: string;
-      uploadedByNameEn: string;
-      uploadedByNameAr: string;
-      uploadedAt: string;
-    }>;
-  }>;
-      comments: Array<{
+  comments: Array<{
     id: string;
     bodyEn: string | null;
     bodyAr: string | null;
@@ -493,14 +584,6 @@ export type ClientRequestDetail = {
     authorNameEn: string;
     authorNameAr: string;
     createdAt: string;
-  }>;
-  requiredDocuments: Array<{
-    id: string;
-    nameEn: string;
-    nameAr: string;
-    mandatory: boolean;
-    acceptedMimeTypes: string[];
-    maxSizeMb: number;
   }>;
 };
 
@@ -514,31 +597,36 @@ export async function getClientRequestDetail(
     const request = await prisma.request.findFirst({
       where: { id: requestId, organisationId },
       include: {
-        serviceItem: {
-          include: { requiredDocuments: { orderBy: { sortOrder: "asc" } } },
+        items: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            serviceItem: {
+              include: { requiredDocuments: { orderBy: { sortOrder: "asc" } } },
+            },
+            documents: {
+              include: {
+                versions: {
+                  include: {
+                    uploadedBy: {
+                      select: { fullNameEn: true, fullNameAr: true },
+                    },
+                  },
+                  orderBy: { version: "asc" },
+                },
+                currentVersion: {
+                  include: {
+                    uploadedBy: {
+                      select: { fullNameEn: true, fullNameAr: true },
+                    },
+                  },
+                },
+              },
+              orderBy: { createdAt: "asc" },
+            },
+          },
         },
         events: {
           include: { actor: { select: { fullNameEn: true, fullNameAr: true } } },
-          orderBy: { createdAt: "asc" },
-        },
-        documents: {
-          include: {
-            versions: {
-              include: {
-                uploadedBy: {
-                  select: { fullNameEn: true, fullNameAr: true },
-                },
-              },
-              orderBy: { version: "asc" },
-            },
-            currentVersion: {
-              include: {
-                uploadedBy: {
-                  select: { fullNameEn: true, fullNameAr: true },
-                },
-              },
-            },
-          },
           orderBy: { createdAt: "asc" },
         },
         comments: {
@@ -568,33 +656,75 @@ export async function getClientRequestDetail(
       .reverse()
       .find((e) => e.toState === "RETURNED_TO_CLIENT");
 
+    const minMaxResubmissions = Math.min(
+      ...request.items.map((i) => i.serviceItem.maxResubmissions),
+    );
+
     return {
       id: request.id,
       requestNo: request.requestNo,
       state: request.state,
-      productNameEn: request.productNameEn,
-      productNameAr: request.productNameAr,
-      brand: request.brand,
-      productAttrs:
-        request.productAttrs && typeof request.productAttrs === "object"
-          ? (request.productAttrs as Record<string, unknown>)
-          : {},
-      productAttrSchema: request.serviceItem.productAttrSchema,
       submissionNo: request.submissionNo,
       submittedAt: request.submittedAt?.toISOString() ?? null,
       createdAt: request.createdAt.toISOString(),
       slaDueAt: request.slaDueAt?.toISOString() ?? null,
       closedAt: request.closedAt?.toISOString() ?? null,
       priceCharged: toNumber(request.priceCharged),
-      serviceNameEn: request.serviceItem.nameEn,
-      serviceNameAr: request.serviceItem.nameAr,
-      maxResubmissions: request.serviceItem.maxResubmissions,
+      items: request.items.map((item) => ({
+        id: item.id,
+        serviceItemId: item.serviceItemId,
+        serviceNameEn: item.serviceItem.nameEn,
+        serviceNameAr: item.serviceItem.nameAr,
+        productNameEn: item.productNameEn,
+        productNameAr: item.productNameAr,
+        brand: item.brand,
+        productAttrs:
+          item.productAttrs && typeof item.productAttrs === "object"
+            ? (item.productAttrs as Record<string, unknown>)
+            : {},
+        productAttrSchema: item.serviceItem.productAttrSchema,
+        maxResubmissions: item.serviceItem.maxResubmissions,
+        documents: item.documents.map((d) => ({
+          id: d.id,
+          label: d.label,
+          requiredDocumentId: d.requiredDocumentId,
+          currentVersion: d.currentVersion
+            ? {
+                id: d.currentVersion.id,
+                version: d.currentVersion.version,
+                fileName: d.currentVersion.fileName,
+                mimeType: d.currentVersion.mimeType,
+                sizeBytes: d.currentVersion.sizeBytes,
+                storageKey: d.currentVersion.storageKey,
+                uploadedByNameEn: d.currentVersion.uploadedBy.fullNameEn,
+                uploadedByNameAr: d.currentVersion.uploadedBy.fullNameAr,
+                uploadedAt: d.currentVersion.uploadedAt.toISOString(),
+              }
+            : null,
+          versions: d.versions.map((v) => ({
+            id: v.id,
+            version: v.version,
+            fileName: v.fileName,
+            mimeType: v.mimeType,
+            sizeBytes: v.sizeBytes,
+            storageKey: v.storageKey,
+            uploadedByNameEn: v.uploadedBy.fullNameEn,
+            uploadedByNameAr: v.uploadedBy.fullNameAr,
+            uploadedAt: v.uploadedAt.toISOString(),
+          })),
+        })),
+        requiredDocuments: item.serviceItem.requiredDocuments.map((d) => ({
+          id: d.id,
+          nameEn: d.nameEn,
+          nameAr: d.nameAr,
+          mandatory: d.mandatory,
+          acceptedMimeTypes: d.acceptedMimeTypes,
+          maxSizeMb: d.maxSizeMb,
+        })),
+      })),
       canResubmit:
         request.state === "RETURNED_TO_CLIENT" &&
-        !exceedsMaxResubmissions(
-          request.submissionNo,
-          request.serviceItem.maxResubmissions,
-        ),
+        !exceedsMaxResubmissions(request.submissionNo, minMaxResubmissions),
       canRequestReopen:
         REOPENABLE_STATES.includes(request.state) &&
         latestReopenRequest?.status !== "PENDING",
@@ -636,35 +766,6 @@ export async function getClientRequestDetail(
         faultAttribution: e.faultAttribution,
         createdAt: e.createdAt.toISOString(),
       })),
-      documents: request.documents.map((d) => ({
-        id: d.id,
-        label: d.label,
-        requiredDocumentId: d.requiredDocumentId,
-        currentVersion: d.currentVersion
-          ? {
-              id: d.currentVersion.id,
-              version: d.currentVersion.version,
-              fileName: d.currentVersion.fileName,
-              mimeType: d.currentVersion.mimeType,
-              sizeBytes: d.currentVersion.sizeBytes,
-              storageKey: d.currentVersion.storageKey,
-              uploadedByNameEn: d.currentVersion.uploadedBy.fullNameEn,
-              uploadedByNameAr: d.currentVersion.uploadedBy.fullNameAr,
-              uploadedAt: d.currentVersion.uploadedAt.toISOString(),
-            }
-          : null,
-        versions: d.versions.map((v) => ({
-          id: v.id,
-          version: v.version,
-          fileName: v.fileName,
-          mimeType: v.mimeType,
-          sizeBytes: v.sizeBytes,
-          storageKey: v.storageKey,
-          uploadedByNameEn: v.uploadedBy.fullNameEn,
-          uploadedByNameAr: v.uploadedBy.fullNameAr,
-          uploadedAt: v.uploadedAt.toISOString(),
-        })),
-      })),
       comments: request.comments.map((c) => ({
         id: c.id,
         bodyEn: c.bodyEn,
@@ -673,14 +774,6 @@ export async function getClientRequestDetail(
         authorNameEn: c.author.fullNameEn,
         authorNameAr: c.author.fullNameAr,
         createdAt: c.createdAt.toISOString(),
-      })),
-      requiredDocuments: request.serviceItem.requiredDocuments.map((d) => ({
-        id: d.id,
-        nameEn: d.nameEn,
-        nameAr: d.nameAr,
-        mandatory: d.mandatory,
-        acceptedMimeTypes: d.acceptedMimeTypes,
-        maxSizeMb: d.maxSizeMb,
       })),
     };
   } catch {
@@ -751,8 +844,16 @@ export async function listClientReports(input: {
               {
                 OR: [
                   { requestNo: { contains: q, mode: "insensitive" } },
-                  { productNameEn: { contains: q, mode: "insensitive" } },
-                  { productNameAr: { contains: q, mode: "insensitive" } },
+                  {
+                    items: {
+                      some: {
+                        OR: [
+                          { productNameEn: { contains: q, mode: "insensitive" } },
+                          { productNameAr: { contains: q, mode: "insensitive" } },
+                        ],
+                      },
+                    },
+                  },
                 ],
               },
             ],
@@ -765,7 +866,11 @@ export async function listClientReports(input: {
       prisma.request.findMany({
         where,
         include: {
-          serviceItem: { select: { nameEn: true, nameAr: true } },
+          items: {
+            orderBy: { sortOrder: "asc" },
+            take: 1,
+            include: { serviceItem: { select: { nameEn: true, nameAr: true } } },
+          },
           events: {
             where: { toState: "REPORT_ISSUED" },
             orderBy: { createdAt: "desc" },
@@ -788,15 +893,16 @@ export async function listClientReports(input: {
           r.events[0]?.createdAt ??
           r.closedAt ??
           r.updatedAt;
+        const first = r.items[0];
         return {
           id: r.id,
           requestNo: r.requestNo,
-          productNameEn: r.productNameEn,
-          productNameAr: r.productNameAr,
+          productNameEn: first?.productNameEn ?? "",
+          productNameAr: first?.productNameAr ?? "",
           state: r.state as "REPORT_ISSUED" | "CLOSED",
           issuedAt: issued.toISOString(),
-          serviceNameEn: r.serviceItem.nameEn,
-          serviceNameAr: r.serviceItem.nameAr,
+          serviceNameEn: first?.serviceItem.nameEn ?? "",
+          serviceNameAr: first?.serviceItem.nameAr ?? "",
         };
       }),
     };

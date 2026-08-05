@@ -379,9 +379,11 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
     });
   }
 
+  const allDocuments = data.items.flatMap((item) => item.documents);
+
   const onDownload = (version: DocumentVersionView & { storageKey?: string }) => {
     const key =
-      data.documents
+      allDocuments
         .flatMap((d) => d.versions)
         .find((v) => v.id === version.id)?.storageKey ?? null;
     if (key) openStorage(key);
@@ -405,7 +407,11 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
           <div>
             <p className="text-xs text-ink-500">{t("service")}</p>
             <p className="font-medium text-ink-900">
-              {locale === "ar" ? data.serviceItem.nameAr : data.serviceItem.nameEn}
+              {data.items
+                .map((i) =>
+                  locale === "ar" ? i.serviceItem.nameAr : i.serviceItem.nameEn,
+                )
+                .join(", ")}
             </p>
             <p className="mt-1 text-xs text-ink-500">
               {t("submission", { n: data.submissionNo })}
@@ -988,15 +994,22 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
         </Dialog>
       ) : null}
 
-      {ASSESSMENT_SHOW_STATES.includes(data.state) &&
-      hasCheckItems(data.serviceItem.checkSets) ? (
-        <AssessmentPanel
-          requestId={data.id}
-          checkSets={data.serviceItem.checkSets}
-          initial={data.assessment}
-          editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
-        />
-      ) : null}
+      {ASSESSMENT_SHOW_STATES.includes(data.state)
+        ? data.items
+            .filter((item) => hasCheckItems(item.serviceItem.checkSets))
+            .map((item) => (
+              <AssessmentPanel
+                key={item.id}
+                requestItemId={item.id}
+                title={
+                  locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
+                }
+                checkSets={item.serviceItem.checkSets}
+                initial={item.assessment}
+                editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
+              />
+            ))
+        : null}
 
       <StatusRail
         events={data.events.map((e) => ({
@@ -1014,11 +1027,11 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-ink-900">{t("documents")}</h2>
-        {data.documents.filter((d) => d.currentVersion).length === 0 ? (
+        {allDocuments.filter((d) => d.currentVersion).length === 0 ? (
           <p className="text-sm text-ink-500">{t("documentsEmpty")}</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {data.documents
+            {allDocuments
               .filter((d) => d.currentVersion)
               .map((doc) => (
                 <DocumentCard

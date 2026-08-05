@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { parseAttrSchema } from "@/lib/attr-schema";
-import { computePriceBreakdown } from "@/lib/pricing";
+import { computeOrderBreakdown } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import {
   applyCouponToDraft,
@@ -33,24 +33,9 @@ import { Pill, Sparkles, Upload, X } from "lucide-react";
 import type {
   CataloguePayload,
   CatalogueServiceItem,
+  DraftRequestItemView,
   DraftRequestView,
 } from "@/server/requests/queries";
-
-type PersistedWizardState = {
-  requestId: string | null;
-  step: number;
-  mainId: string | null;
-  subIds: string[];
-  itemId: string | null;
-  productNameEn: string;
-  productNameAr: string;
-  brand: string;
-  attrs: Record<string, unknown>;
-  couponCode: string;
-  appliedCoupon: string | null;
-  discount: number;
-  artworkFinal: boolean;
-};
 
 type UploadSlotState = {
   requiredDocumentId: string | null;
@@ -65,6 +50,38 @@ type UploadSlotState = {
   progress?: number;
 };
 
+type ItemState = {
+  requestItemId: string;
+  serviceItemId: string;
+  productNameEn: string;
+  productNameAr: string;
+  brand: string;
+  attrs: Record<string, unknown>;
+  slots: UploadSlotState[];
+};
+
+type PersistedItemState = {
+  requestItemId: string;
+  serviceItemId: string;
+  productNameEn: string;
+  productNameAr: string;
+  brand: string;
+  attrs: Record<string, unknown>;
+};
+
+type PersistedWizardState = {
+  requestId: string | null;
+  step: number;
+  mainId: string | null;
+  subIds: string[];
+  cartIds: string[];
+  items: PersistedItemState[];
+  couponCode: string;
+  appliedCoupon: string | null;
+  discount: number;
+  artworkFinal: boolean;
+};
+
 type Props = {
   catalogue: CataloguePayload;
   initialDraft: DraftRequestView | null;
@@ -74,6 +91,89 @@ type Props = {
   /** True when an admin is creating on a client's behalf — clears the pin. */
   onBehalf?: boolean;
 };
+
+function buildSlots(
+  item: CatalogueServiceItem,
+  draftItem: DraftRequestItemView | undefined,
+  additionalLabel: string,
+): UploadSlotState[] {
+  const mapped: UploadSlotState[] = item.requiredDocuments.map((doc) => {
+    const existing = draftItem?.documents.find(
+      (d) => d.requiredDocumentId === doc.id,
+    );
+    return {
+      requiredDocumentId: doc.id,
+      label: doc.nameEn,
+      mandatory: doc.mandatory,
+      acceptedMimeTypes: doc.acceptedMimeTypes,
+      maxSizeMb: doc.maxSizeMb,
+      documentId: existing?.id,
+      fileName: existing?.currentVersion?.fileName,
+      mimeType: existing?.currentVersion?.mimeType,
+      previewUrl: existing?.currentVersion
+        ? `/api/storage/${existing.currentVersion.storageKey
+            .split("/")
+            .map(encodeURIComponent)
+            .join("/")}`
+        : undefined,
+    };
+  });
+
+  const extras = draftItem?.documents.filter((d) => !d.requiredDocumentId) ?? [];
+  if (extras.length === 0) {
+    mapped.push({
+      requiredDocumentId: null,
+      label: additionalLabel,
+      mandatory: false,
+      acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
+      maxSizeMb: 50,
+    });
+  } else {
+    for (const existing of extras) {
+      mapped.push({
+        requiredDocumentId: null,
+        label: additionalLabel,
+        mandatory: false,
+        acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
+        maxSizeMb: 50,
+        documentId: existing.id,
+        fileName: existing.currentVersion?.fileName,
+        mimeType: existing.currentVersion?.mimeType,
+        previewUrl: existing.currentVersion
+          ? `/api/storage/${existing.currentVersion.storageKey
+              .split("/")
+              .map(encodeURIComponent)
+              .join("/")}`
+          : undefined,
+      });
+    }
+    mapped.push({
+      requiredDocumentId: null,
+      label: additionalLabel,
+      mandatory: false,
+      acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
+      maxSizeMb: 50,
+    });
+  }
+
+  return mapped;
+}
+
+function itemStateFromDraft(
+  draftItem: DraftRequestItemView,
+  catalogueItem: CatalogueServiceItem | undefined,
+  additionalLabel: string,
+): ItemState {
+  return {
+    requestItemId: draftItem.id,
+    serviceItemId: draftItem.serviceItemId,
+    productNameEn: draftItem.productNameEn,
+    productNameAr: draftItem.productNameAr,
+    brand: draftItem.brand ?? "",
+    attrs: draftItem.productAttrs,
+    slots: catalogueItem ? buildSlots(catalogueItem, draftItem, additionalLabel) : [],
+  };
+}
 
 export function NewRequestWizard({
   catalogue,
@@ -87,13 +187,37 @@ export function NewRequestWizard({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
+  const catalogueItemById = useMemo(
+    () => new Map(catalogue.items.map((i) => [i.id, i])),
+    [catalogue.items],
+  );
+
+  const initialMainAndSubs = useMemo(() => {
+    if (!initialDraft || initialDraft.items.length === 0) return null;
+    const first = catalogueItemById.get(initialDraft.items[0]!.serviceItemId);
+    if (!first) return null;
+    const sub = catalogue.subs.find((s) => s.id === first.subCategoryId);
+    const subIds = Array.from(
+      new Set(
+        initialDraft.items
+          .map((i) => catalogueItemById.get(i.serviceItemId)?.subCategoryId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    return { mainId: sub?.mainCategoryId ?? null, subIds };
+    // Only computed once, from the initial draft passed in on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [step, setStep] = useState(1);
   const [mainId, setMainId] = useState<string | null>(
-    initialDraft ? null : initialMainId ?? null,
+    initialMainAndSubs?.mainId ?? initialMainId ?? null,
   );
-  const [subIds, setSubIds] = useState<string[]>([]);
-  const [itemId, setItemId] = useState<string | null>(
-    initialDraft?.serviceItemId ?? null,
+  const [subIds, setSubIds] = useState<string[]>(
+    initialMainAndSubs?.subIds ?? [],
+  );
+  const [cartIds, setCartIds] = useState<string[]>(
+    initialDraft?.items.map((i) => i.serviceItemId) ?? [],
   );
   const [requestId, setRequestId] = useState<string | null>(
     initialDraft?.id ?? null,
@@ -101,44 +225,25 @@ export function NewRequestWizard({
   const [requestNo, setRequestNo] = useState<string | null>(
     initialDraft?.requestNo ?? null,
   );
-  const [expandedChecks, setExpandedChecks] = useState(false);
+  const [expandedChecks, setExpandedChecks] = useState<Set<string>>(new Set());
 
-  const [productNameEn, setProductNameEn] = useState(
-    initialDraft?.productNameEn ?? "",
-  );
-  const [productNameAr, setProductNameAr] = useState(
-    initialDraft?.productNameAr ?? "",
-  );
-  const [brand, setBrand] = useState(initialDraft?.brand ?? "");
-  const [attrs, setAttrs] = useState<Record<string, unknown>>(
-    initialDraft?.productAttrs ?? {},
-  );
-
-  const selectedItem: CatalogueServiceItem | null = useMemo(
-    () => catalogue.items.find((i) => i.id === itemId) ?? null,
-    [catalogue.items, itemId],
+  const [items, setItems] = useState<ItemState[]>(
+    () =>
+      initialDraft?.items.map((di) =>
+        itemStateFromDraft(
+          di,
+          catalogueItemById.get(di.serviceItemId),
+          t("step3.additional"),
+        ),
+      ) ?? [],
   );
 
   const selectedMain = catalogue.mains.find((m) => m.id === mainId) ?? null;
   const subs = catalogue.subs.filter((s) => s.mainCategoryId === mainId);
-  const items = useMemo(
+  const browsableItems = useMemo(
     () => catalogue.items.filter((i) => subIds.includes(i.subCategoryId)),
     [catalogue.items, subIds],
   );
-
-  const [slots, setSlots] = useState<UploadSlotState[]>([]);
-
-  useEffect(() => {
-    if (!initialDraft) return;
-    const item = catalogue.items.find((i) => i.id === initialDraft.serviceItemId);
-    if (!item) return;
-    const sub = catalogue.subs.find((s) => s.id === item.subCategoryId);
-    if (sub) {
-      setMainId(sub.mainCategoryId);
-      setSubIds([sub.id]);
-    }
-    setSlots(buildSlots(item, initialDraft, t("step3.additional")));
-  }, [initialDraft, catalogue, t]);
 
   const [couponCode, setCouponCode] = useState(initialDraft?.couponCode ?? "");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(
@@ -162,11 +267,26 @@ export function NewRequestWizard({
       setStep(saved.step);
       setMainId(saved.mainId);
       setSubIds(saved.subIds ?? []);
-      setItemId(saved.itemId);
-      setProductNameEn(saved.productNameEn);
-      setProductNameAr(saved.productNameAr);
-      setBrand(saved.brand);
-      setAttrs(saved.attrs);
+      setCartIds(saved.cartIds ?? []);
+      setItems((prev) =>
+        (saved.items ?? []).map((si) => {
+          const catalogueItem = catalogueItemById.get(si.serviceItemId);
+          const existing = prev.find((p) => p.requestItemId === si.requestItemId);
+          return {
+            requestItemId: si.requestItemId,
+            serviceItemId: si.serviceItemId,
+            productNameEn: si.productNameEn,
+            productNameAr: si.productNameAr,
+            brand: si.brand,
+            attrs: si.attrs,
+            slots:
+              existing?.slots ??
+              (catalogueItem
+                ? buildSlots(catalogueItem, undefined, t("step3.additional"))
+                : []),
+          };
+        }),
+      );
       setCouponCode(saved.couponCode);
       setAppliedCoupon(saved.appliedCoupon);
       setDiscount(saved.discount);
@@ -185,11 +305,15 @@ export function NewRequestWizard({
       step,
       mainId,
       subIds,
-      itemId,
-      productNameEn,
-      productNameAr,
-      brand,
-      attrs,
+      cartIds,
+      items: items.map((i) => ({
+        requestItemId: i.requestItemId,
+        serviceItemId: i.serviceItemId,
+        productNameEn: i.productNameEn,
+        productNameAr: i.productNameAr,
+        brand: i.brand,
+        attrs: i.attrs,
+      })),
       couponCode,
       appliedCoupon,
       discount,
@@ -202,62 +326,69 @@ export function NewRequestWizard({
     step,
     mainId,
     subIds,
-    itemId,
-    productNameEn,
-    productNameAr,
-    brand,
-    attrs,
+    cartIds,
+    items,
     couponCode,
     appliedCoupon,
     discount,
     artworkFinal,
   ]);
 
-  const attrFields = useMemo(
-    () => parseAttrSchema(selectedItem?.productAttrSchema),
-    [selectedItem],
-  );
-
   const breakdown = useMemo(() => {
-    if (!selectedItem) {
+    if (items.length === 0) {
       return { subtotal: 0, discount: 0, vatAmount: 0, total: 0 };
     }
-    const b = computePriceBreakdown({
-      basePrice: selectedItem.basePrice,
+    const b = computeOrderBreakdown(
+      items.map((i) => {
+        const catalogueItem = catalogueItemById.get(i.serviceItemId);
+        return {
+          basePrice: catalogueItem?.basePrice ?? 0,
+          vatRate: catalogueItem?.vatRate ?? 0.15,
+        };
+      }),
       discount,
-      vatRate: selectedItem.vatRate,
-    });
+    );
     return {
       subtotal: Number(b.subtotal),
       discount: Number(b.discount),
       vatAmount: Number(b.vatAmount),
       total: Number(b.total),
     };
-  }, [selectedItem, discount]);
+  }, [items, discount, catalogueItemById]);
 
-  const mandatoryTotal = slots.filter((s) => s.mandatory).length;
-  const mandatoryFilled = slots.filter(
-    (s) => s.mandatory && Boolean(s.fileName),
-  ).length;
+  const mandatoryTotal = items.reduce(
+    (sum, i) => sum + i.slots.filter((s) => s.mandatory).length,
+    0,
+  );
+  const mandatoryFilled = items.reduce(
+    (sum, i) =>
+      sum + i.slots.filter((s) => s.mandatory && Boolean(s.fileName)).length,
+    0,
+  );
   const canSubmit =
     artworkFinal &&
+    items.length > 0 &&
     mandatoryFilled >= mandatoryTotal &&
-    productNameEn.trim().length >= 2 &&
-    productNameAr.trim().length >= 2 &&
-    Boolean(requestId) &&
-    Boolean(selectedItem);
+    items.every(
+      (i) =>
+        i.productNameEn.trim().length >= 2 && i.productNameAr.trim().length >= 2,
+    ) &&
+    Boolean(requestId);
 
-  function rebuildSlotsForItem(item: CatalogueServiceItem) {
-    setSlots(buildSlots(item, null, t("step3.additional")));
+  function toggleCartItem(itemId: string) {
+    setCartIds((prev) =>
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId],
+    );
   }
 
-  async function selectServiceItem(item: CatalogueServiceItem) {
-    setItemId(item.id);
-    rebuildSlotsForItem(item);
-    setExpandedChecks(true);
+  function goStep1Continue() {
+    if (cartIds.length === 0) {
+      toast.error(t("errors.SELECT_SERVICE"));
+      return;
+    }
     startTransition(async () => {
       const result = await createOrSelectDraft({
-        serviceItemId: item.id,
+        serviceItemIds: cartIds,
         resumeRequestId: requestId,
       });
       if (!result.ok) {
@@ -269,49 +400,68 @@ export function NewRequestWizard({
       setDiscount(0);
       setAppliedCoupon(null);
       setCouponCode("");
+      setItems((prev) =>
+        result.data.items.map((ri) => {
+          const existing = prev.find((p) => p.requestItemId === ri.id);
+          if (existing) return existing;
+          const catalogueItem = catalogueItemById.get(ri.serviceItemId);
+          return {
+            requestItemId: ri.id,
+            serviceItemId: ri.serviceItemId,
+            productNameEn: "",
+            productNameAr: "",
+            brand: "",
+            attrs: {},
+            slots: catalogueItem
+              ? buildSlots(catalogueItem, undefined, t("step3.additional"))
+              : [],
+          };
+        }),
+      );
+      setStep(2);
     });
   }
 
-  useEffect(() => {
-    if (items.length === 1 && items[0].id !== itemId) {
-      void selectServiceItem(items[0]);
-    }
-    // Only re-run when the resolved item list changes; selectServiceItem is
-    // stable for this purpose and itemId is checked inside the effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
-
-  function goStep2() {
-    if (!selectedItem || !requestId) {
-      toast.error(t("errors.SELECT_SERVICE"));
-      return;
-    }
-    setStep(2);
+  function updateItem(requestItemId: string, patch: Partial<ItemState>) {
+    setItems((prev) =>
+      prev.map((i) => (i.requestItemId === requestItemId ? { ...i, ...patch } : i)),
+    );
   }
 
   function goStep3() {
-    if (productNameEn.trim().length < 2 || productNameAr.trim().length < 2) {
-      toast.error(t("errors.PRODUCT_NAME"));
-      return;
-    }
-    for (const field of attrFields) {
-      if (field.required && (attrs[field.key] === undefined || attrs[field.key] === "")) {
-        toast.error(t("errors.ATTRS_REQUIRED"));
+    for (const item of items) {
+      if (
+        item.productNameEn.trim().length < 2 ||
+        item.productNameAr.trim().length < 2
+      ) {
+        toast.error(t("errors.PRODUCT_NAME"));
         return;
+      }
+      const catalogueItem = catalogueItemById.get(item.serviceItemId);
+      const attrFields = parseAttrSchema(catalogueItem?.productAttrSchema);
+      for (const field of attrFields) {
+        if (
+          field.required &&
+          (item.attrs[field.key] === undefined || item.attrs[field.key] === "")
+        ) {
+          toast.error(t("errors.ATTRS_REQUIRED"));
+          return;
+        }
       }
     }
     startTransition(async () => {
-      if (!requestId) return;
-      const result = await saveDraftProductDetails({
-        requestId,
-        productNameEn,
-        productNameAr,
-        brand: brand || null,
-        productAttrs: attrs,
-      });
-      if (!result.ok) {
-        toast.error(t(`errors.${result.error}` as never));
-        return;
+      for (const item of items) {
+        const result = await saveDraftProductDetails({
+          requestItemId: item.requestItemId,
+          productNameEn: item.productNameEn,
+          productNameAr: item.productNameAr,
+          brand: item.brand || null,
+          productAttrs: item.attrs,
+        });
+        if (!result.ok) {
+          toast.error(t(`errors.${result.error}` as never));
+          return;
+        }
       }
       setStep(3);
     });
@@ -342,9 +492,10 @@ export function NewRequestWizard({
     return null;
   }
 
-  async function onUpload(slotIndex: number, file: File) {
+  async function onUpload(requestItemId: string, slotIndex: number, file: File) {
     if (!requestId) return;
-    const slot = slots[slotIndex];
+    const item = items.find((i) => i.requestItemId === requestItemId);
+    const slot = item?.slots[slotIndex];
     if (!slot) return;
 
     const clientError = clientRejectFile(file, slot);
@@ -353,12 +504,22 @@ export function NewRequestWizard({
       return;
     }
 
-    setSlots((prev) =>
-      prev.map((s, i) => (i === slotIndex ? { ...s, progress: 10 } : s)),
+    setItems((prev) =>
+      prev.map((i) =>
+        i.requestItemId === requestItemId
+          ? {
+              ...i,
+              slots: i.slots.map((s, idx) =>
+                idx === slotIndex ? { ...s, progress: 10 } : s,
+              ),
+            }
+          : i,
+      ),
     );
 
     const fd = new FormData();
     fd.set("requestId", requestId);
+    fd.set("requestItemId", requestItemId);
     if (slot.requiredDocumentId) {
       fd.set("requiredDocumentId", slot.requiredDocumentId);
     }
@@ -367,8 +528,17 @@ export function NewRequestWizard({
 
     const result = await uploadRequestDocument(fd);
     if (!result.ok) {
-      setSlots((prev) =>
-        prev.map((s, i) => (i === slotIndex ? { ...s, progress: undefined } : s)),
+      setItems((prev) =>
+        prev.map((i) =>
+          i.requestItemId === requestItemId
+            ? {
+                ...i,
+                slots: i.slots.map((s, idx) =>
+                  idx === slotIndex ? { ...s, progress: undefined } : s,
+                ),
+              }
+            : i,
+        ),
       );
       if (result.error === "MIME_REJECTED") {
         toast.error(
@@ -383,78 +553,101 @@ export function NewRequestWizard({
       return;
     }
 
-    setSlots((prev) =>
-      prev.map((s, i) =>
-        i === slotIndex
+    setItems((prev) =>
+      prev.map((i) =>
+        i.requestItemId === requestItemId
           ? {
-              ...s,
-              progress: 100,
-              documentId: result.data.documentId,
-              fileName: result.data.fileName,
-              mimeType: result.data.mimeType,
-              previewUrl: result.data.previewUrl,
+              ...i,
+              slots: i.slots.map((s, idx) =>
+                idx === slotIndex
+                  ? {
+                      ...s,
+                      progress: 100,
+                      documentId: result.data.documentId,
+                      fileName: result.data.fileName,
+                      mimeType: result.data.mimeType,
+                      previewUrl: result.data.previewUrl,
+                    }
+                  : s,
+              ),
             }
-          : s,
+          : i,
       ),
     );
   }
 
-  async function onDropFiles(slotIndex: number, fileList: FileList | File[]) {
+  async function onDropFiles(
+    requestItemId: string,
+    slotIndex: number,
+    fileList: FileList | File[],
+  ) {
     const files = Array.from(fileList);
     if (files.length === 0 || !requestId) return;
-    const baseSlot = slots[slotIndex];
+    const item = items.find((i) => i.requestItemId === requestItemId);
+    const baseSlot = item?.slots[slotIndex];
     if (!baseSlot) return;
 
     if (baseSlot.requiredDocumentId) {
-      await onUpload(slotIndex, files[0]!);
+      await onUpload(requestItemId, slotIndex, files[0]!);
       return;
     }
 
-    let workingIndex = slotIndex;
     for (let i = 0; i < files.length; i += 1) {
       const file = files[i]!;
+      let workingIndex = slotIndex;
       if (i > 0) {
         workingIndex = -1;
-        setSlots((prev) => {
-          const next = [
-            ...prev,
-            {
-              requiredDocumentId: null,
-              label: t("step3.additional"),
-              mandatory: false,
-              acceptedMimeTypes: [
-                "application/pdf",
-                "image/png",
-                "image/jpeg",
-              ],
-              maxSizeMb: 50,
-            } satisfies UploadSlotState,
-          ];
-          workingIndex = next.length - 1;
-          return next;
-        });
+        setItems((prev) =>
+          prev.map((it) => {
+            if (it.requestItemId !== requestItemId) return it;
+            const next = [
+              ...it.slots,
+              {
+                requiredDocumentId: null,
+                label: t("step3.additional"),
+                mandatory: false,
+                acceptedMimeTypes: [
+                  "application/pdf",
+                  "image/png",
+                  "image/jpeg",
+                ],
+                maxSizeMb: 50,
+              } satisfies UploadSlotState,
+            ];
+            workingIndex = next.length - 1;
+            return { ...it, slots: next };
+          }),
+        );
         await Promise.resolve();
         if (workingIndex < 0) continue;
       }
-      await onUpload(workingIndex, file);
+      await onUpload(requestItemId, workingIndex, file);
     }
   }
 
-  async function onRemoveSlot(slotIndex: number) {
-    const slot = slots[slotIndex];
+  async function onRemoveSlot(requestItemId: string, slotIndex: number) {
+    const item = items.find((i) => i.requestItemId === requestItemId);
+    const slot = item?.slots[slotIndex];
     if (!slot?.documentId || !requestId) {
-      setSlots((prev) =>
-        prev.map((s, i) =>
-          i === slotIndex
+      setItems((prev) =>
+        prev.map((i) =>
+          i.requestItemId === requestItemId
             ? {
-                ...s,
-                documentId: undefined,
-                fileName: undefined,
-                mimeType: undefined,
-                previewUrl: undefined,
-                progress: undefined,
+                ...i,
+                slots: i.slots.map((s, idx) =>
+                  idx === slotIndex
+                    ? {
+                        ...s,
+                        documentId: undefined,
+                        fileName: undefined,
+                        mimeType: undefined,
+                        previewUrl: undefined,
+                        progress: undefined,
+                      }
+                    : s,
+                ),
               }
-            : s,
+            : i,
         ),
       );
       return;
@@ -467,18 +660,25 @@ export function NewRequestWizard({
       toast.error(t(`errors.${result.error}` as never));
       return;
     }
-    setSlots((prev) =>
-      prev.map((s, i) =>
-        i === slotIndex
+    setItems((prev) =>
+      prev.map((i) =>
+        i.requestItemId === requestItemId
           ? {
-              ...s,
-              documentId: undefined,
-              fileName: undefined,
-              mimeType: undefined,
-              previewUrl: undefined,
-              progress: undefined,
+              ...i,
+              slots: i.slots.map((s, idx) =>
+                idx === slotIndex
+                  ? {
+                      ...s,
+                      documentId: undefined,
+                      fileName: undefined,
+                      mimeType: undefined,
+                      previewUrl: undefined,
+                      progress: undefined,
+                    }
+                  : s,
+              ),
             }
-          : s,
+          : i,
       ),
     );
   }
@@ -527,10 +727,6 @@ export function NewRequestWizard({
         requestId,
         idempotencyKey,
         artworkIsFinal: true,
-        productNameEn,
-        productNameAr,
-        brand: brand || null,
-        productAttrs: attrs,
         couponCode: appliedCoupon,
       });
       if (!result.ok) {
@@ -578,7 +774,6 @@ export function NewRequestWizard({
                   onClick={() => {
                     setMainId(main.id);
                     setSubIds([]);
-                    setItemId(null);
                   }}
                   className={cn(
                     "rounded-lg border p-4 text-start transition-colors duration-150 ease-out",
@@ -616,7 +811,6 @@ export function NewRequestWizard({
                           ? prev.filter((id) => id !== sub.id)
                           : [...prev, sub.id],
                       );
-                      setItemId(null);
                     }}
                     className={cn(
                       "rounded-md border px-3 py-2 text-sm font-medium",
@@ -633,16 +827,17 @@ export function NewRequestWizard({
 
             {subIds.length > 0 ? (
               <ul className="space-y-2">
-                {items.map((item) => {
+                {browsableItems.map((item) => {
                   const vat = item.basePrice * item.vatRate;
+                  const inCart = cartIds.includes(item.id);
                   return (
                     <li key={item.id}>
                       <button
                         type="button"
-                        onClick={() => void selectServiceItem(item)}
+                        onClick={() => toggleCartItem(item.id)}
                         className={cn(
                           "w-full rounded-lg border p-4 text-start transition-colors duration-150 ease-out",
-                          itemId === item.id
+                          inCart
                             ? "border-atlas-green bg-atlas-green-tint"
                             : "border-line bg-surface hover:bg-surface-alt",
                         )}
@@ -677,16 +872,23 @@ export function NewRequestWizard({
                           </div>
                         </div>
                       </button>
-                      {itemId === item.id ? (
+                      {inCart ? (
                         <div className="mt-2 rounded-md border border-line bg-surface-alt p-3">
                           <button
                             type="button"
                             className="text-sm font-semibold text-atlas-green-600"
-                            onClick={() => setExpandedChecks((v) => !v)}
+                            onClick={() =>
+                              setExpandedChecks((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(item.id)) next.delete(item.id);
+                                else next.add(item.id);
+                                return next;
+                              })
+                            }
                           >
                             {t("step1.whatWeCheck")}
                           </button>
-                          {expandedChecks ? (
+                          {expandedChecks.has(item.id) ? (
                             <ul className="mt-2 space-y-1 text-sm text-ink-800">
                               {item.checkSets.map((set) => (
                                 <li key={set.code}>
@@ -703,87 +905,126 @@ export function NewRequestWizard({
               </ul>
             ) : null}
 
-            <Button type="button" disabled={!itemId || pending} onClick={goStep2}>
+            <Button
+              type="button"
+              disabled={cartIds.length === 0 || pending}
+              onClick={goStep1Continue}
+            >
               {t("continue")}
             </Button>
           </section>
         ) : null}
 
         {step === 2 ? (
-          <section className="space-y-4">
+          <section className="space-y-6">
             <h2 className="text-lg font-semibold text-ink-900">{t("step2.title")}</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>{t("fields.productNameAr")}</Label>
-                <Input
-                  value={productNameAr}
-                  onChange={(e) => setProductNameAr(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{t("fields.productNameEn")}</Label>
-                <Input
-                  value={productNameEn}
-                  onChange={(e) => setProductNameEn(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>{t("fields.brand")}</Label>
-                <Input value={brand} onChange={(e) => setBrand(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-4">
-              {attrFields.map((field) => (
-                <div key={field.key} className="space-y-2">
-                  <Label>
-                    {locale === "ar" ? field.titleAr : field.titleEn}
-                  </Label>
-                  <p className="text-xs text-ink-500">
-                    {locale === "ar" ? field.helpAr : field.helpEn}
+            {items.map((item) => {
+              const catalogueItem = catalogueItemById.get(item.serviceItemId);
+              const attrFields = parseAttrSchema(catalogueItem?.productAttrSchema);
+              return (
+                <div
+                  key={item.requestItemId}
+                  className="space-y-4 rounded-lg border border-line bg-surface p-4"
+                >
+                  <p className="text-sm font-semibold text-ink-900">
+                    {catalogueItem
+                      ? locale === "ar"
+                        ? catalogueItem.nameAr
+                        : catalogueItem.nameEn
+                      : ""}
                   </p>
-                  {field.type === "boolean" ? (
-                    <Select
-                      value={
-                        attrs[field.key] === true
-                          ? "true"
-                          : attrs[field.key] === false
-                            ? "false"
-                            : ""
-                      }
-                      onValueChange={(v) =>
-                        setAttrs((a) => ({ ...a, [field.key]: v === "true" }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t("fields.select")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="true">{t("fields.yes")}</SelectItem>
-                        <SelectItem value="false">{t("fields.no")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Select
-                      value={String(attrs[field.key] ?? "")}
-                      onValueChange={(v) =>
-                        setAttrs((a) => ({ ...a, [field.key]: v }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t("fields.select")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(field.enum ?? []).map((opt) => (
-                          <SelectItem key={opt} value={opt}>
-                            {t(`enums.${opt}` as never)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>{t("fields.productNameAr")}</Label>
+                      <Input
+                        value={item.productNameAr}
+                        onChange={(e) =>
+                          updateItem(item.requestItemId, {
+                            productNameAr: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t("fields.productNameEn")}</Label>
+                      <Input
+                        value={item.productNameEn}
+                        onChange={(e) =>
+                          updateItem(item.requestItemId, {
+                            productNameEn: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>{t("fields.brand")}</Label>
+                      <Input
+                        value={item.brand}
+                        onChange={(e) =>
+                          updateItem(item.requestItemId, { brand: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    {attrFields.map((field) => (
+                      <div key={field.key} className="space-y-2">
+                        <Label>
+                          {locale === "ar" ? field.titleAr : field.titleEn}
+                        </Label>
+                        <p className="text-xs text-ink-500">
+                          {locale === "ar" ? field.helpAr : field.helpEn}
+                        </p>
+                        {field.type === "boolean" ? (
+                          <Select
+                            value={
+                              item.attrs[field.key] === true
+                                ? "true"
+                                : item.attrs[field.key] === false
+                                  ? "false"
+                                  : ""
+                            }
+                            onValueChange={(v) =>
+                              updateItem(item.requestItemId, {
+                                attrs: { ...item.attrs, [field.key]: v === "true" },
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={t("fields.select")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="true">{t("fields.yes")}</SelectItem>
+                              <SelectItem value="false">{t("fields.no")}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Select
+                            value={String(item.attrs[field.key] ?? "")}
+                            onValueChange={(v) =>
+                              updateItem(item.requestItemId, {
+                                attrs: { ...item.attrs, [field.key]: v },
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={t("fields.select")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(field.enum ?? []).map((opt) => (
+                                <SelectItem key={opt} value={opt}>
+                                  {t(`enums.${opt}` as never)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setStep(1)}>
                 {t("back")}
@@ -796,7 +1037,7 @@ export function NewRequestWizard({
         ) : null}
 
         {step === 3 ? (
-          <section className="space-y-4">
+          <section className="space-y-6">
             <h2 className="text-lg font-semibold text-ink-900">{t("step3.title")}</h2>
             <p className="text-sm text-ink-500">
               {t("step3.counter", {
@@ -804,112 +1045,137 @@ export function NewRequestWizard({
                 total: mandatoryTotal,
               })}
             </p>
-            <ul className="space-y-3">
-              {slots.map((slot, index) => (
-                <li
-                  key={`${slot.requiredDocumentId ?? "extra"}-${index}`}
-                  className="rounded-lg border border-line bg-surface p-4"
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-ink-900">
-                        {slot.requiredDocumentId
-                          ? locale === "ar"
-                            ? selectedItem?.requiredDocuments.find(
-                                (d) => d.id === slot.requiredDocumentId,
-                              )?.nameAr ?? slot.label
-                            : selectedItem?.requiredDocuments.find(
-                                (d) => d.id === slot.requiredDocumentId,
-                              )?.nameEn ?? slot.label
-                          : t("step3.additional")}
-                        {slot.mandatory ? (
-                          <span className="ms-2 text-state-bad">*</span>
-                        ) : (
-                          <span className="ms-2 text-xs text-ink-500">
-                            ({t("step3.optional")})
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    {slot.fileName ? (
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => void onRemoveSlot(index)}
-                        aria-label={t("step3.remove")}
+            {items.map((item) => {
+              const catalogueItem = catalogueItemById.get(item.serviceItemId);
+              return (
+                <div key={item.requestItemId} className="space-y-3">
+                  <p className="text-sm font-semibold text-ink-900">
+                    {catalogueItem
+                      ? locale === "ar"
+                        ? catalogueItem.nameAr
+                        : catalogueItem.nameEn
+                      : ""}
+                  </p>
+                  <ul className="space-y-3">
+                    {item.slots.map((slot, index) => (
+                      <li
+                        key={`${slot.requiredDocumentId ?? "extra"}-${index}`}
+                        className="rounded-lg border border-line bg-surface p-4"
                       >
-                        <X className="size-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                  {slot.fileName ? (
-                    <div className="flex items-center gap-3">
-                      {slot.previewUrl && slot.mimeType?.startsWith("image/") ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={slot.previewUrl}
-                          alt=""
-                          className="size-14 rounded-md border border-line object-cover"
-                        />
-                      ) : slot.previewUrl && slot.mimeType === "application/pdf" ? (
-                        <object
-                          data={slot.previewUrl}
-                          type="application/pdf"
-                          className="size-14 overflow-hidden rounded-md border border-line bg-surface-alt"
-                          aria-label={slot.fileName}
-                        />
-                      ) : (
-                        <div className="flex size-14 items-center justify-center rounded-md border border-line bg-surface-alt text-xs font-data">
-                          PDF
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-ink-900">
+                              {slot.requiredDocumentId
+                                ? locale === "ar"
+                                  ? catalogueItem?.requiredDocuments.find(
+                                      (d) => d.id === slot.requiredDocumentId,
+                                    )?.nameAr ?? slot.label
+                                  : catalogueItem?.requiredDocuments.find(
+                                      (d) => d.id === slot.requiredDocumentId,
+                                    )?.nameEn ?? slot.label
+                                : t("step3.additional")}
+                              {slot.mandatory ? (
+                                <span className="ms-2 text-state-bad">*</span>
+                              ) : (
+                                <span className="ms-2 text-xs text-ink-500">
+                                  ({t("step3.optional")})
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          {slot.fileName ? (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() =>
+                                void onRemoveSlot(item.requestItemId, index)
+                              }
+                              aria-label={t("step3.remove")}
+                            >
+                              <X className="size-4" />
+                            </Button>
+                          ) : null}
                         </div>
-                      )}
-                      <p className="truncate text-sm text-ink-800" dir="ltr">
-                        {slot.fileName}
-                      </p>
-                    </div>
-                  ) : (
-                    <label
-                      className="flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-line bg-surface-alt px-4 py-6 text-center"
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void onDropFiles(index, e.dataTransfer.files);
-                      }}
-                    >
-                      <Upload className="mb-2 size-5 text-atlas-green" />
-                      <span className="text-sm text-ink-800">
-                        {t("step3.drop")}
-                      </span>
-                      <input
-                        type="file"
-                        className="sr-only"
-                        multiple={!slot.requiredDocumentId}
-                        accept={slot.acceptedMimeTypes.join(",")}
-                        onChange={(e) => {
-                          if (e.target.files?.length) {
-                            void onDropFiles(index, e.target.files);
-                          }
-                          e.target.value = "";
-                        }}
-                      />
-                      {typeof slot.progress === "number" ? (
-                        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-line">
-                          <div
-                            className="h-full bg-atlas-green transition-[width] duration-150 ease-out"
-                            style={{ width: `${slot.progress}%` }}
-                          />
-                        </div>
-                      ) : null}
-                    </label>
-                  )}
-                </li>
-              ))}
-            </ul>
+                        {slot.fileName ? (
+                          <div className="flex items-center gap-3">
+                            {slot.previewUrl && slot.mimeType?.startsWith("image/") ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={slot.previewUrl}
+                                alt=""
+                                className="size-14 rounded-md border border-line object-cover"
+                              />
+                            ) : slot.previewUrl &&
+                              slot.mimeType === "application/pdf" ? (
+                              <object
+                                data={slot.previewUrl}
+                                type="application/pdf"
+                                className="size-14 overflow-hidden rounded-md border border-line bg-surface-alt"
+                                aria-label={slot.fileName}
+                              />
+                            ) : (
+                              <div className="flex size-14 items-center justify-center rounded-md border border-line bg-surface-alt text-xs font-data">
+                                PDF
+                              </div>
+                            )}
+                            <p className="truncate text-sm text-ink-800" dir="ltr">
+                              {slot.fileName}
+                            </p>
+                          </div>
+                        ) : (
+                          <label
+                            className="flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-line bg-surface-alt px-4 py-6 text-center"
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void onDropFiles(
+                                item.requestItemId,
+                                index,
+                                e.dataTransfer.files,
+                              );
+                            }}
+                          >
+                            <Upload className="mb-2 size-5 text-atlas-green" />
+                            <span className="text-sm text-ink-800">
+                              {t("step3.drop")}
+                            </span>
+                            <input
+                              type="file"
+                              className="sr-only"
+                              multiple={!slot.requiredDocumentId}
+                              accept={slot.acceptedMimeTypes.join(",")}
+                              onChange={(e) => {
+                                if (e.target.files?.length) {
+                                  void onDropFiles(
+                                    item.requestItemId,
+                                    index,
+                                    e.target.files,
+                                  );
+                                }
+                                e.target.value = "";
+                              }}
+                            />
+                            {typeof slot.progress === "number" ? (
+                              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-line">
+                                <div
+                                  className="h-full bg-atlas-green transition-[width] duration-150 ease-out"
+                                  style={{ width: `${slot.progress}%` }}
+                                />
+                              </div>
+                            ) : null}
+                          </label>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setStep(2)}>
                 {t("back")}
@@ -929,22 +1195,33 @@ export function NewRequestWizard({
           <section className="space-y-4">
             <h2 className="text-lg font-semibold text-ink-900">{t("step4.title")}</h2>
             <div className="rounded-lg border border-line bg-surface-alt p-4 text-sm text-ink-800">
-              <p>
-                <span className="text-ink-500">{t("summary.service")}: </span>
-                {selectedItem
-                  ? locale === "ar"
-                    ? selectedItem.nameAr
-                    : selectedItem.nameEn
-                  : "—"}
-              </p>
-              <p>
-                <span className="text-ink-500">{t("summary.product")}: </span>
-                {locale === "ar" ? productNameAr : productNameEn}
-              </p>
-              <p>
-                <span className="text-ink-500">{t("summary.docs")}: </span>
-                {slots.filter((s) => s.fileName).length}
-              </p>
+              {items.map((item) => {
+                const catalogueItem = catalogueItemById.get(item.serviceItemId);
+                const docsFilled = item.slots.filter((s) => s.fileName).length;
+                return (
+                  <div
+                    key={item.requestItemId}
+                    className="border-b border-line py-2 last:border-0"
+                  >
+                    <p>
+                      <span className="text-ink-500">{t("summary.service")}: </span>
+                      {catalogueItem
+                        ? locale === "ar"
+                          ? catalogueItem.nameAr
+                          : catalogueItem.nameEn
+                        : "—"}
+                    </p>
+                    <p>
+                      <span className="text-ink-500">{t("summary.product")}: </span>
+                      {locale === "ar" ? item.productNameAr : item.productNameEn}
+                    </p>
+                    <p>
+                      <span className="text-ink-500">{t("summary.docs")}: </span>
+                      {docsFilled}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex flex-wrap items-end gap-2">
@@ -1011,10 +1288,17 @@ export function NewRequestWizard({
           <div className="flex justify-between gap-3">
             <dt className="text-ink-500">{t("summary.service")}</dt>
             <dd className="text-end text-ink-800">
-              {selectedItem
-                ? locale === "ar"
-                  ? selectedItem.nameAr
-                  : selectedItem.nameEn
+              {items.length > 0
+                ? items
+                    .map((i) => {
+                      const catalogueItem = catalogueItemById.get(i.serviceItemId);
+                      if (!catalogueItem) return "";
+                      return locale === "ar"
+                        ? catalogueItem.nameAr
+                        : catalogueItem.nameEn;
+                    })
+                    .filter(Boolean)
+                    .join(", ")
                 : "—"}
             </dd>
           </div>
@@ -1063,73 +1347,4 @@ function formatExpiredOn(isoDate?: string): string {
   const [y, m, d] = isoDate.split("-");
   if (!y || !m || !d) return isoDate;
   return `${d}/${m}/${y}`;
-}
-
-function buildSlots(
-  item: CatalogueServiceItem | null,
-  draft: DraftRequestView | null,
-  additionalLabel: string,
-): UploadSlotState[] {
-  if (!item) return [];
-  const mapped: UploadSlotState[] = item.requiredDocuments.map((doc) => {
-    const existing = draft?.documents.find(
-      (d) => d.requiredDocumentId === doc.id,
-    );
-    return {
-      requiredDocumentId: doc.id,
-      label: doc.nameEn,
-      mandatory: doc.mandatory,
-      acceptedMimeTypes: doc.acceptedMimeTypes,
-      maxSizeMb: doc.maxSizeMb,
-      documentId: existing?.id,
-      fileName: existing?.currentVersion?.fileName,
-      mimeType: existing?.currentVersion?.mimeType,
-      previewUrl: existing?.currentVersion
-        ? `/api/storage/${existing.currentVersion.storageKey
-            .split("/")
-            .map(encodeURIComponent)
-            .join("/")}`
-        : undefined,
-    };
-  });
-
-  const extras =
-    draft?.documents.filter((d) => !d.requiredDocumentId) ?? [];
-  if (extras.length === 0) {
-    mapped.push({
-      requiredDocumentId: null,
-      label: additionalLabel,
-      mandatory: false,
-      acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
-      maxSizeMb: 50,
-    });
-  } else {
-    for (const existing of extras) {
-      mapped.push({
-        requiredDocumentId: null,
-        label: additionalLabel,
-        mandatory: false,
-        acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
-        maxSizeMb: 50,
-        documentId: existing.id,
-        fileName: existing.currentVersion?.fileName,
-        mimeType: existing.currentVersion?.mimeType,
-        previewUrl: existing.currentVersion
-          ? `/api/storage/${existing.currentVersion.storageKey
-              .split("/")
-              .map(encodeURIComponent)
-              .join("/")}`
-          : undefined,
-      });
-    }
-    mapped.push({
-      requiredDocumentId: null,
-      label: additionalLabel,
-      mandatory: false,
-      acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
-      maxSizeMb: 50,
-    });
-  }
-
-  return mapped;
 }

@@ -8,12 +8,14 @@ import { consumeRateLimitAsync } from "@/lib/rate-limit";
 export type PublicVerification = {
   requestNo: string;
   state: "REPORT_ISSUED" | "CLOSED";
-  productNameEn: string;
-  productNameAr: string;
   organisationNameEn: string;
   organisationNameAr: string;
-  serviceNameEn: string;
-  serviceNameAr: string;
+  items: Array<{
+    productNameEn: string;
+    productNameAr: string;
+    serviceNameEn: string;
+    serviceNameAr: string;
+  }>;
   issuedAt: string;
 };
 
@@ -44,7 +46,10 @@ export async function getPublicVerification(
     },
     include: {
       organisation: { select: { nameEn: true, nameAr: true } },
-      serviceItem: { select: { nameEn: true, nameAr: true } },
+      items: {
+        orderBy: { sortOrder: "asc" },
+        include: { serviceItem: { select: { nameEn: true, nameAr: true } } },
+      },
       events: {
         where: { toState: "REPORT_ISSUED" },
         orderBy: { createdAt: "desc" },
@@ -63,12 +68,14 @@ export async function getPublicVerification(
   return {
     requestNo: row.requestNo,
     state: row.state as "REPORT_ISSUED" | "CLOSED",
-    productNameEn: row.productNameEn,
-    productNameAr: row.productNameAr,
     organisationNameEn: row.organisation.nameEn,
     organisationNameAr: row.organisation.nameAr,
-    serviceNameEn: row.serviceItem.nameEn,
-    serviceNameAr: row.serviceItem.nameAr,
+    items: row.items.map((item) => ({
+      productNameEn: item.productNameEn,
+      productNameAr: item.productNameAr,
+      serviceNameEn: item.serviceItem.nameEn,
+      serviceNameAr: item.serviceItem.nameAr,
+    })),
     issuedAt,
   };
 }

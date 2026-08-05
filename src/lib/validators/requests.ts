@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createOrSelectDraftSchema = z.object({
-  serviceItemId: z.string().min(1),
+  serviceItemIds: z.array(z.string().min(1)).min(1),
   resumeRequestId: z.string().min(1).nullable().optional(),
 });
 
@@ -16,6 +16,7 @@ export const removeCouponFromDraftSchema = z.object({
 
 export const uploadRequestDocumentIdsSchema = z.object({
   requestId: z.string().min(1),
+  requestItemId: z.string().min(1),
   requiredDocumentId: z.string().min(1).nullable().optional(),
   label: z.string().trim().min(1).max(200).optional(),
 });

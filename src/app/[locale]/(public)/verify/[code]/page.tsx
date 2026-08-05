@@ -58,9 +58,9 @@ export default async function VerifyCodePage({ params }: Props) {
                 <div className="flex justify-between gap-4">
                   <dt className="text-ink-500">{t("verifiedProduct")}</dt>
                   <dd className="text-start text-ink-900">
-                    {isAr
-                      ? verification.productNameAr
-                      : verification.productNameEn}
+                    {verification.items
+                      .map((i) => (isAr ? i.productNameAr : i.productNameEn))
+                      .join(", ")}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
@@ -74,9 +74,9 @@ export default async function VerifyCodePage({ params }: Props) {
                 <div className="flex justify-between gap-4">
                   <dt className="text-ink-500">{t("verifiedService")}</dt>
                   <dd className="text-start text-ink-900">
-                    {isAr
-                      ? verification.serviceNameAr
-                      : verification.serviceNameEn}
+                    {verification.items
+                      .map((i) => (isAr ? i.serviceNameAr : i.serviceNameEn))
+                      .join(", ")}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">

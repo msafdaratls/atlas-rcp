@@ -19,7 +19,7 @@ import {
 import { evaluateCoupon } from "@/lib/coupon";
 import { prisma } from "@/lib/db";
 import { log } from "@/lib/logger";
-import { computePriceBreakdown, toNumber } from "@/lib/pricing";
+import { computeOrderBreakdown, toNumber } from "@/lib/pricing";
 import { requirePermission } from "@/lib/rbac";
 import { resolveResubmissionPricePct } from "@/lib/resubmission-price";
 import { scopedDb } from "@/lib/scoped-db";
@@ -140,19 +140,22 @@ async function notifyCreditLimitReached(organisationId: string): Promise<void> {
   }
 }
 
-async function loadServiceContext(
+async function loadServiceContexts(
   organisationId: string,
-  serviceItemId: string,
+  serviceItemIds: string[],
   submissionNo: number,
 ) {
-  const item = await prisma.serviceItem.findFirst({
-    where: { id: serviceItemId, active: true },
+  const items = await prisma.serviceItem.findMany({
+    where: { id: { in: serviceItemIds }, active: true },
     include: {
       subCategory: { include: { mainCategory: true } },
       requiredDocuments: true,
     },
   });
-  if (!item) return null;
+  if (items.length !== new Set(serviceItemIds).size) return null;
+  // Preserve caller-requested order (cart order), not the DB's arbitrary order.
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const ordered = serviceItemIds.map((id) => byId.get(id)!);
 
   const priorSubmitted = await prisma.request.count({
     where: {
@@ -162,20 +165,28 @@ async function loadServiceContext(
   });
 
   return {
-    item,
-    mainCategoryId: item.subCategory.mainCategoryId,
-    mainCategoryCode: item.subCategory.mainCategory.code,
-    subCategoryId: item.subCategoryId,
-    basePrice: item.basePrice,
-    vatRate: item.vatRate,
+    items: ordered,
     submissionNo,
     organisationId,
     isNewClient: isNewClientOrg(priorSubmitted),
   };
 }
 
+function couponItemContext(items: Array<{
+  id: string;
+  subCategoryId: string;
+  subCategory: { mainCategoryId: string; mainCategory: { code: string } };
+}>) {
+  return items.map((i) => ({
+    serviceItemId: i.id,
+    subCategoryId: i.subCategoryId,
+    mainCategoryId: i.subCategory.mainCategoryId,
+    mainCategoryCode: i.subCategory.mainCategory.code,
+  }));
+}
+
 const draftProductSchema = z.object({
-  requestId: z.string().min(1),
+  requestItemId: z.string().min(1),
   productNameEn: z.string().trim().min(2).max(200),
   productNameAr: z.string().trim().min(2).max(200),
   brand: z.string().trim().max(120).nullable().optional(),
@@ -184,13 +195,20 @@ const draftProductSchema = z.object({
 
 export async function createOrSelectDraft(
   input: z.infer<typeof createOrSelectDraftSchema>,
-): Promise<ActionResult<{ requestId: string; requestNo: string }>> {
+): Promise<
+  ActionResult<{
+    requestId: string;
+    requestNo: string;
+    items: Array<{ id: string; serviceItemId: string }>;
+  }>
+> {
   try {
     const ctx = await resolveRequestContext();
     const session = ctx.session;
     const orgId = ctx.organisationId;
     const parsed = createOrSelectDraftSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const wantedIds = parsed.data.serviceItemIds;
 
     if (parsed.data.resumeRequestId) {
       const existing = await prisma.request.findFirst({
@@ -199,24 +217,25 @@ export async function createOrSelectDraft(
           id: parsed.data.resumeRequestId,
           state: "DRAFT",
         },
+        include: { items: true },
       });
       if (existing) {
-        if (existing.serviceItemId !== parsed.data.serviceItemId) {
-          const svc = await loadServiceContext(
-            orgId,
-            parsed.data.serviceItemId,
-            1,
-          );
+        const currentIds = existing.items.map((i) => i.serviceItemId);
+        const sameCart =
+          currentIds.length === wantedIds.length &&
+          currentIds.every((id) => wantedIds.includes(id));
+
+        if (!sameCart) {
+          const svc = await loadServiceContexts(orgId, wantedIds, 1);
           if (!svc) return { ok: false, error: "SERVICE_NOT_FOUND" };
 
-          const switchedBreakdown = computePriceBreakdown({
-            basePrice: svc.basePrice,
-            discount: 0,
-            vatRate: svc.vatRate,
-          });
+          const switchedBreakdown = computeOrderBreakdown(svc.items);
 
+          const toRemove = existing.items.filter(
+            (i) => !wantedIds.includes(i.serviceItemId),
+          );
           const docs = await prisma.requestDocument.findMany({
-            where: { requestId: existing.id },
+            where: { requestItemId: { in: toRemove.map((i) => i.id) } },
             include: { versions: { select: { storageKey: true } } },
           });
           const storageKeys = docs.flatMap((d) =>
@@ -224,24 +243,27 @@ export async function createOrSelectDraft(
           );
 
           await prisma.$transaction(async (tx) => {
-            for (const doc of docs) {
-              await tx.requestDocument.update({
-                where: { id: doc.id },
-                data: { currentVersionId: null },
+            if (toRemove.length > 0) {
+              await tx.requestItem.deleteMany({
+                where: { id: { in: toRemove.map((i) => i.id) } },
               });
             }
-            if (docs.length > 0) {
-              await tx.documentVersion.deleteMany({
-                where: { documentId: { in: docs.map((d) => d.id) } },
-              });
-              await tx.requestDocument.deleteMany({
-                where: { requestId: existing.id },
+            const toAdd = svc.items.filter(
+              (si) => !currentIds.includes(si.id),
+            );
+            for (const si of toAdd) {
+              await tx.requestItem.create({
+                data: {
+                  requestId: existing.id,
+                  serviceItemId: si.id,
+                  basePrice: si.basePrice,
+                  vatRate: si.vatRate,
+                },
               });
             }
             await tx.request.update({
               where: { id: existing.id },
               data: {
-                serviceItemId: parsed.data.serviceItemId,
                 priceCharged: switchedBreakdown.total,
                 discountApplied: 0,
                 couponCode: null,
@@ -253,21 +275,22 @@ export async function createOrSelectDraft(
             await storage.delete(key);
           }
         }
+        const items = await prisma.requestItem.findMany({
+          where: { requestId: existing.id },
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, serviceItemId: true },
+        });
         return {
           ok: true,
-          data: { requestId: existing.id, requestNo: existing.requestNo },
+          data: { requestId: existing.id, requestNo: existing.requestNo, items },
         };
       }
     }
 
-    const svc = await loadServiceContext(orgId, parsed.data.serviceItemId, 1);
+    const svc = await loadServiceContexts(orgId, wantedIds, 1);
     if (!svc) return { ok: false, error: "SERVICE_NOT_FOUND" };
 
-    const draftBreakdown = computePriceBreakdown({
-      basePrice: svc.basePrice,
-      discount: 0,
-      vatRate: svc.vatRate,
-    });
+    const draftBreakdown = computeOrderBreakdown(svc.items);
 
     const created = await prisma.$transaction(async (tx) => {
       const requestNo = await nextRequestNo(tx);
@@ -275,13 +298,18 @@ export async function createOrSelectDraft(
         data: {
           requestNo,
           organisationId: orgId,
-          serviceItemId: parsed.data.serviceItemId,
           createdByUserId: session.id,
           state: "DRAFT",
-          productNameEn: "",
-          productNameAr: "",
           priceCharged: draftBreakdown.total,
           discountApplied: 0,
+          items: {
+            create: svc.items.map((si, idx) => ({
+              serviceItemId: si.id,
+              basePrice: si.basePrice,
+              vatRate: si.vatRate,
+              sortOrder: idx,
+            })),
+          },
         },
       });
       await tx.requestEvent.create({
@@ -293,7 +321,12 @@ export async function createOrSelectDraft(
           note: "Draft created",
         },
       });
-      return request;
+      const items = await tx.requestItem.findMany({
+        where: { requestId: request.id },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, serviceItemId: true },
+      });
+      return { request, items };
     });
 
     await writeAuditLog({
@@ -301,16 +334,20 @@ export async function createOrSelectDraft(
       organisationId: orgId,
       action: "request.draft.create",
       entityType: "Request",
-      entityId: created.id,
+      entityId: created.request.id,
       after: {
-        requestNo: created.requestNo,
-        serviceItemId: parsed.data.serviceItemId,
+        requestNo: created.request.requestNo,
+        serviceItemIds: wantedIds,
       },
     });
 
     return {
       ok: true,
-      data: { requestId: created.id, requestNo: created.requestNo },
+      data: {
+        requestId: created.request.id,
+        requestNo: created.request.requestNo,
+        items: created.items,
+      },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
@@ -331,25 +368,27 @@ export async function saveDraftProductDetails(
     const parsed = draftProductSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
-    const draft = await prisma.request.findFirst({
+    const item = await prisma.requestItem.findFirst({
       where: {
-        organisationId: orgId,
-        id: parsed.data.requestId,
-        state: { in: ["DRAFT", "RETURNED_TO_CLIENT"] },
+        id: parsed.data.requestItemId,
+        request: {
+          organisationId: orgId,
+          state: { in: ["DRAFT", "RETURNED_TO_CLIENT"] },
+        },
       },
       include: { serviceItem: { select: { productAttrSchema: true } } },
     });
-    if (!draft) return { ok: false, error: "NOT_FOUND" };
+    if (!item) return { ok: false, error: "NOT_FOUND" };
 
     const { validateProductAttrs } = await import("@/lib/attr-schema");
     const attrError = validateProductAttrs(
-      draft.serviceItem.productAttrSchema,
+      item.serviceItem.productAttrSchema,
       parsed.data.productAttrs,
     );
     if (attrError) return { ok: false, error: attrError };
 
-    await prisma.request.update({
-      where: { id: draft.id },
+    await prisma.requestItem.update({
+      where: { id: item.id },
       data: {
         productNameEn: parsed.data.productNameEn,
         productNameAr: parsed.data.productNameAr,
@@ -362,8 +401,8 @@ export async function saveDraftProductDetails(
       session,
       organisationId: orgId,
       action: "request.draft.product",
-      entityType: "Request",
-      entityId: draft.id,
+      entityType: "RequestItem",
+      entityId: item.id,
       after: parsed.data as Prisma.InputJsonValue,
     });
 
@@ -467,8 +506,12 @@ export async function previewCoupon(
         state: "DRAFT",
       },
       include: {
-        serviceItem: {
-          include: { subCategory: { include: { mainCategory: true } } },
+        items: {
+          include: {
+            serviceItem: {
+              include: { subCategory: { include: { mainCategory: true } } },
+            },
+          },
         },
       },
     });
@@ -486,12 +529,14 @@ export async function previewCoupon(
       where: { organisationId: orgId, ...SUBMITTED_LIFECYCLE_WHERE },
     });
 
+    const orderSubtotal = draft.items.reduce(
+      (sum, i) => sum.plus(i.basePrice),
+      new Prisma.Decimal(0),
+    );
+
     const evalResult = evaluateCoupon(coupon, {
-      serviceItemId: draft.serviceItemId,
-      mainCategoryId: draft.serviceItem.subCategory.mainCategoryId,
-      mainCategoryCode: draft.serviceItem.subCategory.mainCategory.code,
-      subCategoryId: draft.serviceItem.subCategoryId,
-      basePrice: draft.serviceItem.basePrice,
+      items: couponItemContext(draft.items.map((i) => i.serviceItem)),
+      basePrice: orderSubtotal,
       submissionNo: draft.submissionNo,
       organisationId: orgId,
       isNewClient: isNewClientOrg(priorSubmitted),
@@ -506,11 +551,7 @@ export async function previewCoupon(
       };
     }
 
-    const breakdown = computePriceBreakdown({
-      basePrice: draft.serviceItem.basePrice,
-      discount: evalResult.discount,
-      vatRate: draft.serviceItem.vatRate,
-    });
+    const breakdown = computeOrderBreakdown(draft.items, evalResult.discount);
 
     return {
       ok: true,
@@ -626,15 +667,11 @@ export async function removeCouponFromDraft(
         id: parsed.data.requestId,
         state: "DRAFT",
       },
-      include: { serviceItem: true },
+      include: { items: true },
     });
     if (!draft) return { ok: false, error: "NOT_FOUND" };
 
-    const breakdown = computePriceBreakdown({
-      basePrice: draft.serviceItem.basePrice,
-      discount: 0,
-      vatRate: draft.serviceItem.vatRate,
-    });
+    const breakdown = computeOrderBreakdown(draft.items);
 
     await prisma.request.update({
       where: { id: draft.id },
@@ -689,6 +726,7 @@ export async function uploadRequestDocument(formData: FormData): Promise<
     const requiredDocumentIdRaw = formData.get("requiredDocumentId");
     const ids = uploadRequestDocumentIdsSchema.safeParse({
       requestId: String(formData.get("requestId") ?? ""),
+      requestItemId: String(formData.get("requestItemId") ?? ""),
       requiredDocumentId:
         typeof requiredDocumentIdRaw === "string" &&
         requiredDocumentIdRaw.length > 0
@@ -697,7 +735,7 @@ export async function uploadRequestDocument(formData: FormData): Promise<
       label: String(formData.get("label") ?? "Document"),
     });
     if (!ids.success) return { ok: false, error: "VALIDATION" };
-    const { requestId, requiredDocumentId } = ids.data;
+    const { requestId, requestItemId, requiredDocumentId } = ids.data;
     const label = ids.data.label ?? "Document";
     const file = formData.get("file");
     if (!(file instanceof File)) {
@@ -711,16 +749,19 @@ export async function uploadRequestDocument(formData: FormData): Promise<
         id: requestId,
         state: { in: ["DRAFT", "RETURNED_TO_CLIENT"] },
       },
-      include: {
-        serviceItem: { include: { requiredDocuments: true } },
-      },
     });
     if (!draft) return { ok: false, error: "NOT_FOUND" };
+
+    const item = await prisma.requestItem.findFirst({
+      where: { id: requestItemId, requestId: draft.id },
+      include: { serviceItem: { include: { requiredDocuments: true } } },
+    });
+    if (!item) return { ok: false, error: "NOT_FOUND" };
 
     let accepted = ["application/pdf", "image/png", "image/jpeg"];
     let maxMb = 50;
     if (requiredDocumentId) {
-      const reqDoc = draft.serviceItem.requiredDocuments.find(
+      const reqDoc = item.serviceItem.requiredDocuments.find(
         (d) => d.id === requiredDocumentId,
       );
       if (!reqDoc) return { ok: false, error: "DOC_SLOT_NOT_FOUND" };
@@ -800,7 +841,7 @@ export async function uploadRequestDocument(formData: FormData): Promise<
     const result = await prisma.$transaction(async (tx) => {
       let doc = requiredDocumentId
         ? await tx.requestDocument.findFirst({
-            where: { requestId, requiredDocumentId },
+            where: { requestItemId, requiredDocumentId },
             include: { versions: true },
           })
         : null;
@@ -809,6 +850,7 @@ export async function uploadRequestDocument(formData: FormData): Promise<
         doc = await tx.requestDocument.create({
           data: {
             requestId,
+            requestItemId,
             requiredDocumentId,
             label,
           },
@@ -941,10 +983,6 @@ const submitSchema = z.object({
   requestId: z.string().min(1),
   idempotencyKey: z.string().min(8).max(80),
   artworkIsFinal: z.literal(true),
-  productNameEn: z.string().trim().min(2),
-  productNameAr: z.string().trim().min(2),
-  brand: z.string().trim().max(120).nullable().optional(),
-  productAttrs: z.record(z.string(), z.unknown()),
   couponCode: z.string().nullable().optional(),
 });
 
@@ -984,41 +1022,54 @@ export async function submitRequest(
         state: "DRAFT",
       },
       include: {
-        serviceItem: {
+        items: {
           include: {
-            requiredDocuments: true,
-            subCategory: { include: { mainCategory: true } },
+            serviceItem: {
+              include: {
+                requiredDocuments: true,
+                subCategory: { include: { mainCategory: true } },
+              },
+            },
+            documents: { include: { currentVersion: true } },
           },
         },
-        documents: { include: { currentVersion: true } },
       },
     });
     if (!draft) return { ok: false, error: "NOT_FOUND" };
+    if (draft.items.length === 0) return { ok: false, error: "NOT_FOUND" };
 
     const { validateProductAttrs } = await import("@/lib/attr-schema");
-    const attrError = validateProductAttrs(
-      draft.serviceItem.productAttrSchema,
-      parsed.data.productAttrs,
-    );
-    if (attrError) return { ok: false, error: attrError };
-
-    const mandatory = draft.serviceItem.requiredDocuments.filter(
-      (d) => d.mandatory,
-    );
-    for (const req of mandatory) {
-      const filled = draft.documents.some(
-        (d) => d.requiredDocumentId === req.id && d.currentVersion,
-      );
-      if (!filled) {
-        return { ok: false, error: "MANDATORY_DOCS_MISSING" };
+    for (const item of draft.items) {
+      if (
+        item.productNameEn.trim().length < 2 ||
+        item.productNameAr.trim().length < 2
+      ) {
+        return { ok: false, error: "PRODUCT_DETAILS_MISSING" };
       }
-    }
+      const attrError = validateProductAttrs(
+        item.serviceItem.productAttrSchema,
+        item.productAttrs as Record<string, unknown>,
+      );
+      if (attrError) return { ok: false, error: attrError };
 
-    const hasInfected = draft.documents.some(
-      (d) => d.currentVersion?.avStatus === "INFECTED",
-    );
-    if (hasInfected) {
-      return { ok: false, error: "INFECTED_FILE" };
+      const mandatory = item.serviceItem.requiredDocuments.filter(
+        (d) => d.mandatory,
+      );
+      for (const req of mandatory) {
+        const filled = item.documents.some(
+          (d) => d.requiredDocumentId === req.id && d.currentVersion,
+        );
+        if (!filled) {
+          return { ok: false, error: "MANDATORY_DOCS_MISSING" };
+        }
+      }
+
+      const hasInfected = item.documents.some(
+        (d) => d.currentVersion?.avStatus === "INFECTED",
+      );
+      if (hasInfected) {
+        return { ok: false, error: "INFECTED_FILE" };
+      }
     }
 
     let discount = new Prisma.Decimal(0);
@@ -1080,12 +1131,13 @@ export async function submitRequest(
         const priorSubmitted = await tx.request.count({
           where: { organisationId: orgId, ...SUBMITTED_LIFECYCLE_WHERE },
         });
+        const orderSubtotal = draft.items.reduce(
+          (sum, i) => sum.plus(i.basePrice),
+          new Prisma.Decimal(0),
+        );
         const evalResult = evaluateCoupon(coupon, {
-          serviceItemId: draft.serviceItemId,
-          mainCategoryId: draft.serviceItem.subCategory.mainCategoryId,
-          mainCategoryCode: draft.serviceItem.subCategory.mainCategory.code,
-          subCategoryId: draft.serviceItem.subCategoryId,
-          basePrice: draft.serviceItem.basePrice,
+          items: couponItemContext(draft.items.map((i) => i.serviceItem)),
+          basePrice: orderSubtotal,
           submissionNo: draft.submissionNo,
           organisationId: orgId,
           isNewClient: isNewClientOrg(priorSubmitted),
@@ -1102,27 +1154,18 @@ export async function submitRequest(
         });
       }
 
-      const breakdown = computePriceBreakdown({
-        basePrice: draft.serviceItem.basePrice,
-        discount,
-        vatRate: draft.serviceItem.vatRate,
-      });
+      const breakdown = computeOrderBreakdown(draft.items, discount);
 
       await assertWithinCreditLimit(tx, orgId, breakdown.total);
 
       const now = new Date();
-      const slaDueAt = new Date(
-        now.getTime() + draft.serviceItem.slaHours * 60 * 60 * 1000,
-      );
+      const slaHours = Math.max(...draft.items.map((i) => i.serviceItem.slaHours));
+      const slaDueAt = new Date(now.getTime() + slaHours * 60 * 60 * 1000);
 
       const updated = await tx.request.update({
         where: { id: draft.id },
         data: {
           state: "SUBMITTED",
-          productNameEn: parsed.data.productNameEn,
-          productNameAr: parsed.data.productNameAr,
-          brand: parsed.data.brand ?? null,
-          productAttrs: parsed.data.productAttrs as Prisma.InputJsonValue,
           couponCode,
           discountApplied: breakdown.discount,
           priceCharged: breakdown.total,
@@ -1173,14 +1216,12 @@ export async function submitRequest(
             issuedAt: now,
             dueAt: invoiceDueAt(now, org.paymentTermsDays),
             lines: {
-              create: [
-                {
-                  description: `${draft.serviceItem.nameEn} / ${draft.serviceItem.nameAr}`,
-                  qty: 1,
-                  unitPrice: breakdown.subtotal,
-                  lineTotal: breakdown.subtotal,
-                },
-              ],
+              create: draft.items.map((item) => ({
+                description: `${item.serviceItem.nameEn} / ${item.serviceItem.nameAr}`,
+                qty: 1,
+                unitPrice: item.basePrice,
+                lineTotal: item.basePrice,
+              })),
             },
           },
         });
@@ -1231,7 +1272,7 @@ export async function submitRequest(
             createdByUserId: session.id,
             ...notificationCopy("REQUEST_RECEIVED", {
               requestNo: updated.requestNo,
-              slaHours: String(draft.serviceItem.slaHours),
+              slaHours: String(slaHours),
             }),
           },
         },
@@ -1330,19 +1371,23 @@ export async function resubmitReturnedRequest(
         state: "RETURNED_TO_CLIENT",
       },
       include: {
-        serviceItem: {
-          select: {
-            nameEn: true,
-            basePrice: true,
-            vatRate: true,
-            slaHours: true,
-            maxResubmissions: true,
-            resubmissionPricePct: true,
-            freeResubmissions: true,
-            requiredDocuments: true,
+        items: {
+          include: {
+            serviceItem: {
+              select: {
+                nameEn: true,
+                basePrice: true,
+                vatRate: true,
+                slaHours: true,
+                maxResubmissions: true,
+                resubmissionPricePct: true,
+                freeResubmissions: true,
+                requiredDocuments: true,
+              },
+            },
+            documents: { include: { currentVersion: true } },
           },
         },
-        documents: { include: { currentVersion: true } },
         events: {
           where: { toState: "RETURNED_TO_CLIENT" },
           orderBy: { createdAt: "desc" },
@@ -1352,32 +1397,32 @@ export async function resubmitReturnedRequest(
     });
     if (!request) return { ok: false, error: "NOT_FOUND" };
 
-    if (
-      exceedsMaxResubmissions(
-        request.submissionNo,
-        request.serviceItem.maxResubmissions,
-      )
-    ) {
+    const maxResubmissions = Math.min(
+      ...request.items.map((i) => i.serviceItem.maxResubmissions),
+    );
+    if (exceedsMaxResubmissions(request.submissionNo, maxResubmissions)) {
       return { ok: false, error: "MAX_RESUBMISSIONS" };
     }
 
-    const mandatory = request.serviceItem.requiredDocuments.filter(
-      (d) => d.mandatory,
-    );
-    for (const req of mandatory) {
-      const filled = request.documents.some(
-        (d) => d.requiredDocumentId === req.id && d.currentVersion,
+    for (const item of request.items) {
+      const mandatory = item.serviceItem.requiredDocuments.filter(
+        (d) => d.mandatory,
       );
-      if (!filled) {
-        return { ok: false, error: "MANDATORY_DOCS_MISSING" };
+      for (const req of mandatory) {
+        const filled = item.documents.some(
+          (d) => d.requiredDocumentId === req.id && d.currentVersion,
+        );
+        if (!filled) {
+          return { ok: false, error: "MANDATORY_DOCS_MISSING" };
+        }
       }
-    }
 
-    const hasInfectedResubmit = request.documents.some(
-      (d) => d.currentVersion?.avStatus === "INFECTED",
-    );
-    if (hasInfectedResubmit) {
-      return { ok: false, error: "INFECTED_FILE" };
+      const hasInfectedResubmit = item.documents.some(
+        (d) => d.currentVersion?.avStatus === "INFECTED",
+      );
+      if (hasInfectedResubmit) {
+        return { ok: false, error: "INFECTED_FILE" };
+      }
     }
 
     const fault = request.events[0]?.faultAttribution;
@@ -1385,11 +1430,19 @@ export async function resubmitReturnedRequest(
       return { ok: false, error: "FAULT_MISSING" };
     }
     const nextSubmission = request.submissionNo + 1;
-    const resubmissionPct = resolveResubmissionPricePct({
-      fault,
-      submissionNo: nextSubmission,
-      freeResubmissions: request.serviceItem.freeResubmissions,
-      resubmissionPricePct: request.serviceItem.resubmissionPricePct,
+    const resubmissionItems = request.items.map((item) => {
+      const pct = resolveResubmissionPricePct({
+        fault,
+        submissionNo: nextSubmission,
+        freeResubmissions: item.serviceItem.freeResubmissions,
+        resubmissionPricePct: item.serviceItem.resubmissionPricePct,
+      });
+      return {
+        nameEn: item.serviceItem.nameEn,
+        basePrice: item.serviceItem.basePrice.mul(pct),
+        vatRate: item.serviceItem.vatRate,
+        pct,
+      };
     });
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -1405,12 +1458,7 @@ export async function resubmitReturnedRequest(
       });
 
       const now = new Date();
-      const base = request.serviceItem.basePrice.mul(resubmissionPct);
-      const breakdown = computePriceBreakdown({
-        basePrice: base,
-        discount: new Prisma.Decimal(0),
-        vatRate: request.serviceItem.vatRate,
-      });
+      const breakdown = computeOrderBreakdown(resubmissionItems);
 
       if (!breakdown.total.isZero()) {
         await assertWithinCreditLimit(tx, orgId, breakdown.total);
@@ -1421,11 +1469,11 @@ export async function resubmitReturnedRequest(
         slaPausedAt: request.slaPausedAt,
         resumedAt: now,
       });
+      const slaHours = Math.max(
+        ...request.items.map((i) => i.serviceItem.slaHours),
+      );
       const slaDueAt =
-        resumedSla ??
-        new Date(
-          now.getTime() + request.serviceItem.slaHours * 60 * 60 * 1000,
-        );
+        resumedSla ?? new Date(now.getTime() + slaHours * 60 * 60 * 1000);
 
       const row = await tx.request.update({
         where: { id: request.id },
@@ -1451,7 +1499,7 @@ export async function resubmitReturnedRequest(
           note:
             parsed.data.note?.trim() || "Resubmitted after return corrections",
           metadata: {
-            resubmissionPct: resubmissionPct.toString(),
+            resubmissionPct: resubmissionItems.map((i) => i.pct.toString()),
             priorSubmissionNo: request.submissionNo,
             fault,
           },
@@ -1476,14 +1524,12 @@ export async function resubmitReturnedRequest(
             issuedAt: now,
             dueAt: invoiceDueAt(now, org.paymentTermsDays),
             lines: {
-              create: [
-                {
-                  description: `Resubmission ${nextSubmission} — ${request.serviceItem.nameEn}`,
-                  qty: 1,
-                  unitPrice: breakdown.subtotal,
-                  lineTotal: breakdown.subtotal,
-                },
-              ],
+              create: resubmissionItems.map((item) => ({
+                description: `Resubmission ${nextSubmission} — ${item.nameEn}`,
+                qty: 1,
+                unitPrice: item.basePrice.toDecimalPlaces(2),
+                lineTotal: item.basePrice.toDecimalPlaces(2),
+              })),
             },
           },
         });

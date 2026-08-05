@@ -51,7 +51,10 @@ export async function GET(request: Request, { params }: Params) {
       },
       include: {
         organisation: { select: { nameEn: true, nameAr: true } },
-        serviceItem: { select: { nameEn: true, nameAr: true } },
+        items: {
+          orderBy: { sortOrder: "asc" },
+          include: { serviceItem: { select: { nameEn: true, nameAr: true } } },
+        },
         events: {
           where: { toState: "REPORT_ISSUED" },
           orderBy: { createdAt: "desc" },
@@ -76,9 +79,12 @@ export async function GET(request: Request, { params }: Params) {
       requestNo: row.requestNo,
       organisationName:
         locale === "ar" ? row.organisation.nameAr : row.organisation.nameEn,
-      productName: locale === "ar" ? row.productNameAr : row.productNameEn,
-      serviceName:
-        locale === "ar" ? row.serviceItem.nameAr : row.serviceItem.nameEn,
+      productName: row.items
+        .map((i) => (locale === "ar" ? i.productNameAr : i.productNameEn))
+        .join(", "),
+      serviceName: row.items
+        .map((i) => (locale === "ar" ? i.serviceItem.nameAr : i.serviceItem.nameEn))
+        .join(", "),
       issuedAt,
       state: row.state,
     });

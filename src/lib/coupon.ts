@@ -20,11 +20,19 @@ export type CouponEvalResult =
   | { ok: true; discount: Prisma.Decimal }
   | { ok: false; reason: CouponFailureReason; meta?: Record<string, string> };
 
-type ServiceContext = {
+type OrderItemContext = {
   serviceItemId: string;
   mainCategoryId: string;
   mainCategoryCode: string;
   subCategoryId: string;
+};
+
+type ServiceContext = {
+  /** One entry per RequestItem in the order/draft; a category-scoped coupon
+   * matches if ANY item satisfies its appliesTo restriction. */
+  items: OrderItemContext[];
+  /** Order subtotal (sum of every item's basePrice) — the discount and
+   * minOrderAmount check operate on the whole order, not a single item. */
   basePrice: Prisma.Decimal;
   submissionNo: number;
   organisationId: string;
@@ -104,11 +112,12 @@ function evaluateAppliesTo(
 ): CouponEvalResult | null {
   if (appliesTo === "ALL") return null;
   if (appliesTo === "MAIN_CATEGORY") {
-    if (!ids.includes(ctx.mainCategoryId)) {
-      if (ctx.mainCategoryCode === "FOOD_DRUGS") {
+    if (!ctx.items.some((i) => ids.includes(i.mainCategoryId))) {
+      const code = ctx.items[0]?.mainCategoryCode;
+      if (code === "FOOD_DRUGS") {
         return { ok: false, reason: "APPLIES_COSMETICS_ONLY" };
       }
-      if (ctx.mainCategoryCode === "COSMETICS") {
+      if (code === "COSMETICS") {
         return { ok: false, reason: "APPLIES_FOOD_ONLY" };
       }
       return { ok: false, reason: "APPLIES_CATEGORY" };
@@ -116,13 +125,13 @@ function evaluateAppliesTo(
     return null;
   }
   if (appliesTo === "SUB_CATEGORY") {
-    if (!ids.includes(ctx.subCategoryId)) {
+    if (!ctx.items.some((i) => ids.includes(i.subCategoryId))) {
       return { ok: false, reason: "APPLIES_CATEGORY" };
     }
     return null;
   }
   if (appliesTo === "SERVICE_ITEM") {
-    if (!ids.includes(ctx.serviceItemId)) {
+    if (!ctx.items.some((i) => ids.includes(i.serviceItemId))) {
       return { ok: false, reason: "APPLIES_SERVICE" };
     }
     return null;

@@ -473,16 +473,20 @@ export async function decideReopenRequest(
 
     const reopenRequest = await prisma.requestReopenRequest.findUnique({
       where: { id: reopenRequestId },
-      include: {
-        request: {
-          include: { serviceItem: { select: { slaHours: true } } },
-        },
-      },
     });
     if (!reopenRequest || reopenRequest.status !== "PENDING") {
       return { ok: false, error: "NOT_FOUND" };
     }
-    const request = reopenRequest.request;
+    const request = await prisma.request.findUnique({
+      where: { id: reopenRequest.requestId },
+      include: { items: { include: { serviceItem: { select: { slaHours: true } } } } },
+    });
+    if (!request) {
+      return { ok: false, error: "NOT_FOUND" };
+    }
+    const requestSlaHours = Math.max(
+      ...request.items.map((i) => i.serviceItem.slaHours),
+    );
     if (!canReopenRequest(request.state)) {
       return { ok: false, error: "INVALID_STATE" };
     }
@@ -511,7 +515,7 @@ export async function decideReopenRequest(
             closedAt: null,
             heldFromState: null,
             slaPausedAt: null,
-            slaDueAt: freshSlaDueAt(now, request.serviceItem.slaHours),
+            slaDueAt: freshSlaDueAt(now, requestSlaHours),
           },
         });
         if (updated.count === 0) {
@@ -615,12 +619,15 @@ export async function reopenRequestByAdmin(
 
     const request = await prisma.request.findUnique({
       where: { id: requestId },
-      include: { serviceItem: { select: { slaHours: true } } },
+      include: { items: { include: { serviceItem: { select: { slaHours: true } } } } },
     });
     if (!request) return { ok: false, error: "NOT_FOUND" };
     if (!canReopenRequest(request.state)) {
       return { ok: false, error: "INVALID_STATE" };
     }
+    const requestSlaHours = Math.max(
+      ...request.items.map((i) => i.serviceItem.slaHours),
+    );
 
     const pending = await prisma.requestReopenRequest.findFirst({
       where: { requestId, status: "PENDING" },
@@ -638,7 +645,7 @@ export async function reopenRequestByAdmin(
           closedAt: null,
           heldFromState: null,
           slaPausedAt: null,
-          slaDueAt: freshSlaDueAt(now, request.serviceItem.slaHours),
+          slaDueAt: freshSlaDueAt(now, requestSlaHours),
         },
       });
       if (updated.count === 0) {
@@ -937,7 +944,7 @@ const ASSESSMENT_EDIT_STATES: RequestState[] = [
 ];
 
 const saveAssessmentSchema = z.object({
-  requestId: z.string().min(1),
+  requestItemId: z.string().min(1),
   verdicts: z.record(
     z.string(),
     z.enum(["COMPLIANT", "NON_COMPLIANT", "NA"]),
@@ -954,24 +961,23 @@ export async function saveAssessment(
     const parsed = saveAssessmentSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
-    const request = await prisma.request.findUnique({
-      where: { id: parsed.data.requestId },
+    const item = await prisma.requestItem.findUnique({
+      where: { id: parsed.data.requestItemId },
       select: {
         id: true,
-        state: true,
-        organisationId: true,
         assessment: true,
         serviceItem: { select: { checkSets: true } },
+        request: { select: { id: true, state: true, organisationId: true } },
       },
     });
-    if (!request) return { ok: false, error: "NOT_FOUND" };
+    if (!item) return { ok: false, error: "NOT_FOUND" };
 
-    if (!ASSESSMENT_EDIT_STATES.includes(request.state)) {
+    if (!ASSESSMENT_EDIT_STATES.includes(item.request.state)) {
       return { ok: false, error: "INVALID_STATE" };
     }
 
     // Keep only verdicts/notes whose item codes exist in the service checklist.
-    const checkSets = parseCheckSets(request.serviceItem.checkSets);
+    const checkSets = parseCheckSets(item.serviceItem.checkSets);
     if (!hasCheckItems(checkSets)) {
       return { ok: false, error: "NO_CHECKLIST" };
     }
@@ -996,18 +1002,18 @@ export async function saveAssessment(
     };
     const summary = computeAssessment(checkSets, nextState);
 
-    await prisma.request.update({
-      where: { id: request.id },
+    await prisma.requestItem.update({
+      where: { id: item.id },
       data: { assessment: nextState as unknown as Prisma.InputJsonValue },
     });
 
     await writeAuditLog({
       session,
-      organisationId: request.organisationId,
+      organisationId: item.request.organisationId,
       action: "request.assessment.save",
-      entityType: "Request",
-      entityId: request.id,
-      before: { assessment: request.assessment },
+      entityType: "RequestItem",
+      entityId: item.id,
+      before: { assessment: item.assessment },
       after: {
         assessed: summary.assessed,
         total: summary.total,
@@ -1015,7 +1021,7 @@ export async function saveAssessment(
       },
     });
 
-    revalidatePath(`/[locale]/admin/requests/${request.id}`, "page");
+    revalidatePath(`/[locale]/admin/requests/${item.request.id}`, "page");
     return {
       ok: true,
       data: {
@@ -1367,7 +1373,7 @@ export async function deleteServiceItem(
     });
     if (!item) return { ok: false, error: "NOT_FOUND" };
 
-    const requestCount = await prisma.request.count({
+    const requestCount = await prisma.requestItem.count({
       where: { serviceItemId: item.id },
     });
     if (requestCount > 0) return { ok: false, error: "HAS_REQUESTS" };

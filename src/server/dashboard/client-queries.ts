@@ -187,6 +187,11 @@ export async function getClientDashboard(): Promise<ClientDashboardView | null> 
         where: { organisationId, state: "RETURNED_TO_CLIENT" },
         orderBy: { updatedAt: "desc" },
         include: {
+          items: {
+            orderBy: { sortOrder: "asc" },
+            take: 1,
+            select: { productNameEn: true, productNameAr: true },
+          },
           events: {
             where: { toState: "RETURNED_TO_CLIENT" },
             orderBy: { createdAt: "desc" },
@@ -267,8 +272,8 @@ export async function getClientDashboard(): Promise<ClientDashboardView | null> 
       attention: returned.map((r) => ({
         id: r.id,
         requestNo: r.requestNo,
-        productNameEn: r.productNameEn,
-        productNameAr: r.productNameAr,
+        productNameEn: r.items[0]?.productNameEn ?? "",
+        productNameAr: r.items[0]?.productNameAr ?? "",
         reasonCodes: r.events[0]?.reasonCodes ?? [],
         note: r.events[0]?.note ?? null,
       })),

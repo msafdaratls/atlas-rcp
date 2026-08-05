@@ -214,8 +214,11 @@ export async function getAdminShellChrome(
             select: {
               id: true,
               requestNo: true,
-              productNameEn: true,
-              productNameAr: true,
+              items: {
+                orderBy: { sortOrder: "asc" },
+                take: 1,
+                select: { productNameEn: true, productNameAr: true },
+              },
             },
           })
         : Promise.resolve([]),
@@ -234,7 +237,9 @@ export async function getAdminShellChrome(
       requests: requests.map((r) => ({
         id: r.id,
         requestNo: r.requestNo,
-        productName: locale === "ar" ? r.productNameAr : r.productNameEn,
+        productName:
+          (locale === "ar" ? r.items[0]?.productNameAr : r.items[0]?.productNameEn) ??
+          "",
       })),
       clients: clients.map((c) => ({
         id: c.id,
@@ -262,6 +267,7 @@ export type AdminRequestListItem = {
   orgNameAr: string;
   serviceNameEn: string;
   serviceNameAr: string;
+  extraItemCount: number;
   unreadClientMessages: number;
 };
 
@@ -299,8 +305,16 @@ export async function listAdminRequests(input: {
     if (q) {
       where.OR = [
         { requestNo: { contains: q, mode: "insensitive" } },
-        { productNameEn: { contains: q, mode: "insensitive" } },
-        { productNameAr: { contains: q, mode: "insensitive" } },
+        {
+          items: {
+            some: {
+              OR: [
+                { productNameEn: { contains: q, mode: "insensitive" } },
+                { productNameAr: { contains: q, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
         { organisation: { nameEn: { contains: q, mode: "insensitive" } } },
         { organisation: { nameAr: { contains: q, mode: "insensitive" } } },
       ];
@@ -312,7 +326,10 @@ export async function listAdminRequests(input: {
         where,
         include: {
           organisation: { select: { nameEn: true, nameAr: true } },
-          serviceItem: { select: { nameEn: true, nameAr: true } },
+          items: {
+            orderBy: { sortOrder: "asc" },
+            include: { serviceItem: { select: { nameEn: true, nameAr: true } } },
+          },
         },
         orderBy: { updatedAt: "desc" },
         skip: (page - 1) * pageSize,
@@ -340,22 +357,26 @@ export async function listAdminRequests(input: {
       page,
       pageSize,
       pageCount: Math.max(1, Math.ceil(total / pageSize)),
-      rows: rows.map((r) => ({
-        id: r.id,
-        requestNo: r.requestNo,
-        productNameEn: r.productNameEn,
-        productNameAr: r.productNameAr,
-        state: r.state,
-        slaDueAt: r.slaDueAt?.toISOString() ?? null,
-        submittedAt: r.submittedAt?.toISOString() ?? null,
-        updatedAt: r.updatedAt.toISOString(),
-        organisationId: r.organisationId,
-        orgNameEn: r.organisation.nameEn,
-        orgNameAr: r.organisation.nameAr,
-        serviceNameEn: r.serviceItem.nameEn,
-        serviceNameAr: r.serviceItem.nameAr,
-        unreadClientMessages: unreadByRequestId.get(r.id) ?? 0,
-      })),
+      rows: rows.map((r) => {
+        const first = r.items[0];
+        return {
+          id: r.id,
+          requestNo: r.requestNo,
+          productNameEn: first?.productNameEn ?? "",
+          productNameAr: first?.productNameAr ?? "",
+          state: r.state,
+          slaDueAt: r.slaDueAt?.toISOString() ?? null,
+          submittedAt: r.submittedAt?.toISOString() ?? null,
+          updatedAt: r.updatedAt.toISOString(),
+          organisationId: r.organisationId,
+          orgNameEn: r.organisation.nameEn,
+          orgNameAr: r.organisation.nameAr,
+          serviceNameEn: first?.serviceItem.nameEn ?? "",
+          serviceNameAr: first?.serviceItem.nameAr ?? "",
+          extraItemCount: Math.max(0, r.items.length - 1),
+          unreadClientMessages: unreadByRequestId.get(r.id) ?? 0,
+        };
+      }),
     };
   } catch {
     return null;
@@ -364,41 +385,12 @@ export async function listAdminRequests(input: {
 
 // ─── getAdminRequestDetail ───────────────────────────────────────────────────
 
-export type AdminRequestDetail = {
+export type AdminRequestDetailItem = {
   id: string;
-  requestNo: string;
-  state: RequestState;
   productNameEn: string;
   productNameAr: string;
   brand: string | null;
   productAttrs: Record<string, unknown>;
-  submissionNo: number;
-  priceCharged: number;
-  discountApplied: number;
-  couponCode: string | null;
-  slaDueAt: string | null;
-  submittedAt: string | null;
-  closedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  heldFromState: RequestState | null;
-  allowedTransitions: RequestState[];
-  canReopen: boolean;
-  reopenTargetStates: RequestState[];
-  pendingReopenRequest: {
-    id: string;
-    reason: string;
-    requestedAt: string;
-    requestedByNameEn: string;
-    requestedByNameAr: string;
-  } | null;
-  organisation: {
-    id: string;
-    nameEn: string;
-    nameAr: string;
-    email: string;
-    phone: string | null;
-  };
   serviceItem: {
     id: string;
     code: string;
@@ -409,25 +401,6 @@ export type AdminRequestDetail = {
     checkSets: CheckSet[];
   };
   assessment: AssessmentState;
-  createdBy: { id: string; fullNameEn: string; fullNameAr: string; email: string };
-  assignedTo: {
-    id: string;
-    fullNameEn: string;
-    fullNameAr: string;
-    email: string;
-  } | null;
-  events: Array<{
-    id: string;
-    fromState: RequestState | null;
-    toState: RequestState;
-    actorNameEn: string;
-    actorNameAr: string;
-    actorRole: Role;
-    note: string | null;
-    reasonCodes: ReturnReasonCode[];
-    faultAttribution: FaultAttribution | null;
-    createdAt: string;
-  }>;
   documents: Array<{
     id: string;
     label: string;
@@ -455,6 +428,59 @@ export type AdminRequestDetail = {
       uploadedAt: string;
     }>;
   }>;
+};
+
+export type AdminRequestDetail = {
+  id: string;
+  requestNo: string;
+  state: RequestState;
+  submissionNo: number;
+  priceCharged: number;
+  discountApplied: number;
+  couponCode: string | null;
+  slaDueAt: string | null;
+  submittedAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  heldFromState: RequestState | null;
+  allowedTransitions: RequestState[];
+  canReopen: boolean;
+  reopenTargetStates: RequestState[];
+  pendingReopenRequest: {
+    id: string;
+    reason: string;
+    requestedAt: string;
+    requestedByNameEn: string;
+    requestedByNameAr: string;
+  } | null;
+  organisation: {
+    id: string;
+    nameEn: string;
+    nameAr: string;
+    email: string;
+    phone: string | null;
+  };
+  items: AdminRequestDetailItem[];
+  createdBy: { id: string; fullNameEn: string; fullNameAr: string; email: string };
+  assignedTo: {
+    id: string;
+    fullNameEn: string;
+    fullNameAr: string;
+    email: string;
+  } | null;
+  events: Array<{
+    id: string;
+    fromState: RequestState | null;
+    toState: RequestState;
+    actorNameEn: string;
+    actorNameAr: string;
+    actorRole: Role;
+    note: string | null;
+    reasonCodes: ReturnReasonCode[];
+    faultAttribution: FaultAttribution | null;
+    createdAt: string;
+  }>;
   comments: Array<{
     id: string;
     bodyEn: string | null;
@@ -480,15 +506,36 @@ export async function getAdminRequestDetail(
         organisation: {
           select: { id: true, nameEn: true, nameAr: true, email: true, phone: true },
         },
-        serviceItem: {
-          select: {
-            id: true,
-            code: true,
-            nameEn: true,
-            nameAr: true,
-            slaHours: true,
-            maxResubmissions: true,
-            checkSets: true,
+        items: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            serviceItem: {
+              select: {
+                id: true,
+                code: true,
+                nameEn: true,
+                nameAr: true,
+                slaHours: true,
+                maxResubmissions: true,
+                checkSets: true,
+              },
+            },
+            documents: {
+              include: {
+                versions: {
+                  include: {
+                    uploadedBy: { select: { fullNameEn: true, fullNameAr: true } },
+                  },
+                  orderBy: { version: "asc" },
+                },
+                currentVersion: {
+                  include: {
+                    uploadedBy: { select: { fullNameEn: true, fullNameAr: true } },
+                  },
+                },
+              },
+              orderBy: { createdAt: "asc" },
+            },
           },
         },
         createdBy: {
@@ -499,22 +546,6 @@ export async function getAdminRequestDetail(
         },
         events: {
           include: { actor: { select: { fullNameEn: true, fullNameAr: true } } },
-          orderBy: { createdAt: "asc" },
-        },
-        documents: {
-          include: {
-            versions: {
-              include: {
-                uploadedBy: { select: { fullNameEn: true, fullNameAr: true } },
-              },
-              orderBy: { version: "asc" },
-            },
-            currentVersion: {
-              include: {
-                uploadedBy: { select: { fullNameEn: true, fullNameAr: true } },
-              },
-            },
-          },
           orderBy: { createdAt: "asc" },
         },
         comments: {
@@ -546,13 +577,6 @@ export async function getAdminRequestDetail(
       id: request.id,
       requestNo: request.requestNo,
       state: request.state,
-      productNameEn: request.productNameEn,
-      productNameAr: request.productNameAr,
-      brand: request.brand,
-      productAttrs:
-        request.productAttrs && typeof request.productAttrs === "object"
-          ? (request.productAttrs as Record<string, unknown>)
-          : {},
       submissionNo: request.submissionNo,
       priceCharged: toNumber(request.priceCharged),
       discountApplied: toNumber(request.discountApplied),
@@ -584,16 +608,55 @@ export async function getAdminRequestDetail(
           }
         : null,
       organisation: request.organisation,
-      serviceItem: {
-        id: request.serviceItem.id,
-        code: request.serviceItem.code,
-        nameEn: request.serviceItem.nameEn,
-        nameAr: request.serviceItem.nameAr,
-        slaHours: request.serviceItem.slaHours,
-        maxResubmissions: request.serviceItem.maxResubmissions,
-        checkSets: parseCheckSets(request.serviceItem.checkSets),
-      },
-      assessment: parseAssessment(request.assessment),
+      items: request.items.map((item) => ({
+        id: item.id,
+        productNameEn: item.productNameEn,
+        productNameAr: item.productNameAr,
+        brand: item.brand,
+        productAttrs:
+          item.productAttrs && typeof item.productAttrs === "object"
+            ? (item.productAttrs as Record<string, unknown>)
+            : {},
+        serviceItem: {
+          id: item.serviceItem.id,
+          code: item.serviceItem.code,
+          nameEn: item.serviceItem.nameEn,
+          nameAr: item.serviceItem.nameAr,
+          slaHours: item.serviceItem.slaHours,
+          maxResubmissions: item.serviceItem.maxResubmissions,
+          checkSets: parseCheckSets(item.serviceItem.checkSets),
+        },
+        assessment: parseAssessment(item.assessment),
+        documents: item.documents.map((d) => ({
+          id: d.id,
+          label: d.label,
+          requiredDocumentId: d.requiredDocumentId,
+          currentVersion: d.currentVersion
+            ? {
+                id: d.currentVersion.id,
+                version: d.currentVersion.version,
+                fileName: d.currentVersion.fileName,
+                mimeType: d.currentVersion.mimeType,
+                sizeBytes: d.currentVersion.sizeBytes,
+                storageKey: d.currentVersion.storageKey,
+                uploadedByNameEn: d.currentVersion.uploadedBy.fullNameEn,
+                uploadedByNameAr: d.currentVersion.uploadedBy.fullNameAr,
+                uploadedAt: d.currentVersion.uploadedAt.toISOString(),
+              }
+            : null,
+          versions: d.versions.map((v) => ({
+            id: v.id,
+            version: v.version,
+            fileName: v.fileName,
+            mimeType: v.mimeType,
+            sizeBytes: v.sizeBytes,
+            storageKey: v.storageKey,
+            uploadedByNameEn: v.uploadedBy.fullNameEn,
+            uploadedByNameAr: v.uploadedBy.fullNameAr,
+            uploadedAt: v.uploadedAt.toISOString(),
+          })),
+        })),
+      })),
       createdBy: request.createdBy,
       assignedTo: request.assignedTo,
       events: request.events.map((e) => ({
@@ -607,35 +670,6 @@ export async function getAdminRequestDetail(
         reasonCodes: e.reasonCodes,
         faultAttribution: e.faultAttribution,
         createdAt: e.createdAt.toISOString(),
-      })),
-      documents: request.documents.map((d) => ({
-        id: d.id,
-        label: d.label,
-        requiredDocumentId: d.requiredDocumentId,
-        currentVersion: d.currentVersion
-          ? {
-              id: d.currentVersion.id,
-              version: d.currentVersion.version,
-              fileName: d.currentVersion.fileName,
-              mimeType: d.currentVersion.mimeType,
-              sizeBytes: d.currentVersion.sizeBytes,
-              storageKey: d.currentVersion.storageKey,
-              uploadedByNameEn: d.currentVersion.uploadedBy.fullNameEn,
-              uploadedByNameAr: d.currentVersion.uploadedBy.fullNameAr,
-              uploadedAt: d.currentVersion.uploadedAt.toISOString(),
-            }
-          : null,
-        versions: d.versions.map((v) => ({
-          id: v.id,
-          version: v.version,
-          fileName: v.fileName,
-          mimeType: v.mimeType,
-          sizeBytes: v.sizeBytes,
-          storageKey: v.storageKey,
-          uploadedByNameEn: v.uploadedBy.fullNameEn,
-          uploadedByNameAr: v.uploadedBy.fullNameAr,
-          uploadedAt: v.uploadedAt.toISOString(),
-        })),
       })),
       comments: request.comments.map((c) => ({
         id: c.id,
@@ -868,10 +902,13 @@ export async function getAdminClientDetail(
         select: {
           id: true,
           requestNo: true,
-          productNameEn: true,
-          productNameAr: true,
           state: true,
           updatedAt: true,
+          items: {
+            orderBy: { sortOrder: "asc" },
+            take: 1,
+            select: { productNameEn: true, productNameAr: true },
+          },
         },
       }),
       canViewFinance
@@ -918,8 +955,8 @@ export async function getAdminClientDetail(
       recentRequests: recentRequests.map((r) => ({
         id: r.id,
         requestNo: r.requestNo,
-        productNameEn: r.productNameEn,
-        productNameAr: r.productNameAr,
+        productNameEn: r.items[0]?.productNameEn ?? "",
+        productNameAr: r.items[0]?.productNameAr ?? "",
         state: r.state,
         updatedAt: r.updatedAt.toISOString(),
       })),

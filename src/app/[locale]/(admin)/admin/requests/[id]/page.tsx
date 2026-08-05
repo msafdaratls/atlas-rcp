@@ -33,7 +33,9 @@ export default async function AdminRequestDetailPage({ params }: Props) {
   return (
     <div>
       <PageHeader
-        title={locale === "ar" ? data.productNameAr : data.productNameEn}
+        title={data.items
+          .map((i) => (locale === "ar" ? i.productNameAr : i.productNameEn))
+          .join(", ")}
         description={t("pageDescription")}
         breadcrumbs={[
           { label: tNav("requests"), href: `/${locale}/admin/requests` },

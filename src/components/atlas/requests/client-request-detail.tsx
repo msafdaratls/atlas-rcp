@@ -88,15 +88,29 @@ export function ClientRequestDetailPanel({ data }: Props) {
   const [reopenReason, setReopenReason] = useState("");
   const [reopenPending, setReopenPending] = useState(false);
 
-  const [productNameEn, setProductNameEn] = useState(data.productNameEn);
-  const [productNameAr, setProductNameAr] = useState(data.productNameAr);
-  const [brand, setBrand] = useState(data.brand ?? "");
-  const [attrs, setAttrs] = useState<Record<string, unknown>>(data.productAttrs);
-  const [savingProduct, setSavingProduct] = useState(false);
+  const [editItems, setEditItems] = useState(
+    data.items.map((item) => ({
+      requestItemId: item.id,
+      productNameEn: item.productNameEn,
+      productNameAr: item.productNameAr,
+      brand: item.brand ?? "",
+      attrs: item.productAttrs,
+    })),
+  );
+  const [savingProductId, setSavingProductId] = useState<string | null>(null);
 
-  const attrFields = useMemo(
-    () => parseAttrSchema(data.productAttrSchema),
-    [data.productAttrSchema],
+  function updateEditItem(
+    requestItemId: string,
+    patch: Partial<(typeof editItems)[number]>,
+  ) {
+    setEditItems((prev) =>
+      prev.map((i) => (i.requestItemId === requestItemId ? { ...i, ...patch } : i)),
+    );
+  }
+
+  const allDocuments = useMemo(
+    () => data.items.flatMap((item) => item.documents),
+    [data.items],
   );
 
   const totalOpenAmount = useMemo(
@@ -106,7 +120,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
 
   const onDownload = (version: DocumentVersionView & { storageKey?: string }) => {
     const key =
-      data.documents
+      allDocuments
         .flatMap((d) => d.versions)
         .find((v) => v.id === version.id)?.storageKey ?? null;
     if (key) openStorage(key);
@@ -129,21 +143,26 @@ export function ClientRequestDetailPanel({ data }: Props) {
     });
   };
 
-  const handleSaveProductDetails = () => {
-    if (productNameEn.trim().length < 2 || productNameAr.trim().length < 2) {
+  const handleSaveProductDetails = (requestItemId: string) => {
+    const item = editItems.find((i) => i.requestItemId === requestItemId);
+    if (!item) return;
+    if (
+      item.productNameEn.trim().length < 2 ||
+      item.productNameAr.trim().length < 2
+    ) {
       toast.error(t("errors.VALIDATION"));
       return;
     }
-    setSavingProduct(true);
+    setSavingProductId(requestItemId);
     startTransition(async () => {
       const result = await saveDraftProductDetails({
-        requestId: data.id,
-        productNameEn,
-        productNameAr,
-        brand: brand || null,
-        productAttrs: attrs,
+        requestItemId,
+        productNameEn: item.productNameEn,
+        productNameAr: item.productNameAr,
+        brand: item.brand || null,
+        productAttrs: item.attrs,
       });
-      setSavingProduct(false);
+      setSavingProductId(null);
       if (!result.ok) {
         toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
         return;
@@ -220,7 +239,11 @@ export function ClientRequestDetailPanel({ data }: Props) {
     );
   }, [chatOpen, data.id, router]);
 
-  const handleUpload = async (requiredDocumentId: string, label: string) => {
+  const handleUpload = async (
+    requestItemId: string,
+    requiredDocumentId: string,
+    label: string,
+  ) => {
     const input = fileRefs.current[requiredDocumentId];
     const file = input?.files?.[0];
     if (!file) return;
@@ -228,6 +251,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
     try {
       const fd = new FormData();
       fd.set("requestId", data.id);
+      fd.set("requestItemId", requestItemId);
       fd.set("requiredDocumentId", requiredDocumentId);
       fd.set("label", label);
       fd.set("file", file);
@@ -250,7 +274,9 @@ export function ClientRequestDetailPanel({ data }: Props) {
         <div>
           <p className="text-xs text-ink-500">{t("service")}</p>
           <p className="font-semibold text-ink-900">
-            {locale === "ar" ? data.serviceNameAr : data.serviceNameEn}
+            {data.items
+              .map((i) => (locale === "ar" ? i.serviceNameAr : i.serviceNameEn))
+              .join(", ")}
           </p>
           <p className="mt-1 text-xs text-ink-500">
             {t("submission", { n: data.submissionNo })}
@@ -446,149 +472,186 @@ export function ClientRequestDetailPanel({ data }: Props) {
 
           {data.canResubmit ? (
             <div className="mt-4 space-y-4">
-              <div className="space-y-3 rounded-md border border-line bg-surface p-3">
-                <h3 className="text-sm font-semibold text-ink-900">
-                  {t("edit.title")}
-                </h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label>{tFields("productNameAr")}</Label>
-                    <Input
-                      value={productNameAr}
-                      onChange={(e) => setProductNameAr(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>{tFields("productNameEn")}</Label>
-                    <Input
-                      value={productNameEn}
-                      onChange={(e) => setProductNameEn(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <Label>{tFields("brand")}</Label>
-                    <Input value={brand} onChange={(e) => setBrand(e.target.value)} />
-                  </div>
-                </div>
-                {attrFields.length > 0 ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {attrFields.map((field) => (
-                      <div key={field.key} className="space-y-1">
-                        <Label>
-                          {locale === "ar" ? field.titleAr : field.titleEn}
-                        </Label>
-                        {field.type === "boolean" ? (
-                          <Select
-                            value={
-                              attrs[field.key] === true
-                                ? "true"
-                                : attrs[field.key] === false
-                                  ? "false"
-                                  : ""
+              {data.items.map((item) => {
+                const editItem = editItems.find(
+                  (i) => i.requestItemId === item.id,
+                )!;
+                const attrFields = parseAttrSchema(item.productAttrSchema);
+                return (
+                  <div key={item.id} className="space-y-3">
+                    <div className="space-y-3 rounded-md border border-line bg-surface p-3">
+                      <h3 className="text-sm font-semibold text-ink-900">
+                        {locale === "ar" ? item.serviceNameAr : item.serviceNameEn}
+                        {" — "}
+                        {t("edit.title")}
+                      </h3>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label>{tFields("productNameAr")}</Label>
+                          <Input
+                            value={editItem.productNameAr}
+                            onChange={(e) =>
+                              updateEditItem(item.id, {
+                                productNameAr: e.target.value,
+                              })
                             }
-                            onValueChange={(v) =>
-                              setAttrs((a) => ({ ...a, [field.key]: v === "true" }))
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>{tFields("productNameEn")}</Label>
+                          <Input
+                            value={editItem.productNameEn}
+                            onChange={(e) =>
+                              updateEditItem(item.id, {
+                                productNameEn: e.target.value,
+                              })
                             }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={tFields("select")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="true">{tFields("yes")}</SelectItem>
-                              <SelectItem value="false">{tFields("no")}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Select
-                            value={String(attrs[field.key] ?? "")}
-                            onValueChange={(v) =>
-                              setAttrs((a) => ({ ...a, [field.key]: v }))
+                          />
+                        </div>
+                        <div className="space-y-1 sm:col-span-2">
+                          <Label>{tFields("brand")}</Label>
+                          <Input
+                            value={editItem.brand}
+                            onChange={(e) =>
+                              updateEditItem(item.id, { brand: e.target.value })
                             }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={tFields("select")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(field.enum ?? []).map((opt) => (
-                                <SelectItem key={opt} value={opt}>
-                                  {tEnums(opt as never)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                          />
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSaveProductDetails}
-                  disabled={savingProduct}
-                >
-                  {savingProduct ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : null}
-                  {t("edit.save")}
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {data.requiredDocuments.map((slot) => {
-                  const existing = data.documents.find(
-                    (d) => d.requiredDocumentId === slot.id,
-                  );
-                  return (
-                    <div
-                      key={slot.id}
-                      className="flex flex-col gap-2 rounded-md border border-line bg-surface p-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-ink-900">
-                          {locale === "ar" ? slot.nameAr : slot.nameEn}
-                          {slot.mandatory ? " *" : ""}
-                        </p>
-                        <p className="text-xs text-ink-500">
-                          {existing?.currentVersion
-                            ? existing.currentVersion.fileName
-                            : t("noFileYet")}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          ref={(el) => {
-                            fileRefs.current[slot.id] = el;
-                          }}
-                          type="file"
-                          className="hidden"
-                          accept={slot.acceptedMimeTypes.join(",")}
-                          onChange={() =>
-                            void handleUpload(
-                              slot.id,
-                              locale === "ar" ? slot.nameAr : slot.nameEn,
-                            )
-                          }
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={uploadingSlot === slot.id}
-                          onClick={() => fileRefs.current[slot.id]?.click()}
-                        >
-                          {uploadingSlot === slot.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <Upload className="size-4" />
-                          )}
-                          {t("replaceFile")}
-                        </Button>
-                      </div>
+                      {attrFields.length > 0 ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {attrFields.map((field) => (
+                            <div key={field.key} className="space-y-1">
+                              <Label>
+                                {locale === "ar" ? field.titleAr : field.titleEn}
+                              </Label>
+                              {field.type === "boolean" ? (
+                                <Select
+                                  value={
+                                    editItem.attrs[field.key] === true
+                                      ? "true"
+                                      : editItem.attrs[field.key] === false
+                                        ? "false"
+                                        : ""
+                                  }
+                                  onValueChange={(v) =>
+                                    updateEditItem(item.id, {
+                                      attrs: {
+                                        ...editItem.attrs,
+                                        [field.key]: v === "true",
+                                      },
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder={tFields("select")} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="true">
+                                      {tFields("yes")}
+                                    </SelectItem>
+                                    <SelectItem value="false">
+                                      {tFields("no")}
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Select
+                                  value={String(editItem.attrs[field.key] ?? "")}
+                                  onValueChange={(v) =>
+                                    updateEditItem(item.id, {
+                                      attrs: { ...editItem.attrs, [field.key]: v },
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder={tFields("select")} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(field.enum ?? []).map((opt) => (
+                                      <SelectItem key={opt} value={opt}>
+                                        {tEnums(opt as never)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSaveProductDetails(item.id)}
+                        disabled={savingProductId === item.id}
+                      >
+                        {savingProductId === item.id ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : null}
+                        {t("edit.save")}
+                      </Button>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="space-y-3">
+                      {item.requiredDocuments.map((slot) => {
+                        const existing = item.documents.find(
+                          (d) => d.requiredDocumentId === slot.id,
+                        );
+                        return (
+                          <div
+                            key={slot.id}
+                            className="flex flex-col gap-2 rounded-md border border-line bg-surface p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-ink-900">
+                                {locale === "ar" ? slot.nameAr : slot.nameEn}
+                                {slot.mandatory ? " *" : ""}
+                              </p>
+                              <p className="text-xs text-ink-500">
+                                {existing?.currentVersion
+                                  ? existing.currentVersion.fileName
+                                  : t("noFileYet")}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                ref={(el) => {
+                                  fileRefs.current[slot.id] = el;
+                                }}
+                                type="file"
+                                className="hidden"
+                                accept={slot.acceptedMimeTypes.join(",")}
+                                onChange={() =>
+                                  void handleUpload(
+                                    item.id,
+                                    slot.id,
+                                    locale === "ar" ? slot.nameAr : slot.nameEn,
+                                  )
+                                }
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={uploadingSlot === slot.id}
+                                onClick={() => fileRefs.current[slot.id]?.click()}
+                              >
+                                {uploadingSlot === slot.id ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                  <Upload className="size-4" />
+                                )}
+                                {t("replaceFile")}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
               <div>
                 <Label htmlFor="resubmit-note">{t("noteLabel")}</Label>
                 <Input
@@ -634,11 +697,11 @@ export function ClientRequestDetailPanel({ data }: Props) {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-ink-900">{t("documents")}</h2>
-        {data.documents.filter((d) => d.currentVersion).length === 0 ? (
+        {allDocuments.filter((d) => d.currentVersion).length === 0 ? (
           <p className="text-sm text-ink-500">{t("documentsEmpty")}</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {data.documents
+            {allDocuments
               .filter((d) => d.currentVersion)
               .map((doc) => (
                 <DocumentCard
