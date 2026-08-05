@@ -10,6 +10,8 @@ type Props = { data: AdminClientDetail };
 export async function AdminClientDetailPanel({ data }: Props) {
   const t = await getTranslations("adminOps.clientDetail");
   const locale = await getLocale();
+  const owner = data.users.find((u) => u.roles.includes("CLIENT_OWNER"));
+  const people = data.users.filter((u) => u.id !== owner?.id);
 
   return (
     <div className="space-y-6">
@@ -107,25 +109,48 @@ export async function AdminClientDetailPanel({ data }: Props) {
       ) : null}
 
       <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-ink-900">{t("owner")}</h2>
+        {owner ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface-alt p-3 text-sm">
+            <div>
+              <p className="font-medium text-ink-900">
+                {locale === "ar" ? owner.fullNameAr : owner.fullNameEn}
+              </p>
+              <p className="text-xs text-ink-500" dir="ltr">
+                {owner.email}
+              </p>
+            </div>
+            <span className="text-xs text-ink-500">{owner.roles.join(", ")}</span>
+          </div>
+        ) : (
+          <p className="text-sm text-ink-500">{t("noOwner")}</p>
+        )}
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-sm font-semibold text-ink-900">{t("users")}</h2>
-        <ul className="space-y-2">
-          {data.users.map((u) => (
-            <li
-              key={u.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface p-3 text-sm"
-            >
-              <div>
-                <p className="font-medium text-ink-900">
-                  {locale === "ar" ? u.fullNameAr : u.fullNameEn}
-                </p>
-                <p className="text-xs text-ink-500" dir="ltr">
-                  {u.email}
-                </p>
-              </div>
-              <span className="text-xs text-ink-500">{u.roles.join(", ")}</span>
-            </li>
-          ))}
-        </ul>
+        {people.length === 0 ? (
+          <p className="text-sm text-ink-500">—</p>
+        ) : (
+          <ul className="space-y-2">
+            {people.map((u) => (
+              <li
+                key={u.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface p-3 text-sm"
+              >
+                <div>
+                  <p className="font-medium text-ink-900">
+                    {locale === "ar" ? u.fullNameAr : u.fullNameEn}
+                  </p>
+                  <p className="text-xs text-ink-500" dir="ltr">
+                    {u.email}
+                  </p>
+                </div>
+                <span className="text-xs text-ink-500">{u.roles.join(", ")}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

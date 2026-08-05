@@ -83,7 +83,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -140,6 +140,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const locale = useLocale();
   const dateLocale = locale === "ar" ? arSA : enGB;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -191,6 +192,11 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const [chatOpen, setChatOpen] = useState(false);
 
   const canMessage = data.state !== "DRAFT" && data.state !== "CANCELLED";
+
+  useEffect(() => {
+    if (searchParams.get("openChat") === "1") setChatOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!chatOpen) return;

@@ -34,6 +34,19 @@ export function isLegalFinancialEvent(type: string): boolean {
   );
 }
 
+/**
+ * In-app-only events: chat messages and mentions never leave the app,
+ * regardless of the user's email notification preference.
+ */
+const IN_APP_ONLY_EVENTS: NotificationEventType[] = [
+  "COMMENT_ADDED",
+  "NOTE_MENTION",
+];
+
+export function isInAppOnlyEvent(type: string): boolean {
+  return IN_APP_ONLY_EVENTS.includes(type as NotificationEventType);
+}
+
 /** Events shown on the company notification preferences grid. */
 export const PREFERENCE_EVENTS = NOTIFICATION_EVENTS.filter((e) =>
   [

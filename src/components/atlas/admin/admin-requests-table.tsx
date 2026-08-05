@@ -170,12 +170,16 @@ export function AdminRequestsTable({
           const unread = row.original.unreadClientMessages;
           if (!unread) return null;
           return (
-            <span className="relative inline-flex">
+            <Link
+              href={`/${locale}/admin/requests/${row.original.id}?openChat=1`}
+              className="relative inline-flex"
+              aria-label={t("columns.messages")}
+            >
               <MessageSquare className="size-5 text-ink-500" />
               <span className="absolute -end-1.5 -top-1.5 flex min-w-4 items-center justify-center rounded-full bg-state-bad px-1 font-data text-[10px] font-semibold leading-none text-white">
                 {unread > 99 ? "99+" : unread}
               </span>
-            </span>
+            </Link>
           );
         },
       },

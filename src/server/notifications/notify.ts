@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import {
+  isInAppOnlyEvent,
   isLegalFinancialEvent,
   type NotificationEventType,
 } from "@/lib/notification-events";
@@ -78,11 +79,13 @@ export async function notify(
   let inApp = 0;
   let emailQueued = 0;
   const forceEmail = isLegalFinancialEvent(input.event);
+  const inAppOnly = isInAppOnlyEvent(input.event);
 
   for (const user of users) {
     const pref = prefMap.get(`${user.id}:${input.event}`);
     const inAppEnabled = pref?.inAppEnabled ?? true;
-    const emailEnabled = forceEmail || (pref?.emailEnabled ?? true);
+    const emailEnabled =
+      !inAppOnly && (forceEmail || (pref?.emailEnabled ?? true));
 
     if (inAppEnabled) {
       let skipInApp = false;

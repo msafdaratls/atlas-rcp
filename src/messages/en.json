@@ -822,7 +822,9 @@
       "vat": "VAT",
       "balance": "Balance",
       "creditLimit": "Credit limit",
-      "users": "Users"
+      "owner": "Client owner",
+      "noOwner": "No owner assigned.",
+      "users": "People in organisation"
     },
     "catalogue": {
       "pageDescription": "Service catalogue used by the client new-request wizard.",
