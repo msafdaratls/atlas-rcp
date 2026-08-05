@@ -4,6 +4,8 @@ import type {
   CouponClientScope,
   CouponDiscountType,
   CouponStatus,
+  EvaluationActivityStatus,
+  EvaluationActivityType,
   FaultAttribution,
   OrganisationStatus,
   Role,
@@ -51,7 +53,16 @@ export const REQUEST_TRANSITIONS: Record<RequestState, RequestState[]> = {
   ASSESSMENT_QUEUED: ["ASSESSMENT_RUNNING", "ON_HOLD", "CANCELLED"],
   ASSESSMENT_RUNNING: ["TECHNICAL_REVIEW", "ON_HOLD", "CANCELLED"],
   TECHNICAL_REVIEW: ["DECISION", "RETURNED_TO_CLIENT", "ON_HOLD", "CANCELLED"],
-  DECISION: ["REPORT_ISSUED", "RETURNED_TO_CLIENT", "ON_HOLD", "CANCELLED"],
+  /// CLOSED here is the "Refuse Certification" path — it bypasses REPORT_ISSUED
+  /// entirely so a refused request never appears "issued". See
+  /// transitionAdminRequest()'s REFUSAL_REASON_REQUIRED / COI gating.
+  DECISION: [
+    "REPORT_ISSUED",
+    "CLOSED",
+    "RETURNED_TO_CLIENT",
+    "ON_HOLD",
+    "CANCELLED",
+  ],
   REPORT_ISSUED: ["CLOSED"],
   CLOSED: [],
   CANCELLED: [],
@@ -399,6 +410,9 @@ export type AdminRequestDetailItem = {
     slaHours: number;
     maxResubmissions: number;
     checkSets: CheckSet[];
+    requiresInspection: boolean;
+    requiresLabTesting: boolean;
+    requiresFactoryAudit: boolean;
   };
   assessment: AssessmentState;
   documents: Array<{
@@ -425,6 +439,23 @@ export type AdminRequestDetailItem = {
       storageKey: string;
       uploadedByNameEn: string;
       uploadedByNameAr: string;
+      uploadedAt: string;
+    }>;
+  }>;
+  activities: Array<{
+    id: string;
+    type: EvaluationActivityType;
+    status: EvaluationActivityStatus;
+    scheduledDate: string | null;
+    assignedUserId: string | null;
+    assignedUserNameEn: string | null;
+    assignedUserNameAr: string | null;
+    qualificationNote: string | null;
+    notes: string | null;
+    reports: Array<{
+      id: string;
+      fileName: string;
+      storageKey: string;
       uploadedAt: string;
     }>;
   }>;
@@ -490,8 +521,34 @@ export type AdminRequestDetail = {
     authorNameAr: string;
     createdAt: string;
     mentions: Array<{ userId: string; nameEn: string; nameAr: string }>;
+    attachments: CommentAttachment[];
   }>;
 };
+
+export type CommentAttachment = {
+  fileName: string;
+  storageKey: string;
+  sizeBytes: number;
+  mimeType: string;
+};
+
+/** Coerce arbitrary JSON (Prisma) into a well-formed attachment list. */
+export function parseCommentAttachments(raw: unknown): CommentAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CommentAttachment[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const a = entry as Record<string, unknown>;
+    if (typeof a.fileName !== "string" || typeof a.storageKey !== "string") continue;
+    out.push({
+      fileName: a.fileName,
+      storageKey: a.storageKey,
+      sizeBytes: typeof a.sizeBytes === "number" ? a.sizeBytes : 0,
+      mimeType: typeof a.mimeType === "string" ? a.mimeType : "application/octet-stream",
+    });
+  }
+  return out;
+}
 
 export async function getAdminRequestDetail(
   id: string,
@@ -518,9 +575,15 @@ export async function getAdminRequestDetail(
                 slaHours: true,
                 maxResubmissions: true,
                 checkSets: true,
+                requiresInspection: true,
+                requiresLabTesting: true,
+                requiresFactoryAudit: true,
               },
             },
             documents: {
+              // Evaluation-activity reports render in the activities panel
+              // below, not the generic document list.
+              where: { activityId: null },
               include: {
                 versions: {
                   include: {
@@ -532,6 +595,17 @@ export async function getAdminRequestDetail(
                   include: {
                     uploadedBy: { select: { fullNameEn: true, fullNameAr: true } },
                   },
+                },
+              },
+              orderBy: { createdAt: "asc" },
+            },
+            activities: {
+              include: {
+                assignedUser: { select: { fullNameEn: true, fullNameAr: true } },
+                documents: {
+                  where: { currentVersionId: { not: null } },
+                  include: { currentVersion: true },
+                  orderBy: { createdAt: "asc" },
                 },
               },
               orderBy: { createdAt: "asc" },
@@ -625,6 +699,9 @@ export async function getAdminRequestDetail(
           slaHours: item.serviceItem.slaHours,
           maxResubmissions: item.serviceItem.maxResubmissions,
           checkSets: parseCheckSets(item.serviceItem.checkSets),
+          requiresInspection: item.serviceItem.requiresInspection,
+          requiresLabTesting: item.serviceItem.requiresLabTesting,
+          requiresFactoryAudit: item.serviceItem.requiresFactoryAudit,
         },
         assessment: parseAssessment(item.assessment),
         documents: item.documents.map((d) => ({
@@ -656,6 +733,25 @@ export async function getAdminRequestDetail(
             uploadedAt: v.uploadedAt.toISOString(),
           })),
         })),
+        activities: item.activities.map((a) => ({
+          id: a.id,
+          type: a.type,
+          status: a.status,
+          scheduledDate: a.scheduledDate?.toISOString() ?? null,
+          assignedUserId: a.assignedUserId,
+          assignedUserNameEn: a.assignedUser?.fullNameEn ?? null,
+          assignedUserNameAr: a.assignedUser?.fullNameAr ?? null,
+          qualificationNote: a.qualificationNote,
+          notes: a.notes,
+          reports: a.documents
+            .filter((d) => d.currentVersion)
+            .map((d) => ({
+              id: d.id,
+              fileName: d.currentVersion!.fileName,
+              storageKey: d.currentVersion!.storageKey,
+              uploadedAt: d.currentVersion!.uploadedAt.toISOString(),
+            })),
+        })),
       })),
       createdBy: request.createdBy,
       assignedTo: request.assignedTo,
@@ -684,6 +780,7 @@ export async function getAdminRequestDetail(
           nameEn: m.user.fullNameEn,
           nameAr: m.user.fullNameAr,
         })),
+        attachments: parseCommentAttachments(c.attachments),
       })),
     };
   } catch {
@@ -994,6 +1091,9 @@ export type AdminCatalogueItem = {
   freeResubmissions: number;
   maxResubmissions: number;
   sortOrder: number;
+  requiresInspection: boolean;
+  requiresLabTesting: boolean;
+  requiresFactoryAudit: boolean;
   subCategoryId: string;
   subCategoryNameEn: string;
   subCategoryNameAr: string;
@@ -1027,6 +1127,9 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
       freeResubmissions: item.freeResubmissions,
       maxResubmissions: item.maxResubmissions,
       sortOrder: item.sortOrder,
+      requiresInspection: item.requiresInspection,
+      requiresLabTesting: item.requiresLabTesting,
+      requiresFactoryAudit: item.requiresFactoryAudit,
       subCategoryId: item.subCategoryId,
       subCategoryNameEn: item.subCategory.nameEn,
       subCategoryNameAr: item.subCategory.nameAr,

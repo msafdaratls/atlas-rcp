@@ -1,6 +1,7 @@
 "use client";
 
 import { AssessmentPanel } from "@/components/atlas/admin/assessment-panel";
+import { EvaluationActivitiesPanel } from "@/components/atlas/admin/evaluation-activities-panel";
 import { MentionTextarea } from "@/components/atlas/admin/mention-textarea";
 import { renderMentionBody } from "@/components/atlas/admin/mention-text";
 import { DocumentCard, type DocumentVersionView } from "@/components/atlas/document-card";
@@ -74,11 +75,13 @@ import {
   Loader2,
   MessageSquare,
   MessageSquarePlus,
+  Paperclip,
   PauseCircle,
   RotateCcw,
   Send,
   Unlock,
   UserRoundCog,
+  X,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -171,6 +174,33 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const [cancelNote, setCancelNote] = useState("");
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
+  const [refuseNote, setRefuseNote] = useState("");
+  const [refuseDialogOpen, setRefuseDialogOpen] = useState(false);
+
+  // Conflict-of-interest gate shown before completing Evaluation, completing
+  // Technical Review, and saving a Certification Decision (Grant or Refuse).
+  const [coiDialogOpen, setCoiDialogOpen] = useState(false);
+  const [coiChecked, setCoiChecked] = useState(false);
+  const [coiNext, setCoiNext] = useState<
+    { kind: "transition"; toState: RequestState } | { kind: "refuse" } | null
+  >(null);
+
+  function openCoiGate(next: typeof coiNext) {
+    setCoiChecked(false);
+    setCoiNext(next);
+    setCoiDialogOpen(true);
+  }
+
+  function submitCoiGate() {
+    if (!coiChecked || !coiNext) return;
+    setCoiDialogOpen(false);
+    if (coiNext.kind === "transition") {
+      runTransition(coiNext.toState, { coiAcknowledged: true });
+    } else {
+      setRefuseDialogOpen(true);
+    }
+  }
+
   const [reopenDecidePending, startReopenDecideTransition] = useTransition();
   const [approveReopenOpen, setApproveReopenOpen] = useState(false);
   const [approveReopenTarget, setApproveReopenTarget] = useState<ReopenTargetState | "">("");
@@ -184,6 +214,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const [adminReopenPending, startAdminReopenTransition] = useTransition();
 
   const [commentBody, setCommentBody] = useState("");
+  const [commentFile, setCommentFile] = useState<File | null>(null);
   const [commentPending, startCommentTransition] = useTransition();
 
   const [clientMessageBody, setClientMessageBody] = useState("");
@@ -209,9 +240,26 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
 
   const canReturn = data.allowedTransitions.includes("RETURNED_TO_CLIENT");
   const canCancel = data.allowedTransitions.includes("CANCELLED");
+  // At DECISION, REPORT_ISSUED/CLOSED are surfaced as the dedicated
+  // Grant/Refuse Certification buttons below, not as generic transitions.
+  const canDecide = data.state === "DECISION";
   const otherTransitions = data.allowedTransitions.filter(
-    (s) => s !== "RETURNED_TO_CLIENT" && s !== "CANCELLED",
+    (s) =>
+      s !== "RETURNED_TO_CLIENT" &&
+      s !== "CANCELLED" &&
+      !(canDecide && (s === "REPORT_ISSUED" || s === "CLOSED")),
   );
+
+  /** The three transitions the spec requires a Conflict of Interest declaration before. */
+  function coiGateFor(target: RequestState): typeof coiNext {
+    if (data.state === "ASSESSMENT_RUNNING" && target === "TECHNICAL_REVIEW") {
+      return { kind: "transition", toState: target };
+    }
+    if (data.state === "TECHNICAL_REVIEW" && target === "DECISION") {
+      return { kind: "transition", toState: target };
+    }
+    return null;
+  }
 
   const clientComments = data.comments.filter((c) => c.direction !== "INTERNAL");
   const internalComments = data.comments.filter((c) => c.direction === "INTERNAL");
@@ -254,6 +302,10 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
         setCancelNote("");
         setCancelDialogOpen(false);
       }
+      if (toState === "CLOSED" && data.state === "DECISION") {
+        setRefuseNote("");
+        setRefuseDialogOpen(false);
+      }
       router.refresh();
     });
   }
@@ -274,6 +326,15 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
       faultAttribution: returnFault,
       note: returnNote.trim() || undefined,
     });
+  }
+
+  function submitRefuse() {
+    const note = refuseNote.trim();
+    if (!note) {
+      toast.error(t("errors.REFUSAL_REASON_REQUIRED"));
+      return;
+    }
+    runTransition("CLOSED", { note, coiAcknowledged: true });
   }
 
   function submitCancel() {
@@ -358,13 +419,18 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
     const body = commentBody.trim();
     if (!body) return;
     startCommentTransition(async () => {
-      const result = await addAdminInternalComment({ requestId: data.id, body });
+      const formData = new FormData();
+      formData.set("requestId", data.id);
+      formData.set("body", body);
+      if (commentFile) formData.set("file", commentFile);
+      const result = await addAdminInternalComment(formData);
       if (!result.ok) {
         toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
         return;
       }
       toast.success(t("success"));
       setCommentBody("");
+      setCommentFile(null);
       router.refresh();
     });
   }
@@ -555,6 +621,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
             <div className="flex flex-wrap gap-2">
               {otherTransitions.map((target) => {
                 const Icon = transitionIcon(target);
+                const gate = coiGateFor(target);
                 return (
                   <Button
                     key={target}
@@ -562,7 +629,9 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                     size="sm"
                     variant="secondary"
                     disabled={pending}
-                    onClick={() => runTransition(target)}
+                    onClick={() =>
+                      gate ? openCoiGate(gate) : runTransition(target)
+                    }
                   >
                     {pending ? (
                       <Loader2 className="size-4 animate-spin" />
@@ -573,6 +642,37 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                   </Button>
                 );
               })}
+            </div>
+          ) : null}
+
+          {canDecide ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={pending}
+                onClick={() =>
+                  openCoiGate({ kind: "transition", toState: "REPORT_ISSUED" })
+                }
+              >
+                {pending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <FileCheck2 className="size-4" />
+                )}
+                {t("grantCertification")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="border-state-bad/40 text-state-bad hover:bg-[color-mix(in_srgb,var(--state-bad)_6%,white)]"
+                disabled={pending}
+                onClick={() => openCoiGate({ kind: "refuse" })}
+              >
+                <XCircle className="size-4" />
+                {t("refuseCertification")}
+              </Button>
             </div>
           ) : null}
 
@@ -606,6 +706,76 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
           ) : null}
         </section>
       ) : null}
+
+      <Dialog open={coiDialogOpen} onOpenChange={setCoiDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("coiTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-ink-700">{t("coiDescription")}</p>
+            <label className="flex items-start gap-2 text-sm text-ink-800">
+              <Checkbox
+                checked={coiChecked}
+                onCheckedChange={(checked) => setCoiChecked(checked === true)}
+              />
+              {t("coiCheckboxLabel")}
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCoiDialogOpen(false)}
+            >
+              {t("coiCancel")}
+            </Button>
+            <Button type="button" disabled={!coiChecked} onClick={submitCoiGate}>
+              {t("coiSubmit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={refuseDialogOpen} onOpenChange={setRefuseDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("refuseTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-ink-700">{t("refuseDescription")}</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="refuse-note">{t("refuseNote")}</Label>
+              <Textarea
+                id="refuse-note"
+                value={refuseNote}
+                onChange={(e) => setRefuseNote(e.target.value)}
+                placeholder={t("refuseNotePlaceholder")}
+                maxLength={1000}
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRefuseDialogOpen(false)}
+            >
+              {t("returnCancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={pending}
+              onClick={submitRefuse}
+            >
+              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {t("refuseSubmit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {data.pendingReopenRequest || data.canReopen ? (
         <section className="space-y-3 rounded-lg border border-line bg-surface p-4">
@@ -1017,6 +1187,23 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
             ))
         : null}
 
+      {ASSESSMENT_SHOW_STATES.includes(data.state)
+        ? data.items.map((item) => (
+            <EvaluationActivitiesPanel
+              key={item.id}
+              requestItemId={item.id}
+              title={
+                locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
+              }
+              serviceItem={item.serviceItem}
+              activities={item.activities}
+              assignableStaff={assignableStaff}
+              editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
+              locale={locale}
+            />
+          ))
+        : null}
+
       <StatusRail
         events={data.events.map((e) => ({
           id: e.id,
@@ -1196,6 +1383,21 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                     locale === "ar" ? "ar" : "en",
                   )}
                 </p>
+                {c.attachments.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {c.attachments.map((a) => (
+                      <button
+                        key={a.storageKey}
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink-700 hover:bg-atlas-green-tint/40"
+                        onClick={() => openStorage(a.storageKey)}
+                      >
+                        <Paperclip className="size-3.5" />
+                        {a.fileName}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -1212,19 +1414,49 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
             locale={locale === "ar" ? "ar" : "en"}
             emptyLabel={t("commentMentionEmpty")}
           />
-          <Button
-            type="button"
-            size="sm"
-            disabled={commentPending || commentBody.trim().length === 0}
-            onClick={submitComment}
-          >
-            {commentPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <MessageSquarePlus className="size-4" />
-            )}
-            {t("commentSubmit")}
-          </Button>
+          {commentFile ? (
+            <div className="flex items-center gap-1.5 text-xs text-ink-600">
+              <Paperclip className="size-3.5" />
+              {commentFile.name}
+              <button
+                type="button"
+                className="text-ink-500 hover:text-ink-800"
+                onClick={() => setCommentFile(null)}
+                aria-label={t("commentAttachmentRemove")}
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={commentPending || commentBody.trim().length === 0}
+              onClick={submitComment}
+            >
+              {commentPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <MessageSquarePlus className="size-4" />
+              )}
+              {t("commentSubmit")}
+            </Button>
+            <Label
+              htmlFor="internal-comment-file"
+              className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-medium text-ink-700 hover:bg-atlas-green-tint/40"
+            >
+              <Paperclip className="size-3.5" />
+              {t("commentAttach")}
+            </Label>
+            <input
+              id="internal-comment-file"
+              type="file"
+              accept="application/pdf,image/png,image/jpeg"
+              className="hidden"
+              onChange={(e) => setCommentFile(e.target.files?.[0] ?? null)}
+            />
+          </div>
         </div>
       </section>
     </div>

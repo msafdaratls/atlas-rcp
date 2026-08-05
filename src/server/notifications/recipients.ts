@@ -63,8 +63,25 @@ export async function resolveRecipients(
 
   switch (event) {
     case "REQUEST_SUBMITTED":
-    case "REQUEST_RESUBMITTED":
       return activeUsersByRoles(tx, ["INTAKE_OFFICER"], "ATLAS");
+
+    case "REQUEST_RESUBMITTED": {
+      // Prefer the reviewer who originally returned it; fall back to
+      // broadcasting to all intake officers if they're no longer active.
+      if (ctx.assignedToUserId) {
+        return tx.user.findMany({
+          where: { id: ctx.assignedToUserId, status: "ACTIVE" },
+          select: {
+            id: true,
+            email: true,
+            locale: true,
+            fullNameEn: true,
+            fullNameAr: true,
+          },
+        });
+      }
+      return activeUsersByRoles(tx, ["INTAKE_OFFICER"], "ATLAS");
+    }
 
     case "REQUEST_RECEIVED": {
       const ids = new Set<string>();
@@ -142,6 +159,40 @@ export async function resolveRecipients(
           fullNameAr: true,
         },
       });
+
+    case "TECHNICAL_REVIEW_READY":
+      return activeUsersByRoles(tx, ["TECHNICAL_REVIEWER"], "ATLAS");
+
+    case "DECISION_READY":
+      return activeUsersByRoles(tx, ["DECISION_MAKER"], "ATLAS");
+
+    case "CERTIFICATE_REFUSED":
+      return activeUsersByRoles(tx, ["INTAKE_OFFICER"], "ATLAS");
+
+    case "REQUEST_CLOSED": {
+      const ids = new Set<string>();
+      if (ctx.createdByUserId) ids.add(ctx.createdByUserId);
+      if (ctx.organisationId) {
+        const owners = await activeUsersByRoles(
+          tx,
+          ["CLIENT_OWNER", "CLIENT_ADMIN"],
+          "CLIENT",
+          ctx.organisationId,
+        );
+        for (const o of owners) ids.add(o.id);
+      }
+      if (ids.size === 0) return [];
+      return tx.user.findMany({
+        where: { id: { in: [...ids] }, status: "ACTIVE" },
+        select: {
+          id: true,
+          email: true,
+          locale: true,
+          fullNameEn: true,
+          fullNameAr: true,
+        },
+      });
+    }
 
     case "INVOICE_ISSUED": {
       if (!ctx.organisationId) return [];

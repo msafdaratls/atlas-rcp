@@ -10,7 +10,11 @@ export type NotificationCopyKey =
   | "REQUEST_RETURNED"
   | "REQUEST_ACCEPTED"
   | "REQUEST_ASSIGNED"
+  | "TECHNICAL_REVIEW_READY"
+  | "DECISION_READY"
   | "REPORT_ISSUED"
+  | "CERTIFICATE_REFUSED"
+  | "REQUEST_CLOSED"
   | "INVOICE_ISSUED"
   | "PAYMENT_RECEIVED"
   | "PAYMENT_REJECTED"
@@ -92,11 +96,43 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
     ctaLabelEn: "Open queue item",
     ctaLabelAr: "فتح عنصر الطابور",
   },
+  TECHNICAL_REVIEW_READY: {
+    titleEn: "Ready for technical review",
+    titleAr: "جاهز للمراجعة الفنية",
+    bodyEn: "{requestNo}: Evaluation is complete and awaiting technical review.",
+    bodyAr: "{requestNo}: اكتمل التقييم وهو بانتظار المراجعة الفنية.",
+    ctaLabelEn: "Open queue item",
+    ctaLabelAr: "فتح عنصر الطابور",
+  },
+  DECISION_READY: {
+    titleEn: "Ready for decision",
+    titleAr: "جاهز لاتخاذ القرار",
+    bodyEn: "{requestNo}: Technical review is complete and awaiting a certification decision.",
+    bodyAr: "{requestNo}: اكتملت المراجعة الفنية وهي بانتظار قرار المطابقة.",
+    ctaLabelEn: "Open queue item",
+    ctaLabelAr: "فتح عنصر الطابور",
+  },
   REPORT_ISSUED: {
     titleEn: "Report issued",
     titleAr: "تم إصدار التقرير",
     bodyEn: "{requestNo}: Your certificate of conformity report is ready.",
     bodyAr: "{requestNo}: تقرير شهادة المطابقة جاهز الآن.",
+  },
+  CERTIFICATE_REFUSED: {
+    titleEn: "Certification refused",
+    titleAr: "تم رفض شهادة المطابقة",
+    bodyEn: "{requestNo}: Certification was refused. {reason}",
+    bodyAr: "{requestNo}: تم رفض شهادة المطابقة. {reason}",
+    ctaLabelEn: "Open request",
+    ctaLabelAr: "فتح الطلب",
+  },
+  REQUEST_CLOSED: {
+    titleEn: "Request closed",
+    titleAr: "تم إغلاق الطلب",
+    bodyEn: "{requestNo} is now closed. Documents and certificates remain available for download.",
+    bodyAr: "{requestNo} مغلق الآن. تبقى المستندات والشهادات متاحة للتنزيل.",
+    ctaLabelEn: "Open request",
+    ctaLabelAr: "فتح الطلب",
   },
   INVOICE_ISSUED: {
     titleEn: "Pro forma invoice issued",

@@ -110,6 +110,9 @@ export function CreateServiceWizard({ categoryTree }: Props) {
   const [freeResubmissions, setFreeResubmissions] = useState("0");
   const [maxResubmissions, setMaxResubmissions] = useState("3");
   const [active, setActive] = useState(true);
+  const [requiresInspection, setRequiresInspection] = useState(false);
+  const [requiresLabTesting, setRequiresLabTesting] = useState(false);
+  const [requiresFactoryAudit, setRequiresFactoryAudit] = useState(false);
 
   const [attributes, setAttributes] = useState<AttrRow[]>([]);
   const [checkSets, setCheckSets] = useState<CheckSetRow[]>([]);
@@ -226,6 +229,9 @@ export function CreateServiceWizard({ categoryTree }: Props) {
           ? Number(maxResubmissions)
           : undefined,
         active,
+        requiresInspection,
+        requiresLabTesting,
+        requiresFactoryAudit,
         productAttributes: attributes.map((attr) => ({
           key: attr.key.trim(),
           type: attr.type,
@@ -439,6 +445,32 @@ export function CreateServiceWizard({ categoryTree }: Props) {
                 />
                 {t("step2.active")}
               </label>
+              <div className="space-y-2">
+                <Label>{t("step2.evaluationActivities")}</Label>
+                <div className="grid gap-2 rounded-md border border-line p-3 sm:grid-cols-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={requiresInspection}
+                      onCheckedChange={(v) => setRequiresInspection(Boolean(v))}
+                    />
+                    {t("step2.requiresInspection")}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={requiresLabTesting}
+                      onCheckedChange={(v) => setRequiresLabTesting(Boolean(v))}
+                    />
+                    {t("step2.requiresLabTesting")}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={requiresFactoryAudit}
+                      onCheckedChange={(v) => setRequiresFactoryAudit(Boolean(v))}
+                    />
+                    {t("step2.requiresFactoryAudit")}
+                  </label>
+                </div>
+              </div>
             </section>
           ) : null}
 

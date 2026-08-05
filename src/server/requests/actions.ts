@@ -1457,6 +1457,22 @@ export async function resubmitReturnedRequest(
         select: { paymentTermsDays: true },
       });
 
+      // If the reviewer who returned it is no longer an active intake
+      // officer, drop the assignment so it falls back to the broadcast pool
+      // instead of silently notifying nobody.
+      let reviewerStillActive = false;
+      if (request.assignedToUserId) {
+        const reviewer = await tx.user.findFirst({
+          where: {
+            id: request.assignedToUserId,
+            status: "ACTIVE",
+            roles: { some: { role: "INTAKE_OFFICER" } },
+          },
+          select: { id: true },
+        });
+        reviewerStillActive = !!reviewer;
+      }
+
       const now = new Date();
       const breakdown = computeOrderBreakdown(resubmissionItems);
 
@@ -1478,7 +1494,10 @@ export async function resubmitReturnedRequest(
       const row = await tx.request.update({
         where: { id: request.id },
         data: {
-          state: "SUBMITTED",
+          // Resubmitting a returned request goes straight back to Application
+          // Review, not back to square one — the reviewer's assignment (if
+          // they're still active) is left untouched below.
+          state: "UNDER_INTAKE_REVIEW",
           submissionNo: nextSubmission,
           submittedAt: now,
           slaDueAt,
@@ -1486,6 +1505,7 @@ export async function resubmitReturnedRequest(
           priceCharged: breakdown.total,
           discountApplied: 0,
           couponCode: null,
+          ...(reviewerStillActive ? {} : { assignedToUserId: null }),
         },
       });
 
@@ -1493,7 +1513,7 @@ export async function resubmitReturnedRequest(
         data: {
           requestId: request.id,
           fromState: "RETURNED_TO_CLIENT",
-          toState: "SUBMITTED",
+          toState: "UNDER_INTAKE_REVIEW",
           actorUserId: session.id,
           actorRole: session.roles[0] ?? "CLIENT_USER",
           note:
@@ -1556,10 +1576,13 @@ export async function resubmitReturnedRequest(
           data: {
             requestId: row.id,
             requestNo: row.requestNo,
-            state: "SUBMITTED",
+            state: "UNDER_INTAKE_REVIEW",
             link: `/admin/requests/${row.id}`,
             organisationId: orgId,
             createdByUserId: session.id,
+            assignedToUserId: reviewerStillActive
+              ? request.assignedToUserId
+              : null,
             ...notificationCopy("REQUEST_RESUBMITTED", {
               requestNo: row.requestNo,
             }),

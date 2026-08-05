@@ -240,6 +240,8 @@ model User {
   commentMentions         RequestCommentMention[]
   reopenRequestsMade      RequestReopenRequest[]   @relation("ReopenRequestedBy")
   reopenRequestsDecided   RequestReopenRequest[]   @relation("ReopenRequestDecidedBy")
+  activitiesAssigned      RequestItemActivity[]    @relation("ActivityAssignedTo")
+  activitiesCreated       RequestItemActivity[]    @relation("ActivityCreatedBy")
   ledgerEntries           LedgerEntry[]
   confirmedPayments       Payment[]                @relation("PaymentConfirmedBy")
   createdCoupons          Coupon[]
@@ -326,6 +328,11 @@ model ServiceItem {
   productAttrSchema    Json    @default("{}")
   /// Requirement sets shown in "What we check" [{ code, titleEn, titleAr }]
   checkSets            Json    @default("[]")
+  /// Optional evaluation activities: when true, the corresponding
+  /// RequestItemActivity card is offered during ASSESSMENT_RUNNING.
+  requiresInspection   Boolean @default(false)
+  requiresLabTesting   Boolean @default(false)
+  requiresFactoryAudit Boolean @default(false)
   sortOrder            Int     @default(0)
   active               Boolean @default(true)
 
@@ -420,9 +427,10 @@ model RequestItem {
   vatRate       Decimal @db.Decimal(5, 4)
   sortOrder     Int     @default(0)
 
-  request     Request           @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  serviceItem ServiceItem       @relation(fields: [serviceItemId], references: [id])
+  request     Request               @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  serviceItem ServiceItem           @relation(fields: [serviceItemId], references: [id])
   documents   RequestDocument[]
+  activities  RequestItemActivity[]
 
   @@index([requestId])
   @@index([serviceItemId])
@@ -433,18 +441,61 @@ model RequestDocument {
   requestId          String
   requestItemId      String
   requiredDocumentId String?
+  /// Set when this document is a report attached to an evaluation activity
+  /// (Inspection/Lab/Audit report) rather than a catalogue-required document.
+  activityId         String?
   label              String
   currentVersionId   String?  @unique
   createdAt          DateTime @default(now())
 
-  request          Request           @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  requestItem      RequestItem       @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
-  requiredDocument RequiredDocument? @relation(fields: [requiredDocumentId], references: [id])
-  currentVersion   DocumentVersion?  @relation("CurrentDocumentVersion", fields: [currentVersionId], references: [id])
-  versions         DocumentVersion[] @relation("DocumentVersions")
+  request          Request              @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestItem      RequestItem          @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
+  requiredDocument RequiredDocument?    @relation(fields: [requiredDocumentId], references: [id])
+  activity         RequestItemActivity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  currentVersion   DocumentVersion?     @relation("CurrentDocumentVersion", fields: [currentVersionId], references: [id])
+  versions         DocumentVersion[]    @relation("DocumentVersions")
 
   @@index([requestId])
   @@index([requestItemId])
+  @@index([activityId])
+}
+
+enum EvaluationActivityType {
+  SHIPMENT_INSPECTION
+  LABORATORY_TESTING
+  FACTORY_AUDIT
+}
+
+enum EvaluationActivityStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// Shipment Inspection / Laboratory Testing / Factory Audit — optional,
+/// per-service evaluation activities scheduled during ASSESSMENT_RUNNING.
+/// "Under Inspection" / "Under Audit" sub-status badges are derived from
+/// `status === IN_PROGRESS` for the matching type; there is no dedicated
+/// RequestState for them.
+model RequestItemActivity {
+  id                String                   @id @default(cuid())
+  requestItemId     String
+  type              EvaluationActivityType
+  status            EvaluationActivityStatus @default(SCHEDULED)
+  scheduledDate     DateTime?
+  assignedUserId    String?
+  qualificationNote String?
+  notes             String?
+  createdByUserId   String
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  requestItem  RequestItem       @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
+  assignedUser User?             @relation("ActivityAssignedTo", fields: [assignedUserId], references: [id])
+  createdBy    User              @relation("ActivityCreatedBy", fields: [createdByUserId], references: [id])
+  documents    RequestDocument[]
+
+  @@index([requestItemId, type])
 }
 
 model DocumentVersion {
@@ -501,8 +552,8 @@ model RequestComment {
   readAt       DateTime?
   createdAt    DateTime          @default(now())
 
-  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  author  User    @relation(fields: [authorUserId], references: [id])
+  request  Request                 @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author   User                    @relation(fields: [authorUserId], references: [id])
   mentions RequestCommentMention[]
 
   @@index([requestId, createdAt])

@@ -2,6 +2,7 @@
 
 import { MoneyValue } from "@/components/atlas/money-value";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -268,6 +269,9 @@ function EditServiceDialog({
                 freeResubmissions: Number(fd.get("freeResubmissions")),
                 maxResubmissions: Number(fd.get("maxResubmissions")),
                 sortOrder: Number(fd.get("sortOrder")),
+                requiresInspection: fd.get("requiresInspection") === "on",
+                requiresLabTesting: fd.get("requiresLabTesting") === "on",
+                requiresFactoryAudit: fd.get("requiresFactoryAudit") === "on",
               });
               if (!result.ok) {
                 toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
@@ -455,6 +459,33 @@ function EditServiceDialog({
                 dir="ltr"
                 defaultValue={item.maxResubmissions}
               />
+            </div>
+          </div>
+
+          <div>
+            <Label>{t("edit.evaluationActivities")}</Label>
+            <div className="mt-1 grid gap-2 rounded-md border border-line p-3 sm:grid-cols-3">
+              <label className="flex items-center gap-2 text-sm text-ink-800">
+                <Checkbox
+                  name="requiresInspection"
+                  defaultChecked={item.requiresInspection}
+                />
+                {t("edit.requiresInspection")}
+              </label>
+              <label className="flex items-center gap-2 text-sm text-ink-800">
+                <Checkbox
+                  name="requiresLabTesting"
+                  defaultChecked={item.requiresLabTesting}
+                />
+                {t("edit.requiresLabTesting")}
+              </label>
+              <label className="flex items-center gap-2 text-sm text-ink-800">
+                <Checkbox
+                  name="requiresFactoryAudit"
+                  defaultChecked={item.requiresFactoryAudit}
+                />
+                {t("edit.requiresFactoryAudit")}
+              </label>
             </div>
           </div>
 

@@ -68,12 +68,29 @@ const REVIEW_ASSIGNMENT_STATES: RequestState[] = [
   "DECISION",
 ];
 
+type StateNotificationEvent =
+  | "REQUEST_RETURNED"
+  | "REQUEST_ACCEPTED"
+  | "REPORT_ISSUED"
+  | "TECHNICAL_REVIEW_READY"
+  | "DECISION_READY"
+  | "REQUEST_CLOSED"
+  | "CERTIFICATE_REFUSED";
+
 function notificationEventForState(
-  state: RequestState,
-): "REQUEST_RETURNED" | "REQUEST_ACCEPTED" | "REPORT_ISSUED" | null {
-  if (state === "RETURNED_TO_CLIENT") return "REQUEST_RETURNED";
-  if (state === "ACCEPTED") return "REQUEST_ACCEPTED";
-  if (state === "REPORT_ISSUED") return "REPORT_ISSUED";
+  fromState: RequestState,
+  toState: RequestState,
+): StateNotificationEvent | null {
+  if (toState === "RETURNED_TO_CLIENT") return "REQUEST_RETURNED";
+  if (toState === "ACCEPTED") return "REQUEST_ACCEPTED";
+  if (toState === "REPORT_ISSUED") return "REPORT_ISSUED";
+  if (toState === "TECHNICAL_REVIEW") return "TECHNICAL_REVIEW_READY";
+  if (toState === "DECISION") return "DECISION_READY";
+  if (toState === "CLOSED") {
+    // Refusal is the only path straight from DECISION to CLOSED; every other
+    // route to CLOSED (e.g. after REPORT_ISSUED) is a normal closure.
+    return fromState === "DECISION" ? "CERTIFICATE_REFUSED" : "REQUEST_CLOSED";
+  }
   return null;
 }
 
@@ -119,7 +136,21 @@ const transitionSchema = z.object({
   note: z.string().trim().max(1000).optional(),
   reasonCodes: z.array(z.enum(RETURN_REASON_CODES)).max(RETURN_REASON_CODES.length).optional(),
   faultAttribution: z.enum(FAULT_ATTRIBUTIONS).optional(),
+  /** Required on the three Conflict-of-Interest-gated transitions; see COI_GATED_TRANSITIONS. */
+  coiAcknowledged: z.literal(true).optional(),
 });
+
+/**
+ * Transitions the spec requires a mandatory Conflict of Interest Declaration
+ * before: completing Evaluation, completing Technical Review, and saving a
+ * Certification Decision (both Grant and Refuse).
+ */
+const COI_GATED_TRANSITIONS: Array<[RequestState, RequestState]> = [
+  ["ASSESSMENT_RUNNING", "TECHNICAL_REVIEW"],
+  ["TECHNICAL_REVIEW", "DECISION"],
+  ["DECISION", "REPORT_ISSUED"],
+  ["DECISION", "CLOSED"],
+];
 
 export async function transitionAdminRequest(
   input: z.infer<typeof transitionSchema>,
@@ -130,7 +161,8 @@ export async function transitionAdminRequest(
     const parsed = transitionSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
-    const { requestId, toState, note, faultAttribution } = parsed.data;
+    const { requestId, toState, note, faultAttribution, coiAcknowledged } =
+      parsed.data;
     const reasonCodes = [...new Set(parsed.data.reasonCodes ?? [])];
 
     const request = await prisma.request.findUnique({
@@ -170,6 +202,21 @@ export async function transitionAdminRequest(
 
     if (toState === "CANCELLED" && !note) {
       return { ok: false, error: "CANCEL_NOTE_REQUIRED" };
+    }
+
+    // Refusing certification (DECISION -> CLOSED) must carry a reason, same
+    // rule as CANCELLED — this is the "Refuse Certification" path.
+    if (request.state === "DECISION" && toState === "CLOSED" && !note) {
+      return { ok: false, error: "REFUSAL_REASON_REQUIRED" };
+    }
+
+    if (
+      COI_GATED_TRANSITIONS.some(
+        ([from, to]) => from === request.state && to === toState,
+      ) &&
+      !coiAcknowledged
+    ) {
+      return { ok: false, error: "COI_ACKNOWLEDGEMENT_REQUIRED" };
     }
 
     const now = new Date();
@@ -227,6 +274,15 @@ export async function transitionAdminRequest(
         throw new Error("CONFLICT");
       }
 
+      const eventMetadata: Record<string, unknown> = {};
+      if (request.state === "DECISION" && (toState === "REPORT_ISSUED" || toState === "CLOSED")) {
+        eventMetadata.decision = toState === "REPORT_ISSUED" ? "GRANTED" : "REFUSED";
+      }
+      if (coiAcknowledged) {
+        eventMetadata.coiAcknowledged = true;
+        eventMetadata.coiAcknowledgedAt = now.toISOString();
+      }
+
       await tx.requestEvent.create({
         data: {
           requestId,
@@ -237,6 +293,7 @@ export async function transitionAdminRequest(
           note: note ?? null,
           reasonCodes,
           faultAttribution: faultAttribution ?? null,
+          metadata: eventMetadata as Prisma.InputJsonValue,
         },
       });
 
@@ -337,10 +394,11 @@ export async function transitionAdminRequest(
           );
         }
 
-        const eventType = notificationEventForState(toState);
+        const eventType = notificationEventForState(request.state, toState);
         if (eventType && request.createdBy) {
           const copy = notificationCopy(eventType, {
             requestNo: request.requestNo,
+            ...(eventType === "CERTIFICATE_REFUSED" ? { reason: note ?? "" } : {}),
           });
           await notify(
             {
@@ -349,7 +407,11 @@ export async function transitionAdminRequest(
                 requestId,
                 requestNo: request.requestNo,
                 state: toState,
-                link: `/client/requests/${requestId}`,
+                link:
+                  eventType === "TECHNICAL_REVIEW_READY" ||
+                  eventType === "DECISION_READY"
+                    ? `/admin/requests/${requestId}`
+                    : `/client/requests/${requestId}`,
                 organisationId: request.organisationId,
                 createdByUserId: request.createdBy.id,
                 ...copy,
@@ -357,6 +419,29 @@ export async function transitionAdminRequest(
             },
             tx,
           );
+
+          // A refusal is also a closure — notify the customer of the closure
+          // itself, in addition to CERTIFICATE_REFUSED going to intake staff.
+          if (eventType === "CERTIFICATE_REFUSED") {
+            const closedCopy = notificationCopy("REQUEST_CLOSED", {
+              requestNo: request.requestNo,
+            });
+            await notify(
+              {
+                event: "REQUEST_CLOSED",
+                data: {
+                  requestId,
+                  requestNo: request.requestNo,
+                  state: toState,
+                  link: `/client/requests/${requestId}`,
+                  organisationId: request.organisationId,
+                  createdByUserId: request.createdBy.id,
+                  ...closedCopy,
+                },
+              },
+              tx,
+            );
+          }
         }
       } catch (error) {
         // Notification delivery is best-effort; the transition itself must still succeed.
@@ -841,13 +926,20 @@ function extractMentionedUserIds(body: string): string[] {
   return [...ids];
 }
 
+/** Log Notes attachments: same accept-list as generic document uploads, capped smaller since these are incidental evidence, not required submission documents. */
+const COMMENT_ATTACHMENT_ACCEPTED = ["application/pdf", "image/png", "image/jpeg"];
+const COMMENT_ATTACHMENT_MAX_MB = 20;
+
 export async function addAdminInternalComment(
-  input: z.infer<typeof internalCommentSchema>,
+  formData: FormData,
 ): Promise<ActionResult<{ commentId: string }>> {
   try {
     const session = await requireSession();
     requirePermission(session, "requests:admin");
-    const parsed = internalCommentSchema.safeParse(input);
+    const parsed = internalCommentSchema.safeParse({
+      requestId: String(formData.get("requestId") ?? ""),
+      body: String(formData.get("body") ?? ""),
+    });
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
     const request = await prisma.request.findUnique({
@@ -855,6 +947,46 @@ export async function addAdminInternalComment(
       select: { id: true, requestNo: true, organisationId: true },
     });
     if (!request) return { ok: false, error: "NOT_FOUND" };
+
+    let attachment: {
+      fileName: string;
+      storageKey: string;
+      sizeBytes: number;
+      mimeType: string;
+    } | null = null;
+    const file = formData.get("file");
+    if (file instanceof File && file.size > 0) {
+      if (!COMMENT_ATTACHMENT_ACCEPTED.includes(file.type)) {
+        return { ok: false, error: "MIME_REJECTED" };
+      }
+      if (file.size > COMMENT_ATTACHMENT_MAX_MB * 1024 * 1024) {
+        return { ok: false, error: "FILE_TOO_LARGE" };
+      }
+      const { mimeAllowed, sniffMime } = await import("@/lib/mime-sniff");
+      const { storage } = await import("@/lib/storage");
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const sniffed = sniffMime(buffer);
+      if (!mimeAllowed(sniffed, COMMENT_ATTACHMENT_ACCEPTED)) {
+        return { ok: false, error: "MIME_REJECTED" };
+      }
+      const { getAvScanner } = await import("@/lib/av");
+      const verdict = await getAvScanner().scan(buffer);
+      if (verdict === "INFECTED") {
+        return { ok: false, error: "INFECTED_FILE" };
+      }
+      const stored = await storage.put({
+        keyPrefix: `orgs/${request.organisationId}/requests/${request.id}/notes`,
+        fileName: file.name,
+        mimeType: sniffed,
+        body: buffer,
+      });
+      attachment = {
+        fileName: file.name,
+        storageKey: stored.key,
+        sizeBytes: buffer.byteLength,
+        mimeType: sniffed,
+      };
+    }
 
     const candidateIds = extractMentionedUserIds(parsed.data.body).filter(
       (id) => id !== session.id,
@@ -878,6 +1010,7 @@ export async function addAdminInternalComment(
           direction: "INTERNAL",
           bodyEn: parsed.data.body,
           bodyAr: parsed.data.body,
+          attachments: attachment ? [attachment as Prisma.InputJsonObject] : [],
         },
       });
 
@@ -931,6 +1064,9 @@ export async function addAdminInternalComment(
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
       return { ok: false, error: message };
+    }
+    if (message === "AV_UNAVAILABLE") {
+      return { ok: false, error: "AV_UNAVAILABLE" };
     }
     return { ok: false, error: "SAVE_FAILED" };
   }
@@ -1033,6 +1169,332 @@ export async function saveAssessment(
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
       return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+// ─── Evaluation activities (Shipment Inspection / Laboratory Testing / Factory Audit) ──
+
+const EVALUATION_ACTIVITY_TYPES = [
+  "SHIPMENT_INSPECTION",
+  "LABORATORY_TESTING",
+  "FACTORY_AUDIT",
+] as const;
+type EvaluationActivityTypeInput = (typeof EVALUATION_ACTIVITY_TYPES)[number];
+
+const ACTIVITY_FLAG_FOR_TYPE: Record<
+  EvaluationActivityTypeInput,
+  "requiresInspection" | "requiresLabTesting" | "requiresFactoryAudit"
+> = {
+  SHIPMENT_INSPECTION: "requiresInspection",
+  LABORATORY_TESTING: "requiresLabTesting",
+  FACTORY_AUDIT: "requiresFactoryAudit",
+};
+
+const scheduleEvaluationActivitySchema = z.object({
+  requestItemId: z.string().min(1),
+  type: z.enum(EVALUATION_ACTIVITY_TYPES),
+  scheduledDate: z.string().trim().min(1).optional(),
+  assignedUserId: z.string().min(1).optional(),
+  qualificationNote: z.string().trim().max(500).optional(),
+});
+
+/**
+ * Creates or updates the schedule for one of a request item's optional
+ * evaluation activities. Only offered when the item's service was configured
+ * to require it (ACTIVITY_FLAG_FOR_TYPE), and only while assessment is
+ * editable. Scheduling moves the activity to IN_PROGRESS — this is what
+ * drives the "Under Inspection" / "Under Audit" badge in the UI.
+ */
+export async function scheduleEvaluationActivity(
+  input: z.infer<typeof scheduleEvaluationActivitySchema>,
+): Promise<ActionResult<{ activityId: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = scheduleEvaluationActivitySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { requestItemId, type, qualificationNote } = parsed.data;
+
+    const item = await prisma.requestItem.findUnique({
+      where: { id: requestItemId },
+      select: {
+        id: true,
+        serviceItem: {
+          select: {
+            requiresInspection: true,
+            requiresLabTesting: true,
+            requiresFactoryAudit: true,
+          },
+        },
+        request: { select: { id: true, state: true, organisationId: true } },
+      },
+    });
+    if (!item) return { ok: false, error: "NOT_FOUND" };
+    if (!ASSESSMENT_EDIT_STATES.includes(item.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+    if (!item.serviceItem[ACTIVITY_FLAG_FOR_TYPE[type]]) {
+      return { ok: false, error: "NOT_APPLICABLE" };
+    }
+
+    if (parsed.data.assignedUserId) {
+      const assignee = await prisma.user.findFirst({
+        where: {
+          id: parsed.data.assignedUserId,
+          status: "ACTIVE",
+          organisation: { type: "ATLAS" },
+        },
+        select: { id: true },
+      });
+      if (!assignee) return { ok: false, error: "NOT_FOUND" };
+    }
+
+    const scheduledDate = parsed.data.scheduledDate
+      ? new Date(parsed.data.scheduledDate)
+      : null;
+    if (parsed.data.scheduledDate && Number.isNaN(scheduledDate?.getTime())) {
+      return { ok: false, error: "VALIDATION" };
+    }
+
+    const existing = await prisma.requestItemActivity.findFirst({
+      where: { requestItemId, type },
+    });
+
+    const activity = existing
+      ? await prisma.requestItemActivity.update({
+          where: { id: existing.id },
+          data: {
+            scheduledDate,
+            assignedUserId: parsed.data.assignedUserId ?? null,
+            qualificationNote: qualificationNote || null,
+            status: existing.status === "COMPLETED" ? existing.status : "IN_PROGRESS",
+          },
+        })
+      : await prisma.requestItemActivity.create({
+          data: {
+            requestItemId,
+            type,
+            status: "IN_PROGRESS",
+            scheduledDate,
+            assignedUserId: parsed.data.assignedUserId ?? null,
+            qualificationNote: qualificationNote || null,
+            createdByUserId: session.id,
+          },
+        });
+
+    await writeAuditLog({
+      session,
+      organisationId: item.request.organisationId,
+      action: existing
+        ? "request.activity.reschedule"
+        : "request.activity.schedule",
+      entityType: "RequestItemActivity",
+      entityId: activity.id,
+      after: {
+        type,
+        scheduledDate: scheduledDate?.toISOString() ?? null,
+        assignedUserId: parsed.data.assignedUserId ?? null,
+      },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${item.request.id}`, "page");
+    return { ok: true, data: { activityId: activity.id } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const completeEvaluationActivitySchema = z.object({
+  activityId: z.string().min(1),
+  notes: z.string().trim().max(1000).optional(),
+});
+
+/** Marks an activity COMPLETED. Requires at least one uploaded report on it. */
+export async function completeEvaluationActivity(
+  input: z.infer<typeof completeEvaluationActivitySchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = completeEvaluationActivitySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const activity = await prisma.requestItemActivity.findUnique({
+      where: { id: parsed.data.activityId },
+      include: {
+        requestItem: {
+          select: {
+            request: { select: { id: true, state: true, organisationId: true } },
+          },
+        },
+      },
+    });
+    if (!activity) return { ok: false, error: "NOT_FOUND" };
+    if (!ASSESSMENT_EDIT_STATES.includes(activity.requestItem.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    const reportCount = await prisma.requestDocument.count({
+      where: { activityId: activity.id, currentVersionId: { not: null } },
+    });
+    if (reportCount === 0) {
+      return { ok: false, error: "REPORT_REQUIRED" };
+    }
+
+    await prisma.requestItemActivity.update({
+      where: { id: activity.id },
+      data: {
+        status: "COMPLETED",
+        notes: parsed.data.notes || null,
+      },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: activity.requestItem.request.organisationId,
+      action: "request.activity.complete",
+      entityType: "RequestItemActivity",
+      entityId: activity.id,
+      after: { type: activity.type },
+    });
+
+    revalidatePath(
+      `/[locale]/admin/requests/${activity.requestItem.request.id}`,
+      "page",
+    );
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const ACTIVITY_REPORT_ACCEPTED = ["application/pdf", "image/png", "image/jpeg"];
+const ACTIVITY_REPORT_MAX_MB = 50;
+
+/** Uploads an Inspection/Test/Audit report, linked to a specific evaluation activity. Supports multiple uploads (each a new version-1 RequestDocument), matching the spec's "upload one or multiple Test Reports". */
+export async function uploadActivityReport(formData: FormData): Promise<
+  ActionResult<{ documentId: string; fileName: string }>
+> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const activityId = String(formData.get("activityId") ?? "");
+    if (!activityId) return { ok: false, error: "VALIDATION" };
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "NO_FILE" };
+    }
+
+    const activity = await prisma.requestItemActivity.findUnique({
+      where: { id: activityId },
+      select: {
+        id: true,
+        type: true,
+        requestItem: {
+          select: {
+            id: true,
+            requestId: true,
+            request: { select: { id: true, state: true, organisationId: true } },
+          },
+        },
+      },
+    });
+    if (!activity) return { ok: false, error: "NOT_FOUND" };
+    if (!ASSESSMENT_EDIT_STATES.includes(activity.requestItem.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    if (!ACTIVITY_REPORT_ACCEPTED.includes(file.type)) {
+      return { ok: false, error: "MIME_REJECTED" };
+    }
+    if (file.size > ACTIVITY_REPORT_MAX_MB * 1024 * 1024) {
+      return { ok: false, error: "FILE_TOO_LARGE" };
+    }
+
+    const { mimeAllowed, sniffMime } = await import("@/lib/mime-sniff");
+    const { storage } = await import("@/lib/storage");
+    const { createHash } = await import("node:crypto");
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const sniffed = sniffMime(buffer);
+    if (!mimeAllowed(sniffed, ACTIVITY_REPORT_ACCEPTED)) {
+      return { ok: false, error: "MIME_REJECTED" };
+    }
+
+    const { getAvScanner } = await import("@/lib/av");
+    const verdict = await getAvScanner().scan(buffer);
+    if (verdict === "INFECTED") {
+      return { ok: false, error: "INFECTED_FILE" };
+    }
+
+    const sha256 = createHash("sha256").update(buffer).digest("hex");
+    const orgId = activity.requestItem.request.organisationId;
+    const requestId = activity.requestItem.requestId;
+    const stored = await storage.put({
+      keyPrefix: `orgs/${orgId}/requests/${requestId}/activities/${activity.id}`,
+      fileName: file.name,
+      mimeType: sniffed,
+      body: buffer,
+    });
+
+    const doc = await prisma.$transaction(async (tx) => {
+      // Laboratory Testing supports multiple reports: each upload is its own
+      // RequestDocument (not a new version of one), so prior reports stay intact.
+      const created = await tx.requestDocument.create({
+        data: {
+          requestId,
+          requestItemId: activity.requestItem.id,
+          activityId: activity.id,
+          label: `${activity.type} report`,
+        },
+      });
+      const version = await tx.documentVersion.create({
+        data: {
+          documentId: created.id,
+          version: 1,
+          fileName: file.name,
+          mimeType: sniffed,
+          sizeBytes: buffer.byteLength,
+          storageKey: stored.key,
+          sha256,
+          uploadedByUserId: session.id,
+          avStatus: "CLEAN",
+        },
+      });
+      await tx.requestDocument.update({
+        where: { id: created.id },
+        data: { currentVersionId: version.id },
+      });
+      return created;
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: orgId,
+      action: "request.activity.report.upload",
+      entityType: "RequestDocument",
+      entityId: doc.id,
+      after: { activityId: activity.id, fileName: file.name },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${requestId}`, "page");
+    return { ok: true, data: { documentId: doc.id, fileName: file.name } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    if (message === "AV_UNAVAILABLE") {
+      return { ok: false, error: "AV_UNAVAILABLE" };
     }
     return { ok: false, error: "SAVE_FAILED" };
   }
@@ -1241,6 +1703,9 @@ const updateServiceItemSchema = z.object({
   freeResubmissions: z.number().int().min(0),
   maxResubmissions: z.number().int().min(0),
   sortOrder: z.number().int().min(0),
+  requiresInspection: z.boolean().optional(),
+  requiresLabTesting: z.boolean().optional(),
+  requiresFactoryAudit: z.boolean().optional(),
 });
 
 export type UpdateServiceItemInput = z.infer<typeof updateServiceItemSchema>;
@@ -1304,6 +1769,9 @@ export async function updateServiceItem(
           freeResubmissions: data.freeResubmissions,
           maxResubmissions: data.maxResubmissions,
           sortOrder: data.sortOrder,
+          requiresInspection: data.requiresInspection ?? false,
+          requiresLabTesting: data.requiresLabTesting ?? false,
+          requiresFactoryAudit: data.requiresFactoryAudit ?? false,
         },
       });
     } catch (error) {
@@ -1445,6 +1913,9 @@ const createServiceItemSchema = z.object({
   active: z.boolean().optional(),
   productAttributes: z.array(productAttrFieldSchema).optional(),
   checkSets: z.array(checkSetInputSchema).optional(),
+  requiresInspection: z.boolean().optional(),
+  requiresLabTesting: z.boolean().optional(),
+  requiresFactoryAudit: z.boolean().optional(),
   requiredDocuments: z.array(requiredDocumentInputSchema),
 });
 
@@ -1518,6 +1989,9 @@ export async function createServiceItem(
             maxResubmissions: data.maxResubmissions ?? 3,
             productAttrSchema,
             checkSets,
+            requiresInspection: data.requiresInspection ?? false,
+            requiresLabTesting: data.requiresLabTesting ?? false,
+            requiresFactoryAudit: data.requiresFactoryAudit ?? false,
             sortOrder: data.sortOrder ?? 0,
             active: data.active ?? true,
           },
