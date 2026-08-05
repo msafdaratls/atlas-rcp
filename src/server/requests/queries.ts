@@ -430,7 +430,7 @@ export type ClientRequestDetail = {
     openAmount: number;
   }>;
   returnInfo: {
-    reasonCode: import("@prisma/client").ReturnReasonCode | null;
+    reasonCodes: import("@prisma/client").ReturnReasonCode[];
     faultAttribution: import("@prisma/client").FaultAttribution | null;
     note: string | null;
     createdAt: string;
@@ -443,7 +443,7 @@ export type ClientRequestDetail = {
     actorNameAr: string;
     actorRole: import("@prisma/client").Role;
     note: string | null;
-    reasonCode: import("@prisma/client").ReturnReasonCode | null;
+    reasonCodes: import("@prisma/client").ReturnReasonCode[];
     faultAttribution: import("@prisma/client").FaultAttribution | null;
     createdAt: string;
   }>;
@@ -585,7 +585,7 @@ export async function getClientRequestDetail(
       })),
       returnInfo: lastReturn
         ? {
-            reasonCode: lastReturn.reasonCode,
+            reasonCodes: lastReturn.reasonCodes,
             faultAttribution: lastReturn.faultAttribution,
             note: lastReturn.note,
             createdAt: lastReturn.createdAt.toISOString(),
@@ -599,7 +599,7 @@ export async function getClientRequestDetail(
         actorNameAr: e.actor.fullNameAr,
         actorRole: e.actorRole,
         note: e.note,
-        reasonCode: e.reasonCode,
+        reasonCodes: e.reasonCodes,
         faultAttribution: e.faultAttribution,
         createdAt: e.createdAt.toISOString(),
       })),

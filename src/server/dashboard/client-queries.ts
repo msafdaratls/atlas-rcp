@@ -52,7 +52,7 @@ export type ClientDashboardView = {
     requestNo: string;
     productNameEn: string;
     productNameAr: string;
-    reasonCode: ReturnReasonCode | null;
+    reasonCodes: ReturnReasonCode[];
     note: string | null;
   }>;
   stats: {
@@ -269,7 +269,7 @@ export async function getClientDashboard(): Promise<ClientDashboardView | null> 
         requestNo: r.requestNo,
         productNameEn: r.productNameEn,
         productNameAr: r.productNameAr,
-        reasonCode: r.events[0]?.reasonCode ?? null,
+        reasonCodes: r.events[0]?.reasonCodes ?? [],
         note: r.events[0]?.note ?? null,
       })),
       stats: {

@@ -116,8 +116,8 @@ export async function ClientDashboard({ data, locale }: Props) {
                     {locale === "ar" ? item.productNameAr : item.productNameEn}
                   </p>
                   <p className="text-xs text-ink-500">
-                    {item.reasonCode
-                      ? tReasons(item.reasonCode)
+                    {item.reasonCodes.length > 0
+                      ? item.reasonCodes.map((code) => tReasons(code)).join(", ")
                       : t("attentionFallback")}
                     {item.note ? ` — ${item.note}` : ""}
                   </p>

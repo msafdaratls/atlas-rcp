@@ -990,7 +990,7 @@ async function main() {
       actorUserId: string;
       actorRole: Role;
       note?: string;
-      reasonCode?: ReturnReasonCode;
+      reasonCodes?: ReturnReasonCode[];
       faultAttribution?: FaultAttribution;
       createdAt: Date;
       metadata?: Prisma.InputJsonValue;
@@ -1040,7 +1040,7 @@ async function main() {
           actorUserId: event.actorUserId,
           actorRole: event.actorRole,
           note: event.note,
-          reasonCode: event.reasonCode,
+          reasonCodes: event.reasonCodes ?? [],
           faultAttribution: event.faultAttribution,
           metadata: event.metadata ?? {},
           createdAt: event.createdAt,
@@ -1245,7 +1245,7 @@ async function main() {
         toState: RequestState.RETURNED_TO_CLIENT,
         actorUserId: intake.id,
         actorRole: Role.INTAKE_OFFICER,
-        reasonCode: ReturnReasonCode.MISSING_ARTWORK,
+        reasonCodes: [ReturnReasonCode.MISSING_ARTWORK],
         faultAttribution: FaultAttribution.CLIENT_FAULT,
         note: "Back panel and Arabic mandatory particulars missing from artwork PDF.",
         createdAt: returned3,
@@ -1704,7 +1704,7 @@ async function main() {
         toState: RequestState.ON_HOLD,
         actorUserId: intake.id,
         actorRole: Role.INTAKE_OFFICER,
-        reasonCode: ReturnReasonCode.EXPIRED_DOCUMENT,
+        reasonCodes: [ReturnReasonCode.EXPIRED_DOCUMENT],
         faultAttribution: FaultAttribution.CLIENT_FAULT,
         note: "Manufacturer ISO certificate expired; waiting for renewed certificate before continuing intake.",
         createdAt: daysAgo(8),
@@ -2107,7 +2107,7 @@ async function main() {
         toState: RequestState.RETURNED_TO_CLIENT,
         actorUserId: intake.id,
         actorRole: Role.INTAKE_OFFICER,
-        reasonCode: ReturnReasonCode.LOW_RESOLUTION,
+        reasonCodes: [ReturnReasonCode.LOW_RESOLUTION, ReturnReasonCode.ILLEGIBLE_SCAN],
         faultAttribution: FaultAttribution.CLIENT_FAULT,
         note: "Artwork below 300 DPI — please re-upload carton panels.",
         createdAt: returnedB,

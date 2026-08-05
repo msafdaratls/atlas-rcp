@@ -443,7 +443,7 @@ model RequestEvent {
   actorUserId      String
   actorRole        Role
   note             String?
-  reasonCode       ReturnReasonCode?
+  reasonCodes      ReturnReasonCode[] @default([])
   faultAttribution FaultAttribution?
   metadata         Json               @default("{}")
   createdAt        DateTime           @default(now())

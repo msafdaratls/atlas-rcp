@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -140,10 +141,13 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
     });
   }
 
-  const [returnReason, setReturnReason] = useState<ReturnReasonCode | "">("");
+  const [returnReasons, setReturnReasons] = useState<ReturnReasonCode[]>([]);
   const [returnFault, setReturnFault] = useState<FaultAttribution | "">("");
   const [returnNote, setReturnNote] = useState("");
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+
+  const [cancelNote, setCancelNote] = useState("");
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const [commentBody, setCommentBody] = useState("");
   const [commentPending, startCommentTransition] = useTransition();
@@ -155,8 +159,9 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const canMessage = data.state !== "DRAFT" && data.state !== "CANCELLED";
 
   const canReturn = data.allowedTransitions.includes("RETURNED_TO_CLIENT");
+  const canCancel = data.allowedTransitions.includes("CANCELLED");
   const otherTransitions = data.allowedTransitions.filter(
-    (s) => s !== "RETURNED_TO_CLIENT",
+    (s) => s !== "RETURNED_TO_CLIENT" && s !== "CANCELLED",
   );
 
   const clientComments = data.comments.filter((c) => c.direction !== "INTERNAL");
@@ -191,25 +196,44 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
       }
       toast.success(t("success"));
       if (toState === "RETURNED_TO_CLIENT") {
-        setReturnReason("");
+        setReturnReasons([]);
         setReturnFault("");
         setReturnNote("");
         setReturnDialogOpen(false);
+      }
+      if (toState === "CANCELLED") {
+        setCancelNote("");
+        setCancelDialogOpen(false);
       }
       router.refresh();
     });
   }
 
+  function toggleReturnReason(code: ReturnReasonCode, checked: boolean) {
+    setReturnReasons((prev) =>
+      checked ? [...prev, code] : prev.filter((c) => c !== code),
+    );
+  }
+
   function submitReturn() {
-    if (!returnReason || !returnFault) {
+    if (returnReasons.length === 0 || !returnFault) {
       toast.error(t("errors.RETURN_REASON_REQUIRED"));
       return;
     }
     runTransition("RETURNED_TO_CLIENT", {
-      reasonCode: returnReason,
+      reasonCodes: returnReasons,
       faultAttribution: returnFault,
       note: returnNote.trim() || undefined,
     });
+  }
+
+  function submitCancel() {
+    const note = cancelNote.trim();
+    if (!note) {
+      toast.error(t("errors.CANCEL_NOTE_REQUIRED"));
+      return;
+    }
+    runTransition("CANCELLED", { note });
   }
 
   function submitComment() {
@@ -325,7 +349,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                     key={target}
                     type="button"
                     size="sm"
-                    variant={target === "CANCELLED" ? "outline" : "secondary"}
+                    variant="secondary"
                     disabled={pending}
                     onClick={() => runTransition(target)}
                   >
@@ -341,18 +365,32 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
             </div>
           ) : null}
 
-          {canReturn ? (
-            <div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="border-state-warn/40 text-state-warn hover:bg-[color-mix(in_srgb,var(--state-warn)_6%,white)]"
-                onClick={() => setReturnDialogOpen(true)}
-              >
-                <RotateCcw className="size-4" />
-                {t("returnTitle")}
-              </Button>
+          {canReturn || canCancel ? (
+            <div className="flex flex-wrap gap-2">
+              {canReturn ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-state-warn/40 text-state-warn hover:bg-[color-mix(in_srgb,var(--state-warn)_6%,white)]"
+                  onClick={() => setReturnDialogOpen(true)}
+                >
+                  <RotateCcw className="size-4" />
+                  {t("returnTitle")}
+                </Button>
+              ) : null}
+              {canCancel ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-state-bad/40 text-state-bad hover:bg-[color-mix(in_srgb,var(--state-bad)_6%,white)]"
+                  onClick={() => setCancelDialogOpen(true)}
+                >
+                  <Ban className="size-4" />
+                  {t("cancel")}
+                </Button>
+              ) : null}
             </div>
           ) : null}
         </section>
@@ -365,43 +403,42 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
               <DialogTitle>{t("returnTitle")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label>{t("returnReason")}</Label>
-                  <Select
-                    value={returnReason}
-                    onValueChange={(v) => setReturnReason(v as ReturnReasonCode)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t("returnReason")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RETURN_REASON_CODES.map((code) => (
-                        <SelectItem key={code} value={code}>
-                          {tReasons(code)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div>
+                <Label>{t("returnReason")}</Label>
+                <div className="mt-1 grid gap-2 rounded-md border border-line p-3 sm:grid-cols-2">
+                  {RETURN_REASON_CODES.map((code) => (
+                    <label
+                      key={code}
+                      className="flex items-center gap-2 text-sm text-ink-800"
+                    >
+                      <Checkbox
+                        checked={returnReasons.includes(code)}
+                        onCheckedChange={(checked) =>
+                          toggleReturnReason(code, checked === true)
+                        }
+                      />
+                      {tReasons(code)}
+                    </label>
+                  ))}
                 </div>
-                <div>
-                  <Label>{t("returnFault")}</Label>
-                  <Select
-                    value={returnFault}
-                    onValueChange={(v) => setReturnFault(v as FaultAttribution)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t("returnFault")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FAULT_ATTRIBUTIONS.map((f) => (
-                        <SelectItem key={f} value={f}>
-                          {tFault(f)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              </div>
+              <div>
+                <Label>{t("returnFault")}</Label>
+                <Select
+                  value={returnFault}
+                  onValueChange={(v) => setReturnFault(v as FaultAttribution)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("returnFault")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FAULT_ATTRIBUTIONS.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {tFault(f)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="return-note">{t("returnNote")}</Label>
@@ -433,6 +470,53 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                   <RotateCcw className="size-4" />
                 )}
                 {t("returnSubmit")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {canCancel ? (
+        <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("cancelTitle")}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="text-sm text-ink-500">{t("cancelDescription")}</p>
+              <div>
+                <Label htmlFor="cancel-note">{t("cancelNote")}</Label>
+                <Textarea
+                  id="cancel-note"
+                  value={cancelNote}
+                  onChange={(e) => setCancelNote(e.target.value)}
+                  placeholder={t("cancelNotePlaceholder")}
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => setCancelDialogOpen(false)}
+              >
+                {t("returnCancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={pending || cancelNote.trim().length === 0}
+                onClick={submitCancel}
+              >
+                {pending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Ban className="size-4" />
+                )}
+                {t("cancelSubmit")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -508,7 +592,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
           actorName: locale === "ar" ? e.actorNameAr : e.actorNameEn,
           actorRole: e.actorRole,
           note: e.note,
-          reasonCode: e.reasonCode,
+          reasonCodes: e.reasonCodes,
           faultAttribution: e.faultAttribution,
           createdAt: e.createdAt,
         }))}

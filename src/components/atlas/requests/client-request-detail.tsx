@@ -310,8 +310,8 @@ export function ClientRequestDetailPanel({ data }: Props) {
             {t("returnTitle")}
           </h2>
           <p className="mt-2 text-sm text-ink-800">
-            {data.returnInfo.reasonCode
-              ? tReasons(data.returnInfo.reasonCode)
+            {data.returnInfo.reasonCodes.length > 0
+              ? data.returnInfo.reasonCodes.map((code) => tReasons(code)).join(", ")
               : t("returnFallback")}
             {data.returnInfo.faultAttribution
               ? ` · ${tFault(data.returnInfo.faultAttribution)}`
@@ -503,7 +503,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
           actorName: locale === "ar" ? e.actorNameAr : e.actorNameEn,
           actorRole: e.actorRole,
           note: e.note,
-          reasonCode: e.reasonCode,
+          reasonCodes: e.reasonCodes,
           faultAttribution: e.faultAttribution,
           createdAt: e.createdAt,
         }))}

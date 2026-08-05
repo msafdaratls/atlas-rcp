@@ -398,7 +398,7 @@ export type AdminRequestDetail = {
     actorNameAr: string;
     actorRole: Role;
     note: string | null;
-    reasonCode: ReturnReasonCode | null;
+    reasonCodes: ReturnReasonCode[];
     faultAttribution: FaultAttribution | null;
     createdAt: string;
   }>;
@@ -551,7 +551,7 @@ export async function getAdminRequestDetail(
         actorNameAr: e.actor.fullNameAr,
         actorRole: e.actorRole,
         note: e.note,
-        reasonCode: e.reasonCode,
+        reasonCodes: e.reasonCodes,
         faultAttribution: e.faultAttribution,
         createdAt: e.createdAt.toISOString(),
       })),
@@ -1131,16 +1131,13 @@ export async function getQualityView(): Promise<QualityView | null> {
     const day90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
     const [reasonGroups, auditRows] = await Promise.all([
-      prisma.requestEvent.groupBy({
-        by: ["reasonCode"],
-        where: {
-          toState: "RETURNED_TO_CLIENT",
-          reasonCode: { not: null },
-          createdAt: { gte: day90 },
-        },
-        _count: { _all: true },
-        orderBy: { _count: { reasonCode: "desc" } },
-      }),
+      prisma.$queryRaw<Array<{ reason: ReturnReasonCode; count: bigint }>>`
+        SELECT unnest("reasonCodes") AS reason, COUNT(*) AS count
+        FROM "RequestEvent"
+        WHERE "toState" = 'RETURNED_TO_CLIENT' AND "createdAt" >= ${day90}
+        GROUP BY reason
+        ORDER BY count DESC
+      `,
       prisma.auditLog.findMany({
         orderBy: { createdAt: "desc" },
         take: 40,
@@ -1151,12 +1148,10 @@ export async function getQualityView(): Promise<QualityView | null> {
     ]);
 
     return {
-      reasons: reasonGroups
-        .filter((r) => r.reasonCode)
-        .map((r) => ({
-          reason: r.reasonCode as ReturnReasonCode,
-          count: r._count._all,
-        })),
+      reasons: reasonGroups.map((r) => ({
+        reason: r.reason,
+        count: Number(r.count),
+      })),
       auditLog: auditRows.map((a) => ({
         id: a.id,
         action: a.action,

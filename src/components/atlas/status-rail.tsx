@@ -18,7 +18,7 @@ export type StatusRailEvent = {
   actorName: string;
   actorRole: Role;
   note?: string | null;
-  reasonCode?: ReturnReasonCode | null;
+  reasonCodes?: ReturnReasonCode[];
   faultAttribution?: FaultAttribution | null;
   createdAt: Date | string;
 };
@@ -89,12 +89,12 @@ export function StatusRail({ events, className }: StatusRailProps) {
                   {event.note ? (
                     <p className="text-sm text-ink-500">{event.note}</p>
                   ) : null}
-                  {event.reasonCode ? (
+                  {event.reasonCodes && event.reasonCodes.length > 0 ? (
                     <p className="text-xs text-ink-500">
                       <span className="font-semibold text-ink-800">
                         {t("reason")}:{" "}
                       </span>
-                      {tReasons(event.reasonCode)}
+                      {event.reasonCodes.map((code) => tReasons(code)).join(", ")}
                     </p>
                   ) : null}
                   {event.faultAttribution ? (

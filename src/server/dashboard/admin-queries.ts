@@ -170,17 +170,16 @@ export async function getAdminDashboard(): Promise<AdminDashboardView | null> {
       if (row) row.closed += 1;
     }
 
-    const returnEvents = await prisma.requestEvent.groupBy({
-      by: ["reasonCode"],
-      where: {
-        toState: "RETURNED_TO_CLIENT",
-        reasonCode: { not: null },
-        createdAt: { gte: day90 },
-      },
-      _count: { _all: true },
-      orderBy: { _count: { reasonCode: "desc" } },
-      take: 8,
-    });
+    const returnEvents = await prisma.$queryRaw<
+      Array<{ reason: ReturnReasonCode; count: bigint }>
+    >`
+      SELECT unnest("reasonCodes") AS reason, COUNT(*) AS count
+      FROM "RequestEvent"
+      WHERE "toState" = 'RETURNED_TO_CLIENT' AND "createdAt" >= ${day90}
+      GROUP BY reason
+      ORDER BY count DESC
+      LIMIT 8
+    `;
 
     const canSeeFinance =
       checkPermission(session, "analytics:finance") ||
@@ -245,12 +244,10 @@ export async function getAdminDashboard(): Promise<AdminDashboardView | null> {
         received: v.received,
         closed: v.closed,
       })),
-      topReturnReasons: returnEvents
-        .filter((r) => r.reasonCode)
-        .map((r) => ({
-          reason: r.reasonCode as ReturnReasonCode,
-          count: r._count._all,
-        })),
+      topReturnReasons: returnEvents.map((r) => ({
+        reason: r.reason,
+        count: Number(r.count),
+      })),
       revenue,
       overLimit,
     };

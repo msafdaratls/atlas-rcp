@@ -115,7 +115,7 @@ const transitionSchema = z.object({
   requestId: z.string().min(1),
   toState: z.enum(REQUEST_STATES),
   note: z.string().trim().max(1000).optional(),
-  reasonCode: z.enum(RETURN_REASON_CODES).optional(),
+  reasonCodes: z.array(z.enum(RETURN_REASON_CODES)).max(RETURN_REASON_CODES.length).optional(),
   faultAttribution: z.enum(FAULT_ATTRIBUTIONS).optional(),
 });
 
@@ -128,7 +128,8 @@ export async function transitionAdminRequest(
     const parsed = transitionSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
-    const { requestId, toState, note, reasonCode, faultAttribution } = parsed.data;
+    const { requestId, toState, note, faultAttribution } = parsed.data;
+    const reasonCodes = [...new Set(parsed.data.reasonCodes ?? [])];
 
     const request = await prisma.request.findUnique({
       where: { id: requestId },
@@ -161,8 +162,12 @@ export async function transitionAdminRequest(
       return { ok: false, error: "FORBIDDEN" };
     }
 
-    if (toState === "RETURNED_TO_CLIENT" && (!reasonCode || !faultAttribution)) {
+    if (toState === "RETURNED_TO_CLIENT" && (reasonCodes.length === 0 || !faultAttribution)) {
       return { ok: false, error: "RETURN_REASON_REQUIRED" };
+    }
+
+    if (toState === "CANCELLED" && !note) {
+      return { ok: false, error: "CANCEL_NOTE_REQUIRED" };
     }
 
     const now = new Date();
@@ -228,7 +233,7 @@ export async function transitionAdminRequest(
           actorUserId: session.id,
           actorRole: session.roles[0] ?? "SYSTEM_ADMIN",
           note: note ?? null,
-          reasonCode: reasonCode ?? null,
+          reasonCodes,
           faultAttribution: faultAttribution ?? null,
         },
       });
@@ -297,7 +302,7 @@ export async function transitionAdminRequest(
                 : request.state === "ON_HOLD"
                   ? null
                   : request.heldFromState,
-            reasonCode,
+            reasonCodes,
             faultAttribution,
           },
         },
