@@ -21,18 +21,21 @@ import {
   getDraftRequest,
   getOpenDraftRequestId,
 } from "@/server/requests/queries";
+import { listOrganisationCredentials } from "@/server/company/credentials";
 
 export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ engagement?: string }>;
 };
 
-export default async function AdminNewRequestPage({ params }: Props) {
+export default async function AdminNewRequestPage({ params, searchParams }: Props) {
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
   const locale = raw as Locale;
   setRequestLocale(locale);
+  const sp = await searchParams;
 
   const session = await requireSession();
   requirePagePermission(session, "requests:create-behalf", locale);
@@ -74,6 +77,7 @@ export default async function AdminNewRequestPage({ params }: Props) {
   const catalogue = await getCatalogueForNewRequest();
   const draftId = await getOpenDraftRequestId();
   const draft = draftId ? await getDraftRequest(draftId) : null;
+  const credentials = await listOrganisationCredentials().catch(() => []);
 
   return (
     <div>
@@ -88,6 +92,8 @@ export default async function AdminNewRequestPage({ params }: Props) {
           catalogue={catalogue}
           initialDraft={draft}
           redirectBasePath="/admin/requests"
+          credentials={credentials}
+          engagementId={sp.engagement ?? null}
           onBehalf
         />
       ) : (

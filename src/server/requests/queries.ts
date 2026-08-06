@@ -42,6 +42,10 @@ export type CatalogueServiceItem = {
   requiredDocumentCount: number;
   productAttrSchema: unknown;
   checkSets: Array<{ code: string; titleEn: string; titleAr: string }>;
+  deliverableEn: string | null;
+  deliverableAr: string | null;
+  deliverableType: "INTERNAL_REPORT" | "EXTERNAL_CERTIFICATE";
+  requiredCredentialPlatform: "GHAD" | "SABER" | "FASAH" | null;
   requiredDocuments: Array<{
     id: string;
     code: string;
@@ -138,6 +142,10 @@ export async function getCatalogueForNewRequest(): Promise<CataloguePayload | nu
         requiredDocumentCount: item.requiredDocuments.length,
         productAttrSchema: item.productAttrSchema,
         checkSets: parseCheckSets(item.checkSets),
+        deliverableEn: item.deliverableEn,
+        deliverableAr: item.deliverableAr,
+        deliverableType: item.deliverableType,
+        requiredCredentialPlatform: item.requiredCredentialPlatform,
         requiredDocuments: item.requiredDocuments.map((d) => ({
           id: d.id,
           code: d.code,
@@ -200,6 +208,7 @@ export type DraftRequestItemView = {
   brand: string | null;
   productAttrs: Record<string, unknown>;
   productAttrSchema: unknown;
+  platformCredentialId: string | null;
   requiredDocuments: Array<{
     id: string;
     code: string;
@@ -272,6 +281,7 @@ export async function getDraftRequest(
             ? (item.productAttrs as Record<string, unknown>)
             : {},
         productAttrSchema: item.serviceItem.productAttrSchema,
+        platformCredentialId: item.platformCredentialId,
         requiredDocuments: item.serviceItem.requiredDocuments.map((d) => ({
           id: d.id,
           code: d.code,

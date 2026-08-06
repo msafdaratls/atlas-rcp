@@ -113,3 +113,16 @@ export const logoUploadMetaSchema = z.object({
   mimeType: z.enum(["image/png", "image/jpeg"]),
   sizeBytes: z.number().int().positive().max(2 * 1024 * 1024),
 });
+
+export const createCredentialSchema = z.object({
+  platform: z.enum(["GHAD", "SABER", "FASAH"]),
+  label: z.string().trim().max(120).optional(),
+  loginIdentifier: z.string().trim().min(1).max(200),
+  secret: z.string().min(1).max(500),
+});
+
+export type CreateCredentialInput = z.infer<typeof createCredentialSchema>;
+
+export const deactivateCredentialSchema = z.object({
+  credentialId: z.string().min(1),
+});

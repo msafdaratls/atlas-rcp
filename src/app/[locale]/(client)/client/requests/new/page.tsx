@@ -9,6 +9,7 @@ import {
   getDraftRequest,
   getOpenDraftRequestId,
 } from "@/server/requests/queries";
+import { listOrganisationCredentials } from "@/server/company/credentials";
 import { FilePlus2 } from "lucide-react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -35,6 +36,7 @@ export default async function NewRequestPage({ params, searchParams }: Props) {
   const catalogue = await getCatalogueForNewRequest();
   const draftId = sp.resume ?? (await getOpenDraftRequestId());
   const draft = draftId ? await getDraftRequest(draftId) : null;
+  const credentials = await listOrganisationCredentials().catch(() => []);
 
   return (
     <div>
@@ -51,6 +53,7 @@ export default async function NewRequestPage({ params, searchParams }: Props) {
           catalogue={catalogue}
           initialDraft={draft}
           initialMainId={sp.main ?? null}
+          credentials={credentials}
         />
       ) : (
         <EmptyState

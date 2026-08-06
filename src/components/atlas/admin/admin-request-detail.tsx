@@ -2,6 +2,7 @@
 
 import { AssessmentPanel } from "@/components/atlas/admin/assessment-panel";
 import { EvaluationActivitiesPanel } from "@/components/atlas/admin/evaluation-activities-panel";
+import { ExternalDeliverablePanel } from "@/components/atlas/admin/external-deliverable-panel";
 import { MentionTextarea } from "@/components/atlas/admin/mention-textarea";
 import { renderMentionBody } from "@/components/atlas/admin/mention-text";
 import { DocumentCard, type DocumentVersionView } from "@/components/atlas/document-card";
@@ -1198,6 +1199,22 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
               serviceItem={item.serviceItem}
               activities={item.activities}
               assignableStaff={assignableStaff}
+              editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
+              locale={locale}
+            />
+          ))
+        : null}
+
+      {ASSESSMENT_SHOW_STATES.includes(data.state)
+        ? data.items.map((item) => (
+            <ExternalDeliverablePanel
+              key={item.id}
+              requestItemId={item.id}
+              title={
+                locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
+              }
+              serviceItem={item.serviceItem}
+              deliverable={item.externalDeliverable}
               editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
               locale={locale}
             />

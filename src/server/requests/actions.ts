@@ -191,6 +191,12 @@ const draftProductSchema = z.object({
   productNameAr: z.string().trim().min(2).max(200),
   brand: z.string().trim().max(120).nullable().optional(),
   productAttrs: z.record(z.string(), z.unknown()),
+  /// Org's stored GHAD/SABER/FASAH login to use for this item's external
+  /// submission — validated as belonging to the same org before saving.
+  platformCredentialId: z.string().min(1).nullable().optional(),
+  /// Convenience traceability link to an earlier RequestItem this one's
+  /// required info was sourced from (e.g. a FASEH Request# origin).
+  sourceRequestItemId: z.string().min(1).nullable().optional(),
 });
 
 export async function createOrSelectDraft(
@@ -290,6 +296,20 @@ export async function createOrSelectDraft(
     const svc = await loadServiceContexts(orgId, wantedIds, 1);
     if (!svc) return { ok: false, error: "SERVICE_NOT_FOUND" };
 
+    let engagementId: string | null = null;
+    if (parsed.data.engagementId) {
+      const engagement = await prisma.engagement.findFirst({
+        where: {
+          id: parsed.data.engagementId,
+          organisationId: orgId,
+          status: "ACTIVE",
+        },
+        select: { id: true },
+      });
+      if (!engagement) return { ok: false, error: "ENGAGEMENT_NOT_FOUND" };
+      engagementId = engagement.id;
+    }
+
     const draftBreakdown = computeOrderBreakdown(svc.items);
 
     const created = await prisma.$transaction(async (tx) => {
@@ -302,6 +322,7 @@ export async function createOrSelectDraft(
           state: "DRAFT",
           priceCharged: draftBreakdown.total,
           discountApplied: 0,
+          engagementId,
           items: {
             create: svc.items.map((si, idx) => ({
               serviceItemId: si.id,
@@ -387,6 +408,31 @@ export async function saveDraftProductDetails(
     );
     if (attrError) return { ok: false, error: attrError };
 
+    if (parsed.data.platformCredentialId) {
+      const credential = await prisma.platformCredential.findFirst({
+        where: {
+          id: parsed.data.platformCredentialId,
+          organisationId: orgId,
+          active: true,
+        },
+        select: { id: true },
+      });
+      if (!credential) return { ok: false, error: "CREDENTIAL_NOT_FOUND" };
+    }
+
+    if (parsed.data.sourceRequestItemId) {
+      const source = await prisma.requestItem.findFirst({
+        where: {
+          id: parsed.data.sourceRequestItemId,
+          request: { organisationId: orgId },
+        },
+        select: { id: true },
+      });
+      if (!source || source.id === item.id) {
+        return { ok: false, error: "SOURCE_ITEM_NOT_FOUND" };
+      }
+    }
+
     await prisma.requestItem.update({
       where: { id: item.id },
       data: {
@@ -394,6 +440,8 @@ export async function saveDraftProductDetails(
         productNameAr: parsed.data.productNameAr,
         brand: parsed.data.brand ?? null,
         productAttrs: parsed.data.productAttrs as Prisma.InputJsonValue,
+        platformCredentialId: parsed.data.platformCredentialId ?? null,
+        sourceRequestItemId: parsed.data.sourceRequestItemId ?? null,
       },
     });
 

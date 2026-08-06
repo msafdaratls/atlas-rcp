@@ -3,6 +3,9 @@ import { z } from "zod";
 export const createOrSelectDraftSchema = z.object({
   serviceItemIds: z.array(z.string().min(1)).min(1),
   resumeRequestId: z.string().min(1).nullable().optional(),
+  /** Links a brand-new draft to a standing Engagement (e.g. a SABER Account
+   * Management retainer). Ignored when resuming an existing draft. */
+  engagementId: z.string().min(1).nullable().optional(),
 });
 
 export const couponDraftSchema = z.object({

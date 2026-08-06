@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  Briefcase,
   Building2,
   ClipboardList,
   FilePlus2,
@@ -105,6 +106,12 @@ const ADMIN_NAV: NavItem[] = [
     href: "/catalogue",
     icon: Package,
     roles: ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"],
+  },
+  {
+    key: "engagements",
+    href: "/engagements",
+    icon: Briefcase,
+    roles: REQUESTS_ADMIN_ROLES,
   },
   {
     key: "coupons",

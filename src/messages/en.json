@@ -64,6 +64,7 @@
       "requests": "Requests",
       "clients": "Clients",
       "catalogue": "Catalogue",
+      "engagements": "Engagements",
       "coupons": "Coupons",
       "finance": "Finance",
       "quality": "Quality",
@@ -164,6 +165,29 @@
       "users": "Users",
       "preferences": "Preferences"
     },
+    "credentials": {
+      "title": "Government portal accounts",
+      "description": "Store your GHAD, SABER and FASAH logins here so they can be reused across requests without retyping them each time.",
+      "add": "Add account",
+      "platform": "Platform",
+      "label": "Label (optional)",
+      "loginIdentifier": "Login email / username",
+      "secret": "Password",
+      "secretHelp": "Stored encrypted. Atlas staff can use it to submit on your behalf; every use is logged.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "remove": "Remove",
+      "empty": "No accounts saved yet.",
+      "created": "Account saved.",
+      "deactivated": "Account removed.",
+      "errors": {
+        "VALIDATION": "Check the form and try again.",
+        "UNAUTHORIZED": "Sign in again to continue.",
+        "FORBIDDEN": "You do not have permission for this action.",
+        "NOT_FOUND": "That account was not found.",
+        "FAILED": "Something went wrong. Try again."
+      }
+    },
     "fields": {
       "nameEn": "Company name (English)",
       "nameAr": "Company name (Arabic)",
@@ -238,6 +262,8 @@
         "REQUEST_RECEIVED": "Request received acknowledgement",
         "REQUEST_RETURNED": "Request returned to client",
         "REPORT_ISSUED": "Report issued",
+        "CERTIFICATE_REFUSED": "Certification refused",
+        "REQUEST_CLOSED": "Request closed",
         "SLA_AT_RISK": "SLA at risk (80% elapsed)",
         "INVOICE_ISSUED": "Pro forma invoice issued",
         "PAYMENT_RECEIVED": "Payment received",
@@ -318,7 +344,9 @@
       "brand": "Brand",
       "select": "Select",
       "yes": "Yes",
-      "no": "No"
+      "no": "No",
+      "platformCredential": "{platform} account",
+      "noCredentials": "No {platform} account saved yet — add one from Company settings before continuing."
     },
     "enums": {
       "capsule": "Capsule",
@@ -342,7 +370,18 @@
       "perfume": "Perfume",
       "general": "General",
       "children": "Children",
-      "professional": "Professional"
+      "professional": "Professional",
+      "TEXTILE": "Textile Products",
+      "ORNAMENTS_ACCESSORIES": "Ornaments and Accessories",
+      "PAPER_CARDBOARD": "Paper and Cardboard",
+      "PACKAGING": "Packaging",
+      "MACHINERY_SAFETY": "General Requirements for Machinery Safety",
+      "KITCHEN_TOOLS_FOOD_SAFETY": "Food Safety in Kitchen Tools and Appliances",
+      "ICT_DEVICES": "Communications and Information Technology Devices",
+      "BUILDING_MATERIALS_PART5": "Building Materials — Part 5",
+      "BUILDING_MATERIALS_PART4": "Building Materials — Part 4",
+      "BUILDING_MATERIALS_PART1": "Building Materials — Part 1",
+      "LOW_VOLTAGE_ELECTRICAL": "GCC Low Voltage Electrical Equipment and Appliances"
     },
     "summary": {
       "title": "Order summary",
@@ -382,6 +421,9 @@
       "ATTRS_REQUIRED": "Complete every required product attribute.",
       "ATTR_REQUIRED": "Complete every required product attribute.",
       "ATTR_INVALID": "One or more product attributes are invalid.",
+      "CREDENTIAL_REQUIRED": "Select the account to use for this service before continuing.",
+      "CREDENTIAL_NOT_FOUND": "That saved account is no longer available. Choose another.",
+      "SOURCE_ITEM_NOT_FOUND": "That source request item is no longer available.",
       "VALIDATION": "Check the form and try again.",
       "UNAUTHORIZED": "Sign in again to continue.",
       "FORBIDDEN": "You do not have permission for this action.",
@@ -839,6 +881,50 @@
           "UNAUTHORIZED": "Sign in again to continue.",
           "SAVE_FAILED": "Could not save. Try again."
         }
+      },
+      "externalDeliverable": {
+        "title": "External submission",
+        "subtitle": "Certificate/registration obtained from an external portal or lab, not an internal Atlas report.",
+        "status": {
+          "PENDING_SUBMISSION": "Not submitted yet",
+          "SUBMITTED": "Submitted",
+          "ISSUED": "Issued",
+          "REJECTED": "Rejected"
+        },
+        "refType": "Reference type",
+        "refTypePlaceholder": "e.g. FASEH_REQUEST_NO, PCOC_NUMBER",
+        "notes": "Notes",
+        "submit": "Mark submitted",
+        "resubmit": "Update submission",
+        "submitted": "Marked submitted",
+        "files": "Files",
+        "noFiles": "No files uploaded yet.",
+        "uploadFile": "Upload file",
+        "fileUploaded": "File uploaded",
+        "submitFirst": "Mark this submitted before uploading the certificate.",
+        "refValue": "Certificate / reference number",
+        "refValuePlaceholder": "The number returned by the portal or lab",
+        "markIssued": "Mark issued",
+        "issued": "Marked issued",
+        "markRejected": "Mark rejected",
+        "rejected": "Marked rejected",
+        "rejectedDefaultNote": "Rejected by the external portal or lab.",
+        "issuedRef": "Issued — reference: {value}",
+        "errors": {
+          "VALIDATION": "Check the form and try again.",
+          "NOT_FOUND": "Not found.",
+          "INVALID_STATE": "This can only be edited during evaluation.",
+          "NOT_APPLICABLE": "This service doesn't use an external deliverable.",
+          "CERTIFICATE_REQUIRED": "Upload the certificate/report before marking this issued.",
+          "NO_FILE": "Choose a file to upload.",
+          "MIME_REJECTED": "That file type isn't supported. Use PDF, PNG, or JPG.",
+          "FILE_TOO_LARGE": "That file is too large.",
+          "INFECTED_FILE": "That file failed a virus scan and was not uploaded.",
+          "AV_UNAVAILABLE": "File scanning is temporarily unavailable. Try again shortly.",
+          "FORBIDDEN": "You do not have permission.",
+          "UNAUTHORIZED": "Sign in again to continue.",
+          "SAVE_FAILED": "Could not save. Try again."
+        }
       }
     },
     "clients": {
@@ -1080,6 +1166,50 @@
         "button": "Delete",
         "confirm": "Delete this service? This cannot be undone.",
         "success": "Service deleted"
+      }
+    },
+    "engagements": {
+      "pageDescription": "Standing retainers for ongoing-management services like SABER Account Management — group multiple requests under one client relationship.",
+      "unavailableTitle": "Engagements unavailable",
+      "unavailableDescription": "Connect PostgreSQL, run migrations and seed, then reopen this page.",
+      "notFoundTitle": "Engagement not found",
+      "notFoundDescription": "This engagement may have been removed.",
+      "create": "New engagement",
+      "client": "Client",
+      "selectClient": "Select a client",
+      "service": "Service",
+      "selectService": "Select a service",
+      "notes": "Notes",
+      "cancel": "Cancel",
+      "save": "Save",
+      "created": "Engagement created",
+      "closed": "Engagement closed",
+      "close": "Close engagement",
+      "newRequest": "New request under this engagement",
+      "empty": "No engagements yet.",
+      "linkedRequests": "Linked requests",
+      "noRequests": "No requests linked yet.",
+      "status": {
+        "ACTIVE": "Active",
+        "PAUSED": "Paused",
+        "CLOSED": "Closed"
+      },
+      "columns": {
+        "client": "Client",
+        "service": "Service",
+        "status": "Status",
+        "requests": "Requests",
+        "started": "Started"
+      },
+      "errors": {
+        "VALIDATION": "Check the form and try again.",
+        "UNAUTHORIZED": "Sign in again to continue.",
+        "FORBIDDEN": "You do not have permission for this action.",
+        "NOT_FOUND": "Not found.",
+        "CLIENT_NOT_FOUND": "That client is no longer available.",
+        "SERVICE_NOT_FOUND": "That service is no longer available.",
+        "ALREADY_CLOSED": "This engagement is already closed.",
+        "SAVE_FAILED": "Could not save. Try again."
       }
     },
     "coupons": {

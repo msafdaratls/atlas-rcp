@@ -69,7 +69,9 @@ export function requirePermission(
     | "quality:read"
     | "audit:read"
     | "settings:admin"
-    | "staff:manage",
+    | "staff:manage"
+    | "credentials:manage"
+    | "credentials:reveal",
 ): void {
   const isClient = session.organisation.type === "CLIENT";
   const isAtlas = session.organisation.type === "ATLAS";
@@ -175,6 +177,20 @@ export function requirePermission(
     case "settings:admin":
     case "staff:manage":
       if (!isAtlas || !hasRole(session, "SYSTEM_ADMIN")) {
+        throw new Error("FORBIDDEN");
+      }
+      return;
+    case "credentials:manage":
+      // Client org owners/admins manage their org's stored portal logins.
+      if (!isClient || !hasAnyRole(session, ["CLIENT_OWNER", "CLIENT_ADMIN"])) {
+        throw new Error("FORBIDDEN");
+      }
+      return;
+    case "credentials:reveal":
+      // Staff working a request need the plaintext to actually log into the
+      // client's GHAD/SABER/FASAH account — gated to the same roles that
+      // work requests day-to-day, and every reveal is audit-logged.
+      if (!isAtlas || !hasAnyRole(session, REQUESTS_ADMIN_ROLES)) {
         throw new Error("FORBIDDEN");
       }
       return;

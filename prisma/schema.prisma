@@ -198,13 +198,15 @@ model Organisation {
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
-  users             User[]
-  requests          Request[]
-  invoices          Invoice[]
-  ledgerEntries     LedgerEntry[]
-  payments          Payment[]
-  couponRedemptions CouponRedemption[]
-  auditLogs         AuditLog[]
+  users               User[]
+  requests            Request[]
+  invoices            Invoice[]
+  ledgerEntries       LedgerEntry[]
+  payments            Payment[]
+  couponRedemptions   CouponRedemption[]
+  auditLogs           AuditLog[]
+  platformCredentials PlatformCredential[]
+  engagements         Engagement[]
 
   @@unique([crNumber])
   @@index([type, status])
@@ -244,10 +246,13 @@ model User {
   activitiesCreated       RequestItemActivity[]    @relation("ActivityCreatedBy")
   ledgerEntries           LedgerEntry[]
   confirmedPayments       Payment[]                @relation("PaymentConfirmedBy")
-  createdCoupons          Coupon[]
-  notifications           Notification[]
-  notificationPreferences NotificationPreference[]
-  auditLogs               AuditLog[]
+  createdCoupons           Coupon[]
+  notifications            Notification[]
+  notificationPreferences  NotificationPreference[]
+  auditLogs                AuditLog[]
+  createdCredentials       PlatformCredential[]
+  externalDeliverablesMade ExternalDeliverable[]
+  createdEngagements       Engagement[]
 
   @@index([organisationId])
   @@index([status])
@@ -333,15 +338,34 @@ model ServiceItem {
   requiresInspection   Boolean @default(false)
   requiresLabTesting   Boolean @default(false)
   requiresFactoryAudit Boolean @default(false)
+  /// Client-facing label for what this service produces, e.g. "Shipment
+  /// Certificate of Conformity (SCOC)" — shown on the catalogue/service card.
+  deliverableEn        String?
+  deliverableAr        String?
+  /// INTERNAL_REPORT: Atlas issues its own report at REPORT_ISSUED (the
+  /// default, existing flow). EXTERNAL_CERTIFICATE: the deliverable is a
+  /// certificate/number obtained from an external portal (SABER/GHAD/FASAH)
+  /// or lab — tracked via ExternalDeliverable instead of an internal review.
+  deliverableType      DeliverableType @default(INTERNAL_REPORT)
+  /// Set when this service needs a client PlatformCredential selected at
+  /// request time (e.g. GHAD Product Registration needs a GHAD login). Null
+  /// for services with no external-portal login requirement.
+  requiredCredentialPlatform PlatformType?
   sortOrder            Int     @default(0)
   active               Boolean @default(true)
 
   subCategory       SubCategory        @relation(fields: [subCategoryId], references: [id])
   requiredDocuments RequiredDocument[]
   requestItems      RequestItem[]
+  engagements       Engagement[]
 
   @@unique([subCategoryId, code])
   @@index([subCategoryId, active, sortOrder])
+}
+
+enum DeliverableType {
+  INTERNAL_REPORT
+  EXTERNAL_CERTIFICATE
 }
 
 model RequiredDocument {
@@ -372,6 +396,9 @@ model Request {
   organisationId   String
   createdByUserId  String
   assignedToUserId String?
+  /// Set when this request was opened under a standing Engagement (e.g. a
+  /// SABER Account Management retainer) rather than as a stand-alone order.
+  engagementId     String?
   state            RequestState  @default(DRAFT)
   /// Prior state when moved to ON_HOLD; resume must return here.
   heldFromState    RequestState?
@@ -394,6 +421,7 @@ model Request {
   organisation   Organisation           @relation(fields: [organisationId], references: [id])
   createdBy      User                   @relation("RequestCreatedBy", fields: [createdByUserId], references: [id])
   assignedTo     User?                  @relation("RequestAssignedTo", fields: [assignedToUserId], references: [id])
+  engagement     Engagement?            @relation(fields: [engagementId], references: [id])
   items          RequestItem[]
   documents      RequestDocument[]
   events         RequestEvent[]
@@ -406,6 +434,7 @@ model Request {
   @@index([state, slaDueAt])
   @@index([createdByUserId])
   @@index([assignedToUserId])
+  @@index([engagementId])
 }
 
 /// One service item within a request's cart. A request always has at least
@@ -426,13 +455,29 @@ model RequestItem {
   basePrice     Decimal @db.Decimal(14, 2)
   vatRate       Decimal @db.Decimal(5, 4)
   sortOrder     Int     @default(0)
+  /// Reference to the org's stored government-portal login (GHAD/SABER/FASAH)
+  /// used for this item's external submission. Kept out of productAttrs so a
+  /// loosely-typed JSON blob never carries a secret reference.
+  platformCredentialId String?
+  /// Optional traceability link: when this item's required info was produced
+  /// by an earlier item (e.g. a FASEH Request# from a FASAH Certificate
+  /// Application feeding a Cosmetic SCOC), point at that item. Convenience
+  /// only — not a hard validation gate, since a number can also be entered
+  /// manually if it originated outside this system.
+  sourceRequestItemId String?
 
-  request     Request               @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  serviceItem ServiceItem           @relation(fields: [serviceItemId], references: [id])
-  documents   RequestDocument[]
-  activities  RequestItemActivity[]
+  request             Request               @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  serviceItem         ServiceItem           @relation(fields: [serviceItemId], references: [id])
+  platformCredential  PlatformCredential?   @relation(fields: [platformCredentialId], references: [id])
+  sourceRequestItem   RequestItem?          @relation("ItemInputSource", fields: [sourceRequestItemId], references: [id])
+  suppliedToItems     RequestItem[]         @relation("ItemInputSource")
+  documents           RequestDocument[]
+  activities          RequestItemActivity[]
+  externalDeliverables ExternalDeliverable[]
 
   @@index([requestId])
+  @@index([platformCredentialId])
+  @@index([sourceRequestItemId])
   @@index([serviceItemId])
 }
 
@@ -444,20 +489,25 @@ model RequestDocument {
   /// Set when this document is a report attached to an evaluation activity
   /// (Inspection/Lab/Audit report) rather than a catalogue-required document.
   activityId         String?
+  /// Set when this document is the certificate/report attached to an
+  /// external deliverable (SABER/GHAD/FASAH certificate, external lab report).
+  externalDeliverableId String?
   label              String
   currentVersionId   String?  @unique
   createdAt          DateTime @default(now())
 
-  request          Request              @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  requestItem      RequestItem          @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
-  requiredDocument RequiredDocument?    @relation(fields: [requiredDocumentId], references: [id])
-  activity         RequestItemActivity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  currentVersion   DocumentVersion?     @relation("CurrentDocumentVersion", fields: [currentVersionId], references: [id])
-  versions         DocumentVersion[]    @relation("DocumentVersions")
+  request             Request              @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestItem         RequestItem          @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
+  requiredDocument    RequiredDocument?    @relation(fields: [requiredDocumentId], references: [id])
+  activity            RequestItemActivity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  externalDeliverable ExternalDeliverable? @relation(fields: [externalDeliverableId], references: [id], onDelete: Cascade)
+  currentVersion      DocumentVersion?     @relation("CurrentDocumentVersion", fields: [currentVersionId], references: [id])
+  versions            DocumentVersion[]    @relation("DocumentVersions")
 
   @@index([requestId])
   @@index([requestItemId])
   @@index([activityId])
+  @@index([externalDeliverableId])
 }
 
 enum EvaluationActivityType {
@@ -496,6 +546,40 @@ model RequestItemActivity {
   documents    RequestDocument[]
 
   @@index([requestItemId, type])
+}
+
+enum ExternalDeliverableStatus {
+  PENDING_SUBMISSION
+  SUBMITTED
+  ISSUED
+  REJECTED
+}
+
+/// The external-work analogue of RequestItemActivity: tracks a
+/// certificate/registration/report obtained from an outside government
+/// portal (SABER, GHAD, FASAH) or an external accredited lab, as opposed to
+/// an internal Atlas technical review. `externalRefValue` (e.g. a FASEH
+/// Request# or PCOC number) is what a later RequestItem can pull in via
+/// RequestItem.sourceRequestItemId.
+model ExternalDeliverable {
+  id               String                    @id @default(cuid())
+  requestItemId    String
+  status           ExternalDeliverableStatus @default(PENDING_SUBMISSION)
+  /// e.g. "FASEH_REQUEST_NO", "PCOC_NUMBER", "GHAD_NOTIFICATION_NO".
+  externalRefType  String
+  externalRefValue String?
+  submittedAt      DateTime?
+  issuedAt         DateTime?
+  notes            String?
+  createdByUserId  String
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  requestItem RequestItem       @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
+  createdBy   User              @relation(fields: [createdByUserId], references: [id])
+  documents   RequestDocument[]
+
+  @@index([requestItemId, status])
 }
 
 model DocumentVersion {
@@ -595,6 +679,72 @@ model RequestReopenRequest {
 
   @@index([requestId, status])
   @@index([status, createdAt])
+}
+
+// ─── Engagements & credentials ─────────────────────────────────────────────────
+
+enum PlatformType {
+  GHAD
+  SABER
+  FASAH
+}
+
+enum EngagementStatus {
+  ACTIVE
+  PAUSED
+  CLOSED
+}
+
+/// Organisation-scoped, reusable government-portal login (GHAD/SABER/FASAH).
+/// Stored once per client per platform rather than re-entered per request —
+/// secretCiphertext/secretIv/secretAuthTag are an AES-256-GCM envelope
+/// (src/lib/crypto/vault.ts); the raw secret never touches RequestItem or
+/// any other JSON blob.
+model PlatformCredential {
+  id               String       @id @default(cuid())
+  organisationId   String
+  platform         PlatformType
+  label            String?
+  loginIdentifier  String
+  secretCiphertext String
+  secretIv         String
+  secretAuthTag    String
+  createdByUserId  String
+  active           Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  organisation Organisation  @relation(fields: [organisationId], references: [id])
+  createdBy    User          @relation(fields: [createdByUserId], references: [id])
+  requestItems RequestItem[]
+
+  @@index([organisationId, platform, active])
+}
+
+/// Standing retainer for ongoing-management services (e.g. SABER Account
+/// Management): stays ACTIVE while individual child Requests (each PCOC/SCOC
+/// submission) open and close normally through the existing RequestState
+/// machine. Pure grouping/status wrapper — does not alter Request lifecycle.
+/// Keyed by serviceItemId rather than hardcoded to SABER so any future
+/// retainer-style service can reuse it.
+model Engagement {
+  id              String           @id @default(cuid())
+  organisationId  String
+  serviceItemId   String
+  status          EngagementStatus @default(ACTIVE)
+  startedAt       DateTime         @default(now())
+  closedAt        DateTime?
+  notes           String?
+  createdByUserId String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  serviceItem  ServiceItem  @relation(fields: [serviceItemId], references: [id])
+  createdBy    User         @relation(fields: [createdByUserId], references: [id])
+  requests     Request[]
+
+  @@index([organisationId, status])
 }
 
 // ─── Commerce ────────────────────────────────────────────────────────────────

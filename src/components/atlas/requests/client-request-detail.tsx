@@ -555,7 +555,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
                                     </SelectItem>
                                   </SelectContent>
                                 </Select>
-                              ) : (
+                              ) : field.enum ? (
                                 <Select
                                   value={String(editItem.attrs[field.key] ?? "")}
                                   onValueChange={(v) =>
@@ -568,13 +568,29 @@ export function ClientRequestDetailPanel({ data }: Props) {
                                     <SelectValue placeholder={tFields("select")} />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {(field.enum ?? []).map((opt) => (
+                                    {field.enum.map((opt) => (
                                       <SelectItem key={opt} value={opt}>
                                         {tEnums(opt as never)}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
+                              ) : (
+                                <Input
+                                  type={field.type === "number" ? "number" : "text"}
+                                  value={String(editItem.attrs[field.key] ?? "")}
+                                  onChange={(e) =>
+                                    updateEditItem(item.id, {
+                                      attrs: {
+                                        ...editItem.attrs,
+                                        [field.key]:
+                                          field.type === "number"
+                                            ? e.target.valueAsNumber
+                                            : e.target.value,
+                                      },
+                                    })
+                                  }
+                                />
                               )}
                             </div>
                           ))}

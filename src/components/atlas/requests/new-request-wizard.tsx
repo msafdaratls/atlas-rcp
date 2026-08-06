@@ -36,6 +36,7 @@ import type {
   DraftRequestItemView,
   DraftRequestView,
 } from "@/server/requests/queries";
+import type { PlatformCredentialSummary } from "@/server/company/credentials";
 
 type UploadSlotState = {
   requiredDocumentId: string | null;
@@ -57,6 +58,7 @@ type ItemState = {
   productNameAr: string;
   brand: string;
   attrs: Record<string, unknown>;
+  platformCredentialId: string | null;
   slots: UploadSlotState[];
 };
 
@@ -67,6 +69,7 @@ type PersistedItemState = {
   productNameAr: string;
   brand: string;
   attrs: Record<string, unknown>;
+  platformCredentialId: string | null;
 };
 
 type PersistedWizardState = {
@@ -90,6 +93,10 @@ type Props = {
   redirectBasePath?: string;
   /** True when an admin is creating on a client's behalf — clears the pin. */
   onBehalf?: boolean;
+  /** The acting org's stored GHAD/SABER/FASAH logins, for services that need one. */
+  credentials?: PlatformCredentialSummary[];
+  /** Links a brand-new draft to a standing Engagement (SABER Account Management, etc). */
+  engagementId?: string | null;
 };
 
 function buildSlots(
@@ -171,6 +178,7 @@ function itemStateFromDraft(
     productNameAr: draftItem.productNameAr,
     brand: draftItem.brand ?? "",
     attrs: draftItem.productAttrs,
+    platformCredentialId: draftItem.platformCredentialId,
     slots: catalogueItem ? buildSlots(catalogueItem, draftItem, additionalLabel) : [],
   };
 }
@@ -181,6 +189,8 @@ export function NewRequestWizard({
   initialMainId,
   redirectBasePath = "/client/requests",
   onBehalf = false,
+  credentials = [],
+  engagementId = null,
 }: Props) {
   const t = useTranslations("newRequest");
   const locale = useLocale();
@@ -279,6 +289,7 @@ export function NewRequestWizard({
             productNameAr: si.productNameAr,
             brand: si.brand,
             attrs: si.attrs,
+            platformCredentialId: si.platformCredentialId ?? null,
             slots:
               existing?.slots ??
               (catalogueItem
@@ -313,6 +324,7 @@ export function NewRequestWizard({
         productNameAr: i.productNameAr,
         brand: i.brand,
         attrs: i.attrs,
+        platformCredentialId: i.platformCredentialId,
       })),
       couponCode,
       appliedCoupon,
@@ -401,6 +413,7 @@ export function NewRequestWizard({
       const result = await createOrSelectDraft({
         serviceItemIds: cartIds,
         resumeRequestId: requestId,
+        engagementId,
       });
       if (!result.ok) {
         toast.error(t(`errors.${result.error}` as never));
@@ -423,6 +436,7 @@ export function NewRequestWizard({
             productNameAr: "",
             brand: "",
             attrs: {},
+            platformCredentialId: null,
             slots: catalogueItem
               ? buildSlots(catalogueItem, undefined, t("step3.additional"))
               : [],
@@ -459,6 +473,10 @@ export function NewRequestWizard({
           return;
         }
       }
+      if (catalogueItem?.requiredCredentialPlatform && !item.platformCredentialId) {
+        toast.error(t("errors.CREDENTIAL_REQUIRED"));
+        return;
+      }
     }
     startTransition(async () => {
       for (const item of items) {
@@ -468,6 +486,7 @@ export function NewRequestWizard({
           productNameAr: item.productNameAr,
           brand: item.brand || null,
           productAttrs: item.attrs,
+          platformCredentialId: item.platformCredentialId,
         });
         if (!result.ok) {
           toast.error(t(`errors.${result.error}` as never));
@@ -1018,7 +1037,7 @@ export function NewRequestWizard({
                               <SelectItem value="false">{t("fields.no")}</SelectItem>
                             </SelectContent>
                           </Select>
-                        ) : (
+                        ) : field.enum ? (
                           <Select
                             value={String(item.attrs[field.key] ?? "")}
                             onValueChange={(v) =>
@@ -1031,16 +1050,78 @@ export function NewRequestWizard({
                               <SelectValue placeholder={t("fields.select")} />
                             </SelectTrigger>
                             <SelectContent>
-                              {(field.enum ?? []).map((opt) => (
+                              {field.enum.map((opt) => (
                                 <SelectItem key={opt} value={opt}>
                                   {t(`enums.${opt}` as never)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                        ) : (
+                          <Input
+                            type={field.type === "number" ? "number" : "text"}
+                            value={String(item.attrs[field.key] ?? "")}
+                            onChange={(e) =>
+                              updateItem(item.requestItemId, {
+                                attrs: {
+                                  ...item.attrs,
+                                  [field.key]:
+                                    field.type === "number"
+                                      ? e.target.valueAsNumber
+                                      : e.target.value,
+                                },
+                              })
+                            }
+                          />
                         )}
                       </div>
                     ))}
+                    {catalogueItem?.requiredCredentialPlatform ? (
+                      <div className="space-y-2">
+                        <Label>
+                          {t("fields.platformCredential", {
+                            platform: catalogueItem.requiredCredentialPlatform,
+                          })}
+                        </Label>
+                        <Select
+                          value={item.platformCredentialId ?? ""}
+                          onValueChange={(v) =>
+                            updateItem(item.requestItemId, {
+                              platformCredentialId: v,
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={t("fields.select")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {credentials
+                              .filter(
+                                (c) =>
+                                  c.platform ===
+                                  catalogueItem.requiredCredentialPlatform,
+                              )
+                              .map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.label
+                                    ? `${c.label} (${c.loginIdentifier})`
+                                    : c.loginIdentifier}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        {credentials.filter(
+                          (c) =>
+                            c.platform === catalogueItem.requiredCredentialPlatform,
+                        ).length === 0 ? (
+                          <p className="text-xs text-danger-500">
+                            {t("fields.noCredentials", {
+                              platform: catalogueItem.requiredCredentialPlatform,
+                            })}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               );

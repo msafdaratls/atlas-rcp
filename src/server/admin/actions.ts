@@ -1500,6 +1500,347 @@ export async function uploadActivityReport(formData: FormData): Promise<
   }
 }
 
+// ─── External deliverables (SABER/GHAD/FASAH certificates, external lab reports) ──
+
+const submitExternalDeliverableSchema = z.object({
+  requestItemId: z.string().min(1),
+  externalRefType: z.string().trim().min(1).max(60),
+  notes: z.string().trim().max(1000).optional(),
+});
+
+/**
+ * Marks external submission as started for a EXTERNAL_CERTIFICATE service
+ * (e.g. staff just submitted the PCOC application on the SABER portal).
+ * Creates the ExternalDeliverable row if one doesn't exist yet.
+ */
+export async function submitExternalDeliverable(
+  input: z.infer<typeof submitExternalDeliverableSchema>,
+): Promise<ActionResult<{ deliverableId: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = submitExternalDeliverableSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const item = await prisma.requestItem.findUnique({
+      where: { id: parsed.data.requestItemId },
+      select: {
+        id: true,
+        serviceItem: { select: { deliverableType: true } },
+        request: { select: { id: true, state: true, organisationId: true } },
+      },
+    });
+    if (!item) return { ok: false, error: "NOT_FOUND" };
+    if (item.serviceItem.deliverableType !== "EXTERNAL_CERTIFICATE") {
+      return { ok: false, error: "NOT_APPLICABLE" };
+    }
+    if (!ASSESSMENT_EDIT_STATES.includes(item.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    const existing = await prisma.externalDeliverable.findFirst({
+      where: { requestItemId: item.id },
+    });
+
+    const deliverable = existing
+      ? await prisma.externalDeliverable.update({
+          where: { id: existing.id },
+          data: {
+            status: existing.status === "ISSUED" ? existing.status : "SUBMITTED",
+            externalRefType: parsed.data.externalRefType,
+            notes: parsed.data.notes || null,
+            submittedAt: existing.submittedAt ?? new Date(),
+          },
+        })
+      : await prisma.externalDeliverable.create({
+          data: {
+            requestItemId: item.id,
+            status: "SUBMITTED",
+            externalRefType: parsed.data.externalRefType,
+            notes: parsed.data.notes || null,
+            submittedAt: new Date(),
+            createdByUserId: session.id,
+          },
+        });
+
+    await writeAuditLog({
+      session,
+      organisationId: item.request.organisationId,
+      action: existing
+        ? "request.externalDeliverable.resubmit"
+        : "request.externalDeliverable.submit",
+      entityType: "ExternalDeliverable",
+      entityId: deliverable.id,
+      after: { externalRefType: parsed.data.externalRefType },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${item.request.id}`, "page");
+    return { ok: true, data: { deliverableId: deliverable.id } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const markExternalDeliverableIssuedSchema = z.object({
+  deliverableId: z.string().min(1),
+  externalRefValue: z.string().trim().min(1).max(200),
+});
+
+/**
+ * Marks an external deliverable ISSUED once the certificate/number has come
+ * back from the portal/lab. Requires the certificate/report file already
+ * attached (mirrors completeEvaluationActivity's report-count gate). The
+ * saved externalRefValue is what a later RequestItem can pull in via
+ * RequestItem.sourceRequestItemId (e.g. a FASEH Request# feeding a SCOC).
+ */
+export async function markExternalDeliverableIssued(
+  input: z.infer<typeof markExternalDeliverableIssuedSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = markExternalDeliverableIssuedSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const deliverable = await prisma.externalDeliverable.findUnique({
+      where: { id: parsed.data.deliverableId },
+      include: {
+        requestItem: {
+          select: {
+            id: true,
+            request: { select: { id: true, state: true, organisationId: true } },
+          },
+        },
+      },
+    });
+    if (!deliverable) return { ok: false, error: "NOT_FOUND" };
+    if (!ASSESSMENT_EDIT_STATES.includes(deliverable.requestItem.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    const docCount = await prisma.requestDocument.count({
+      where: {
+        externalDeliverableId: deliverable.id,
+        currentVersionId: { not: null },
+      },
+    });
+    if (docCount === 0) {
+      return { ok: false, error: "CERTIFICATE_REQUIRED" };
+    }
+
+    await prisma.externalDeliverable.update({
+      where: { id: deliverable.id },
+      data: {
+        status: "ISSUED",
+        externalRefValue: parsed.data.externalRefValue,
+        issuedAt: new Date(),
+      },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: deliverable.requestItem.request.organisationId,
+      action: "request.externalDeliverable.issue",
+      entityType: "ExternalDeliverable",
+      entityId: deliverable.id,
+      after: { externalRefValue: parsed.data.externalRefValue },
+    });
+
+    revalidatePath(
+      `/[locale]/admin/requests/${deliverable.requestItem.request.id}`,
+      "page",
+    );
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const rejectExternalDeliverableSchema = z.object({
+  deliverableId: z.string().min(1),
+  notes: z.string().trim().max(1000),
+});
+
+/** Marks an external submission REJECTED by the portal/lab (needs resubmission). */
+export async function rejectExternalDeliverable(
+  input: z.infer<typeof rejectExternalDeliverableSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = rejectExternalDeliverableSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const deliverable = await prisma.externalDeliverable.findUnique({
+      where: { id: parsed.data.deliverableId },
+      include: {
+        requestItem: {
+          select: {
+            request: { select: { id: true, state: true, organisationId: true } },
+          },
+        },
+      },
+    });
+    if (!deliverable) return { ok: false, error: "NOT_FOUND" };
+    if (!ASSESSMENT_EDIT_STATES.includes(deliverable.requestItem.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    await prisma.externalDeliverable.update({
+      where: { id: deliverable.id },
+      data: { status: "REJECTED", notes: parsed.data.notes },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: deliverable.requestItem.request.organisationId,
+      action: "request.externalDeliverable.reject",
+      entityType: "ExternalDeliverable",
+      entityId: deliverable.id,
+      after: { notes: parsed.data.notes },
+    });
+
+    revalidatePath(
+      `/[locale]/admin/requests/${deliverable.requestItem.request.id}`,
+      "page",
+    );
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const EXTERNAL_CERT_ACCEPTED = ["application/pdf", "image/png", "image/jpeg"];
+const EXTERNAL_CERT_MAX_MB = 20;
+
+/** Uploads the certificate/report file for an external deliverable. */
+export async function uploadExternalDeliverableFile(
+  formData: FormData,
+): Promise<ActionResult<{ documentId: string; fileName: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const deliverableId = String(formData.get("deliverableId") ?? "");
+    if (!deliverableId) return { ok: false, error: "VALIDATION" };
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "NO_FILE" };
+    }
+
+    const deliverable = await prisma.externalDeliverable.findUnique({
+      where: { id: deliverableId },
+      select: {
+        id: true,
+        requestItem: {
+          select: {
+            id: true,
+            requestId: true,
+            request: { select: { id: true, state: true, organisationId: true } },
+          },
+        },
+      },
+    });
+    if (!deliverable) return { ok: false, error: "NOT_FOUND" };
+    if (!ASSESSMENT_EDIT_STATES.includes(deliverable.requestItem.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    if (!EXTERNAL_CERT_ACCEPTED.includes(file.type)) {
+      return { ok: false, error: "MIME_REJECTED" };
+    }
+    if (file.size > EXTERNAL_CERT_MAX_MB * 1024 * 1024) {
+      return { ok: false, error: "FILE_TOO_LARGE" };
+    }
+
+    const { mimeAllowed, sniffMime } = await import("@/lib/mime-sniff");
+    const { storage } = await import("@/lib/storage");
+    const { createHash } = await import("node:crypto");
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const sniffed = sniffMime(buffer);
+    if (!mimeAllowed(sniffed, EXTERNAL_CERT_ACCEPTED)) {
+      return { ok: false, error: "MIME_REJECTED" };
+    }
+
+    const { getAvScanner } = await import("@/lib/av");
+    const verdict = await getAvScanner().scan(buffer);
+    if (verdict === "INFECTED") {
+      return { ok: false, error: "INFECTED_FILE" };
+    }
+
+    const sha256 = createHash("sha256").update(buffer).digest("hex");
+    const orgId = deliverable.requestItem.request.organisationId;
+    const requestId = deliverable.requestItem.requestId;
+    const stored = await storage.put({
+      keyPrefix: `orgs/${orgId}/requests/${requestId}/external-deliverables/${deliverable.id}`,
+      fileName: file.name,
+      mimeType: sniffed,
+      body: buffer,
+    });
+
+    const doc = await prisma.$transaction(async (tx) => {
+      const created = await tx.requestDocument.create({
+        data: {
+          requestId,
+          requestItemId: deliverable.requestItem.id,
+          externalDeliverableId: deliverable.id,
+          label: "External certificate",
+        },
+      });
+      const version = await tx.documentVersion.create({
+        data: {
+          documentId: created.id,
+          version: 1,
+          fileName: file.name,
+          mimeType: sniffed,
+          sizeBytes: buffer.byteLength,
+          storageKey: stored.key,
+          sha256,
+          uploadedByUserId: session.id,
+          avStatus: "CLEAN",
+        },
+      });
+      await tx.requestDocument.update({
+        where: { id: created.id },
+        data: { currentVersionId: version.id },
+      });
+      return created;
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: orgId,
+      action: "request.externalDeliverable.file.upload",
+      entityType: "RequestDocument",
+      entityId: doc.id,
+      after: { deliverableId: deliverable.id, fileName: file.name },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${requestId}`, "page");
+    return { ok: true, data: { documentId: doc.id, fileName: file.name } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    if (message === "AV_UNAVAILABLE") {
+      return { ok: false, error: "AV_UNAVAILABLE" };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
 const clientFacingCommentSchema = z.object({
   requestId: z.string().min(1),
   body: z.string().trim().min(1).max(2000),

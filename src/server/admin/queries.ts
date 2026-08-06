@@ -413,7 +413,20 @@ export type AdminRequestDetailItem = {
     requiresInspection: boolean;
     requiresLabTesting: boolean;
     requiresFactoryAudit: boolean;
+    deliverableType: "INTERNAL_REPORT" | "EXTERNAL_CERTIFICATE";
+    deliverableEn: string | null;
+    deliverableAr: string | null;
   };
+  externalDeliverable: {
+    id: string;
+    status: "PENDING_SUBMISSION" | "SUBMITTED" | "ISSUED" | "REJECTED";
+    externalRefType: string;
+    externalRefValue: string | null;
+    submittedAt: string | null;
+    issuedAt: string | null;
+    notes: string | null;
+    files: Array<{ id: string; fileName: string; storageKey: string }>;
+  } | null;
   assessment: AssessmentState;
   documents: Array<{
     id: string;
@@ -578,12 +591,25 @@ export async function getAdminRequestDetail(
                 requiresInspection: true,
                 requiresLabTesting: true,
                 requiresFactoryAudit: true,
+                deliverableType: true,
+                deliverableEn: true,
+                deliverableAr: true,
               },
             },
+            externalDeliverables: {
+              include: {
+                documents: {
+                  where: { currentVersionId: { not: null } },
+                  include: { currentVersion: true },
+                  orderBy: { createdAt: "asc" },
+                },
+              },
+              orderBy: { createdAt: "asc" },
+            },
             documents: {
-              // Evaluation-activity reports render in the activities panel
-              // below, not the generic document list.
-              where: { activityId: null },
+              // Evaluation-activity / external-deliverable files render in
+              // their own panels below, not the generic document list.
+              where: { activityId: null, externalDeliverableId: null },
               include: {
                 versions: {
                   include: {
@@ -702,7 +728,29 @@ export async function getAdminRequestDetail(
           requiresInspection: item.serviceItem.requiresInspection,
           requiresLabTesting: item.serviceItem.requiresLabTesting,
           requiresFactoryAudit: item.serviceItem.requiresFactoryAudit,
+          deliverableType: item.serviceItem.deliverableType,
+          deliverableEn: item.serviceItem.deliverableEn,
+          deliverableAr: item.serviceItem.deliverableAr,
         },
+        externalDeliverable: item.externalDeliverables[0]
+          ? {
+              id: item.externalDeliverables[0].id,
+              status: item.externalDeliverables[0].status,
+              externalRefType: item.externalDeliverables[0].externalRefType,
+              externalRefValue: item.externalDeliverables[0].externalRefValue,
+              submittedAt:
+                item.externalDeliverables[0].submittedAt?.toISOString() ?? null,
+              issuedAt: item.externalDeliverables[0].issuedAt?.toISOString() ?? null,
+              notes: item.externalDeliverables[0].notes,
+              files: item.externalDeliverables[0].documents
+                .filter((d) => d.currentVersion)
+                .map((d) => ({
+                  id: d.id,
+                  fileName: d.currentVersion!.fileName,
+                  storageKey: d.currentVersion!.storageKey,
+                })),
+            }
+          : null,
         assessment: parseAssessment(item.assessment),
         documents: item.documents.map((d) => ({
           id: d.id,
