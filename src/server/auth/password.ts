@@ -42,7 +42,7 @@ export async function requestPasswordResetAction(
 
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, status: true, locale: true },
+    select: { id: true, organisationId: true, status: true, locale: true },
   });
   if (user && user.status === "ACTIVE") {
     const token = await issueVerificationToken(
@@ -54,6 +54,16 @@ export async function requestPasswordResetAction(
       to: email,
       locale: user.locale || parsed.data.locale,
       token,
+    });
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: user.id,
+        organisationId: user.organisationId,
+        action: "auth.password.reset_requested",
+        entityType: "User",
+        entityId: user.id,
+        ip: await clientIp(),
+      },
     });
   }
 

@@ -3,10 +3,31 @@
 import { AuthError } from "next-auth";
 import { headers } from "next/headers";
 import { z } from "zod";
+import type { Role } from "@prisma/client";
 
 import { signIn } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { consumeRateLimitAsync } from "@/lib/rate-limit";
+
+async function logAuthEvent(input: {
+  userId: string;
+  organisationId: string;
+  actorRole: Role | null;
+  action: string;
+  ip?: string;
+}) {
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: input.userId,
+      actorRole: input.actorRole ?? undefined,
+      organisationId: input.organisationId,
+      action: input.action,
+      entityType: "User",
+      entityId: input.userId,
+      ip: input.ip,
+    },
+  });
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -45,10 +66,24 @@ export async function loginAction(
   // Pre-check for clearer messaging (enforcement also lives in authorize()).
   const known = await prisma.user.findUnique({
     where: { email },
-    select: { emailVerifiedAt: true, lockedUntil: true, status: true },
+    select: {
+      id: true,
+      organisationId: true,
+      emailVerifiedAt: true,
+      lockedUntil: true,
+      status: true,
+      roles: { select: { role: true }, take: 1 },
+    },
   });
   if (known && known.status === "ACTIVE") {
     if (known.lockedUntil && known.lockedUntil.getTime() > Date.now()) {
+      await logAuthEvent({
+        userId: known.id,
+        organisationId: known.organisationId,
+        actorRole: known.roles[0]?.role ?? null,
+        action: "auth.login.blocked_locked",
+        ip: forwarded,
+      });
       return { ok: false, error: "ACCOUNT_LOCKED" };
     }
     if (!known.emailVerifiedAt) {
@@ -76,12 +111,31 @@ export async function loginAction(
       select: { organisation: { select: { type: true } } },
     });
 
+    if (known) {
+      await logAuthEvent({
+        userId: known.id,
+        organisationId: known.organisationId,
+        actorRole: known.roles[0]?.role ?? null,
+        action: "auth.login.success",
+        ip: forwarded,
+      });
+    }
+
     return {
       ok: true,
       redirectTo: org?.organisation.type === "ATLAS" ? "/admin" : "/client",
     };
   } catch (error) {
     if (error instanceof AuthError) {
+      if (known) {
+        await logAuthEvent({
+          userId: known.id,
+          organisationId: known.organisationId,
+          actorRole: known.roles[0]?.role ?? null,
+          action: "auth.login.failed",
+          ip: forwarded,
+        });
+      }
       return { ok: false, error: "INVALID_CREDENTIALS" };
     }
     throw error;

@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac";
 import { ACTING_ORG_COOKIE } from "@/lib/request-context";
+import { requestMeta, writeAuditLog } from "@/lib/audit";
 
 export type OnBehalfResult =
   | { ok: true }
@@ -38,6 +39,17 @@ export async function startRequestOnBehalf(
       // Short-lived — long enough to complete one request, not a standing grant.
       maxAge: 60 * 60 * 2,
     });
+
+    const meta = await requestMeta();
+    await writeAuditLog({
+      session,
+      action: "requests.onBehalf.start",
+      entityType: "Organisation",
+      entityId: org.id,
+      organisationId: org.id,
+      ...meta,
+    });
+
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
@@ -54,7 +66,21 @@ export async function endRequestOnBehalf(): Promise<OnBehalfResult> {
     const session = await requireSession();
     requirePermission(session, "requests:create-behalf");
     const store = await cookies();
+    const pinnedOrgId = store.get(ACTING_ORG_COOKIE)?.value;
     store.delete(ACTING_ORG_COOKIE);
+
+    if (pinnedOrgId) {
+      const meta = await requestMeta();
+      await writeAuditLog({
+        session,
+        action: "requests.onBehalf.end",
+        entityType: "Organisation",
+        entityId: pinnedOrgId,
+        organisationId: pinnedOrgId,
+        ...meta,
+      });
+    }
+
     return { ok: true };
   } catch {
     return { ok: false, error: "FAILED" };
