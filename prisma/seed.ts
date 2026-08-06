@@ -1,4 +1,20 @@
-import { PrismaClient, Prisma, Role, RequestState, CommentDirection, ReturnReasonCode, FaultAttribution, CouponDiscountType, CouponAppliesTo, CouponClientScope, CouponStatus, OrganisationType } from "@prisma/client";
+import {
+  PrismaClient,
+  Prisma,
+  Role,
+  RequestState,
+  CommentDirection,
+  ReturnReasonCode,
+  FaultAttribution,
+  CouponDiscountType,
+  CouponAppliesTo,
+  CouponClientScope,
+  CouponStatus,
+  OrganisationType,
+  ClientCategory,
+  DeliverableType,
+  PlatformType,
+} from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -47,6 +63,17 @@ const formulaMime = [
   "text/csv",
 ] as const;
 
+type DocSeed = {
+  code: string;
+  nameEn: string;
+  nameAr: string;
+  mandatory: boolean;
+  acceptedMimeTypes: string[];
+  helpEn?: string | null;
+  helpAr?: string | null;
+  sortOrder: number;
+};
+
 async function main() {
   // Refuse to run against production — this wipes and reseeds demo data.
   if (process.env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "1") {
@@ -55,7 +82,13 @@ async function main() {
     );
   }
 
-  // Wipe in dependency order for idempotent local reseeds
+  // Wipe in dependency order for idempotent local reseeds. Deleting Request
+  // cascades to RequestItem/RequestDocument/DocumentVersion/RequestEvent/
+  // RequestComment/RequestCommentMention/RequestItemActivity/
+  // ExternalDeliverable/RequestReopenRequest, so those don't need explicit
+  // deleteMany calls. The catalogue (MainCategory/SubCategory/ServiceItem/
+  // RequiredDocument) is rebuilt below to match the current reconciled
+  // catalogue rather than left to migration state, so it's wiped too.
   await prisma.auditLog.deleteMany();
   await prisma.notificationLog.deleteMany();
   await prisma.notificationOutbox.deleteMany();
@@ -67,11 +100,9 @@ async function main() {
   await prisma.ledgerEntry.deleteMany();
   await prisma.invoiceLine.deleteMany();
   await prisma.invoice.deleteMany();
-  await prisma.requestComment.deleteMany();
-  await prisma.requestEvent.deleteMany();
-  await prisma.documentVersion.deleteMany();
-  await prisma.requestDocument.deleteMany();
   await prisma.request.deleteMany();
+  await prisma.engagement.deleteMany();
+  await prisma.platformCredential.deleteMany();
   await prisma.coupon.deleteMany();
   await prisma.requiredDocument.deleteMany();
   await prisma.serviceItem.deleteMany();
@@ -109,94 +140,135 @@ async function main() {
     },
   });
 
-  const [intake, reviewer, decisionMaker, admin] = await Promise.all([
-    prisma.user.create({
-      data: {
-        organisationId: atlas.id,
-        email: "intake@atls.com.sa",
-        username: "intake.officer",
-        passwordHash,
-        fullNameEn: "Noura Al-Harbi",
-        fullNameAr: "نورة الحربي",
-        phone: "+966501110001",
-        locale: "ar",
-        status: "ACTIVE",
-        emailVerifiedAt: new Date(),
-        roles: { create: [{ role: Role.INTAKE_OFFICER }] },
-      },
-    }),
-    prisma.user.create({
-      data: {
-        organisationId: atlas.id,
-        email: "reviewer@atls.com.sa",
-        username: "tech.reviewer",
-        passwordHash,
-        fullNameEn: "Eng. Khalid Al-Otaibi",
-        fullNameAr: "م. خالد العتيبي",
-        phone: "+966501110002",
-        locale: "ar",
-        status: "ACTIVE",
-        emailVerifiedAt: new Date(),
-        roles: { create: [{ role: Role.TECHNICAL_REVIEWER }] },
-      },
-    }),
-    prisma.user.create({
-      data: {
-        organisationId: atlas.id,
-        email: "evaluator@atls.com.sa",
-        username: "evaluator",
-        passwordHash,
-        fullNameEn: "Eng. Faisal Al-Dosari",
-        fullNameAr: "م. فيصل الدوسري",
-        phone: "+966501110005",
-        locale: "ar",
-        status: "ACTIVE",
-        emailVerifiedAt: new Date(),
-        roles: { create: [{ role: Role.EVALUATOR }] },
-      },
-    }),
-    prisma.user.create({
-      data: {
-        organisationId: atlas.id,
-        email: "decision@atls.com.sa",
-        username: "decision.maker",
-        passwordHash,
-        fullNameEn: "Eng. Sara Al-Qahtani",
-        fullNameAr: "م. سارة القحطاني",
-        phone: "+966501110003",
-        locale: "ar",
-        status: "ACTIVE",
-        emailVerifiedAt: new Date(),
-        roles: { create: [{ role: Role.DECISION_MAKER }] },
-      },
-    }),
-    prisma.user.create({
-      data: {
-        organisationId: atlas.id,
-        email: "admin@atlas.com",
-        username: "sys.admin",
-        passwordHash: adminPasswordHash,
-        fullNameEn: "Abdullah Al-Mutairi",
-        fullNameAr: "عبدالله المطيري",
-        phone: "+966501110004",
-        locale: "ar",
-        status: "ACTIVE",
-        emailVerifiedAt: new Date(),
-        roles: {
-          create: [
-            { role: Role.SYSTEM_ADMIN },
-            { role: Role.CATALOGUE_MANAGER },
-            { role: Role.FINANCE },
-          ],
+  const [intake, evaluator, reviewer, decisionMaker, finance, catalogueManager, qualityManager, admin] =
+    await Promise.all([
+      prisma.user.create({
+        data: {
+          organisationId: atlas.id,
+          email: "intake@atls.com.sa",
+          username: "intake.officer",
+          passwordHash,
+          fullNameEn: "Noura Al-Harbi",
+          fullNameAr: "نورة الحربي",
+          phone: "+966501110001",
+          locale: "ar",
+          status: "ACTIVE",
+          emailVerifiedAt: new Date(),
+          roles: { create: [{ role: Role.INTAKE_OFFICER }] },
         },
-      },
-    }),
-  ]);
+      }),
+      prisma.user.create({
+        data: {
+          organisationId: atlas.id,
+          email: "evaluator@atls.com.sa",
+          username: "evaluator",
+          passwordHash,
+          fullNameEn: "Eng. Faisal Al-Dosari",
+          fullNameAr: "م. فيصل الدوسري",
+          phone: "+966501110005",
+          locale: "ar",
+          status: "ACTIVE",
+          emailVerifiedAt: new Date(),
+          roles: { create: [{ role: Role.EVALUATOR }] },
+        },
+      }),
+      prisma.user.create({
+        data: {
+          organisationId: atlas.id,
+          email: "reviewer@atls.com.sa",
+          username: "tech.reviewer",
+          passwordHash,
+          fullNameEn: "Eng. Khalid Al-Otaibi",
+          fullNameAr: "م. خالد العتيبي",
+          phone: "+966501110002",
+          locale: "ar",
+          status: "ACTIVE",
+          emailVerifiedAt: new Date(),
+          roles: { create: [{ role: Role.TECHNICAL_REVIEWER }] },
+        },
+      }),
+      prisma.user.create({
+        data: {
+          organisationId: atlas.id,
+          email: "decision@atls.com.sa",
+          username: "decision.maker",
+          passwordHash,
+          fullNameEn: "Eng. Sara Al-Qahtani",
+          fullNameAr: "م. سارة القحطاني",
+          phone: "+966501110003",
+          locale: "ar",
+          status: "ACTIVE",
+          emailVerifiedAt: new Date(),
+          roles: { create: [{ role: Role.DECISION_MAKER }] },
+        },
+      }),
+      prisma.user.create({
+        data: {
+          organisationId: atlas.id,
+          email: "finance@atls.com.sa",
+          username: "atlas.finance",
+          passwordHash,
+          fullNameEn: "Turki Al-Shammari",
+          fullNameAr: "تركي الشمري",
+          phone: "+966501110006",
+          locale: "ar",
+          status: "ACTIVE",
+          emailVerifiedAt: new Date(),
+          roles: { create: [{ role: Role.FINANCE }] },
+        },
+      }),
+      prisma.user.create({
+        data: {
+          organisationId: atlas.id,
+          email: "catalogue@atls.com.sa",
+          username: "atlas.catalogue",
+          passwordHash,
+          fullNameEn: "Haifa Al-Rashidi",
+          fullNameAr: "هيفاء الرشيدي",
+          phone: "+966501110007",
+          locale: "ar",
+          status: "ACTIVE",
+          emailVerifiedAt: new Date(),
+          roles: { create: [{ role: Role.CATALOGUE_MANAGER }] },
+        },
+      }),
+      prisma.user.create({
+        data: {
+          organisationId: atlas.id,
+          email: "quality@atls.com.sa",
+          username: "atlas.quality",
+          passwordHash,
+          fullNameEn: "Majed Al-Ghamdi",
+          fullNameAr: "ماجد الغامدي",
+          phone: "+966501110008",
+          locale: "ar",
+          status: "ACTIVE",
+          emailVerifiedAt: new Date(),
+          roles: { create: [{ role: Role.QUALITY_MANAGER }] },
+        },
+      }),
+      prisma.user.create({
+        data: {
+          organisationId: atlas.id,
+          email: "admin@atlas.com",
+          username: "sys.admin",
+          passwordHash: adminPasswordHash,
+          fullNameEn: "Abdullah Al-Mutairi",
+          fullNameAr: "عبدالله المطيري",
+          phone: "+966501110004",
+          locale: "ar",
+          status: "ACTIVE",
+          emailVerifiedAt: new Date(),
+          roles: { create: [{ role: Role.SYSTEM_ADMIN }] },
+        },
+      }),
+    ]);
 
   // ── Client organisations ─────────────────────────────────────────────────
   const alNoor = await prisma.organisation.create({
     data: {
       type: OrganisationType.CLIENT,
+      clientCategory: ClientCategory.COMPANY,
       nameEn: "Al Noor Pharmaceuticals Co.",
       nameAr: "شركة النور للصناعات الدوائية",
       logoKey: "orgs/al-noor/logo.svg",
@@ -221,6 +293,7 @@ async function main() {
   const gulfBeauty = await prisma.organisation.create({
     data: {
       type: OrganisationType.CLIENT,
+      clientCategory: ClientCategory.COMPANY,
       nameEn: "Gulf Beauty Trading LLC",
       nameAr: "الخليج لتجارة مستحضرات التجميل",
       logoKey: "orgs/gulf-beauty/logo.svg",
@@ -242,7 +315,7 @@ async function main() {
     },
   });
 
-  const [alNoorOwner, alNoorUser] = await Promise.all([
+  const [alNoorOwner, alNoorAdmin, alNoorUser] = await Promise.all([
     prisma.user.create({
       data: {
         organisationId: alNoor.id,
@@ -261,6 +334,21 @@ async function main() {
             { role: Role.CLIENT_FINANCE },
           ],
         },
+      },
+    }),
+    prisma.user.create({
+      data: {
+        organisationId: alNoor.id,
+        email: "admin@alnoorpharma.sa",
+        username: "alnoor.admin",
+        passwordHash,
+        fullNameEn: "Reem Al-Zahrani",
+        fullNameAr: "ريم الزهراني",
+        phone: "+966550010103",
+        locale: "ar",
+        status: "ACTIVE",
+        emailVerifiedAt: new Date(),
+        roles: { create: [{ role: Role.CLIENT_ADMIN }] },
       },
     }),
     prisma.user.create({
@@ -318,7 +406,7 @@ async function main() {
     }),
   ]);
 
-  // ── Catalogue: Food & Drugs ──────────────────────────────────────────────
+  // ── Catalogue: Food & Drugs (kept as-is — out of scope of the reconciliation) ──
   const foodDrugs = await prisma.mainCategory.create({
     data: {
       code: "FOOD_DRUGS",
@@ -334,13 +422,7 @@ async function main() {
     },
   });
 
-  const [
-    subSupplements,
-    subGeneralFood,
-    subNutrition,
-    subClaims,
-    subAdditives,
-  ] = await Promise.all([
+  const [subSupplements, subGeneralFood, subNutrition, subClaims, subAdditives] = await Promise.all([
     prisma.subCategory.create({
       data: {
         mainCategoryId: foodDrugs.id,
@@ -398,7 +480,7 @@ async function main() {
     }),
   ]);
 
-  // ── Catalogue: Cosmetics ─────────────────────────────────────────────────
+  // ── Catalogue: Cosmetics (reconciled: SFDA-COS-001..004) ────────────────────
   const cosmetics = await prisma.mainCategory.create({
     data: {
       code: "COSMETICS",
@@ -414,80 +496,107 @@ async function main() {
     },
   });
 
-  const [
-    subCosmeticLabel,
-    subIngredient,
-    subCosmeticClaims,
-    subSafety,
-    subNotification,
-  ] = await Promise.all([
+  const subCosmeticLabelling = await prisma.subCategory.create({
+    data: {
+      mainCategoryId: cosmetics.id,
+      code: "COSMETIC_LABELLING",
+      nameEn: "Cosmetic Labelling",
+      nameAr: "بطاقة مستحضرات التجميل",
+      descEn: "Arabic/English cosmetic label assessment against GSO 1943 labelling articles.",
+      descAr: "تقييم بطاقة مستحضر التجميل بالعربية والإنجليزية وفق مواد GSO 1943.",
+      sortOrder: 1,
+    },
+  });
+
+  const subCosmeticCertification = await prisma.subCategory.create({
+    data: {
+      mainCategoryId: cosmetics.id,
+      code: "SFDA_CERTIFICATION",
+      nameEn: "SFDA Certification",
+      nameAr: "شهادات الهيئة",
+      descEn:
+        "SCOC issuance, GHAD product registration, and FASAH shipment certificate applications for cosmetics.",
+      descAr: "إصدار شهادات المطابقة وتسجيل المنتجات في غد وطلبات شهادات فسح لمستحضرات التجميل.",
+      sortOrder: 6,
+    },
+  });
+
+  // ── Catalogue: SABER ──────────────────────────────────────────────────────
+  const saber = await prisma.mainCategory.create({
+    data: {
+      code: "SABER",
+      nameEn: "SABER",
+      nameAr: "سابر",
+      descEn: "Services related to the SABER platform and Saudi Technical Regulations.",
+      descAr: "الخدمات المتعلقة بمنصة سابر واللوائح الفنية السعودية.",
+      icon: "shield-check",
+      sortOrder: 3,
+      active: true,
+    },
+  });
+
+  const [subSaberPcoc, subSaberScoc, subSaberAccountMgmt] = await Promise.all([
     prisma.subCategory.create({
       data: {
-        mainCategoryId: cosmetics.id,
-        code: "COSMETIC_LABELLING",
-        nameEn: "Cosmetic Labelling",
-        nameAr: "بطاقة مستحضرات التجميل",
-        descEn: "Arabic/English cosmetic label assessment against GSO 1943 labelling articles.",
-        descAr: "تقييم بطاقة مستحضر التجميل بالعربية والإنجليزية وفق مواد GSO 1943.",
+        mainCategoryId: saber.id,
+        code: "PRODUCT_CERTIFICATION",
+        nameEn: "Product Certification",
+        nameAr: "شهادة مطابقة المنتج",
+        descEn: "Product Certificate of Conformity (PCOC) issuance through the SABER platform.",
+        descAr: "إصدار شهادة مطابقة المنتج (PCOC) من خلال منصة سابر.",
         sortOrder: 1,
       },
     }),
     prisma.subCategory.create({
       data: {
-        mainCategoryId: cosmetics.id,
-        code: "INGREDIENT_SCREENING",
-        nameEn: "Ingredient Screening",
-        nameAr: "فحص المكونات",
-        descEn: "INCI screening against prohibited, restricted, colorant, preservative, and UV-filter annexes.",
-        descAr: "فحص أسماء INCI مقابل ملاحق المحظور والمقيد والملونات والمواد الحافظة ومرشحات الأشعة فوق البنفسجية.",
+        mainCategoryId: saber.id,
+        code: "SHIPMENT_CERTIFICATION",
+        nameEn: "Shipment Certification",
+        nameAr: "شهادة مطابقة الإرسالية",
+        descEn: "Shipment Certificate of Conformity (SCOC) issuance through the SABER platform.",
+        descAr: "إصدار شهادة مطابقة إرسالية من خلال منصة سابر.",
         sortOrder: 2,
       },
     }),
     prisma.subCategory.create({
       data: {
-        mainCategoryId: cosmetics.id,
-        code: "PRODUCT_CLAIMS",
-        nameEn: "Product Claims",
-        nameAr: "ادعاءات المنتج",
-        descEn: "Cosmetic claims review against GSO claims rules and SFDA guidance.",
-        descAr: "مراجعة ادعاءات مستحضرات التجميل وفق قواعد GSO وإرشادات الهيئة.",
+        mainCategoryId: saber.id,
+        code: "ACCOUNT_MANAGEMENT",
+        nameEn: "Account Management",
+        nameAr: "إدارة الحساب",
+        descEn:
+          "Ongoing management of the client's SABER account: registration, certificate applications, and follow-up.",
+        descAr: "إدارة مستمرة لحساب العميل في سابر: التسجيل وطلبات الشهادات والمتابعة.",
         sortOrder: 3,
-      },
-    }),
-    prisma.subCategory.create({
-      data: {
-        mainCategoryId: cosmetics.id,
-        code: "SAFETY_DOCUMENTATION",
-        nameEn: "Safety Documentation",
-        nameAr: "وثائق السلامة",
-        descEn: "CPSR / PIF completeness review against GSO 1943 and PIF checklists.",
-        descAr: "مراجعة اكتمال تقرير سلامة المنتج وملف معلومات المنتج وفق GSO 1943 وقوائم التحقق.",
-        sortOrder: 4,
-      },
-    }),
-    prisma.subCategory.create({
-      data: {
-        mainCategoryId: cosmetics.id,
-        code: "NOTIFICATION_DOSSIER",
-        nameEn: "Notification Dossier",
-        nameAr: "ملف الإخطار",
-        descEn: "SFDA GHAD notification readiness checklist review.",
-        descAr: "مراجعة جاهزية ملف الإخطار عبر منصة غد التابعة للهيئة.",
-        sortOrder: 5,
       },
     }),
   ]);
 
-  type DocSeed = {
-    code: string;
-    nameEn: string;
-    nameAr: string;
-    mandatory: boolean;
-    acceptedMimeTypes: string[];
-    helpEn: string;
-    helpAr: string;
-    sortOrder: number;
-  };
+  // ── Catalogue: Testing Coordination ──────────────────────────────────────
+  const testingCoordination = await prisma.mainCategory.create({
+    data: {
+      code: "TESTING_COORDINATION",
+      nameEn: "Testing Coordination",
+      nameAr: "تنسيق الاختبارات المخبرية",
+      descEn: "Services related to laboratory testing and coordination with accredited laboratories.",
+      descAr: "الخدمات المتعلقة بتنسيق الاختبارات مع المختبرات المعتمدة.",
+      icon: "flask-conical",
+      sortOrder: 4,
+      active: true,
+    },
+  });
+
+  const subLabTestingCoordination = await prisma.subCategory.create({
+    data: {
+      mainCategoryId: testingCoordination.id,
+      code: "LABORATORY_TESTING_COORDINATION",
+      nameEn: "Laboratory Testing Coordination",
+      nameAr: "تنسيق الاختبارات المخبرية",
+      descEn: "Coordination of product testing with accredited third-party laboratories.",
+      descAr: "تنسيق اختبارات المنتجات مع مختبرات خارجية معتمدة.",
+      sortOrder: 1,
+    },
+  });
 
   async function createServiceItem(input: {
     subCategoryId: string;
@@ -502,6 +611,11 @@ async function main() {
     docs: DocSeed[];
     productAttrSchema?: Prisma.InputJsonValue;
     checkSets?: Prisma.InputJsonValue;
+    deliverableEn?: string;
+    deliverableAr?: string;
+    deliverableType?: DeliverableType;
+    requiredCredentialPlatform?: PlatformType | null;
+    defaultEvaluatorId?: string | null;
   }) {
     return prisma.serviceItem.create({
       data: {
@@ -519,6 +633,11 @@ async function main() {
         maxResubmissions: 3,
         productAttrSchema: input.productAttrSchema ?? {},
         checkSets: input.checkSets ?? [],
+        deliverableEn: input.deliverableEn,
+        deliverableAr: input.deliverableAr,
+        deliverableType: input.deliverableType ?? DeliverableType.INTERNAL_REPORT,
+        requiredCredentialPlatform: input.requiredCredentialPlatform ?? null,
+        defaultEvaluatorId: input.defaultEvaluatorId ?? null,
         sortOrder: input.sortOrder,
         active: true,
         requiredDocuments: {
@@ -529,8 +648,8 @@ async function main() {
             mandatory: d.mandatory,
             acceptedMimeTypes: d.acceptedMimeTypes,
             maxSizeMb: 50,
-            helpEn: d.helpEn,
-            helpAr: d.helpAr,
+            helpEn: d.helpEn ?? null,
+            helpAr: d.helpAr ?? null,
             sortOrder: d.sortOrder,
           })),
         },
@@ -583,36 +702,8 @@ async function main() {
     required: ["dosage_form", "target_group", "contains_fish_oil", "has_nutrition_claim", "has_health_claim"],
   };
 
-  const cosmeticAttrs = {
-    type: "object",
-    properties: {
-      product_type: {
-        type: "string",
-        enum: ["leave-on", "rinse-off", "oral-care", "hair", "nail", "perfume"],
-        titleEn: "Product type",
-        titleAr: "نوع المنتج",
-        helpEn: "Annex concentration limits differ for leave-on vs rinse-off products.",
-        helpAr: "حدود تركيز الملاحق تختلف بين المنتجات التي تُترك والتي تُشطف.",
-      },
-      target_group: {
-        type: "string",
-        enum: ["general", "children", "professional"],
-        titleEn: "Target group",
-        titleAr: "الفئة المستهدفة",
-        helpEn: "Affects mandatory warning statements on the label.",
-        helpAr: "يؤثر على عبارات التحذير الإلزامية على البطاقة.",
-      },
-    },
-    required: ["product_type", "target_group"],
-  };
-
   // foodCheckSets (5 sections, 113 SFDA verification items with full knowledge base)
   // is imported from ./seed-assets/sfda-checksets — generated from the SFDA workbook.
-
-  const cosmeticCheckSets = [
-    { code: "GSO_1943", titleEn: "GSO 1943 — Cosmetic labelling", titleAr: "GSO 1943 — بطاقة مستحضرات التجميل" },
-    { code: "ANNEX_SCREEN", titleEn: "Annex screening", titleAr: "فحص الملاحق" },
-  ];
 
   const artworkDoc = (order: number): DocSeed => ({
     code: "ARTWORK",
@@ -632,7 +723,7 @@ async function main() {
     mandatory: true,
     acceptedMimeTypes: [...formulaMime],
     helpEn: "List all ingredients with quantities and units as declared for SFDA.",
-    helpAr: "أدرج جميع المكونات بكمياتها ووحداتها كما تُصرَّح للهيئة.",
+    helpAr: "أدرج جميع المكونات بكمياتها ووحداتها كما تُصرَّح للهيئة.",
     sortOrder: order,
   });
 
@@ -658,39 +749,6 @@ async function main() {
     sortOrder: order,
   });
 
-  const inciDoc = (order: number): DocSeed => ({
-    code: "INCI_LIST",
-    nameEn: "INCI ingredient list",
-    nameAr: "قائمة مكونات INCI",
-    mandatory: true,
-    acceptedMimeTypes: [...formulaMime],
-    helpEn: "INCI names in descending concentration order with percentages where required.",
-    helpAr: "أسماء INCI بترتيب تنازلي للتركيز مع النسب المئوية عند اللزوم.",
-    sortOrder: order,
-  });
-
-  const cpsrDoc = (order: number): DocSeed => ({
-    code: "CPSR",
-    nameEn: "Cosmetic Product Safety Report",
-    nameAr: "تقرير سلامة مستحضر التجميل",
-    mandatory: true,
-    acceptedMimeTypes: ["application/pdf"],
-    helpEn: "Parts A and B signed by a qualified safety assessor.",
-    helpAr: "الجزءان أ وب موقّعان من مقيّم سلامة مؤهل.",
-    sortOrder: order,
-  });
-
-  const pifDoc = (order: number): DocSeed => ({
-    code: "PIF",
-    nameEn: "Product Information File index",
-    nameAr: "فهرس ملف معلومات المنتج",
-    mandatory: true,
-    acceptedMimeTypes: ["application/pdf"],
-    helpEn: "PIF table of contents with document locations.",
-    helpAr: "فهرس ملف معلومات المنتج مع مواقع المستندات.",
-    sortOrder: order,
-  });
-
   const packagingDoc = (order: number): DocSeed => ({
     code: "PACKAGING_PHOTOS",
     nameEn: "Packaging photographs",
@@ -713,18 +771,7 @@ async function main() {
     sortOrder: order,
   });
 
-  const ghadDoc = (order: number): DocSeed => ({
-    code: "GHAD_DRAFT",
-    nameEn: "GHAD notification draft export",
-    nameAr: "مسودة تصدير إخطار غد",
-    mandatory: true,
-    acceptedMimeTypes: ["application/pdf", "application/json"],
-    helpEn: "Export or screenshot pack of fields prepared for SFDA GHAD.",
-    helpAr: "تصدير أو لقطات لحقول الإخطار المُعدّة لمنصة غد.",
-    sortOrder: order,
-  });
-
-  const serviceItemSeeds = [
+  const foodServiceItemSeeds = [
     {
       subCategoryId: subSupplements.id,
       code: "SUPPLEMENT_LABEL_FULL",
@@ -809,97 +856,479 @@ async function main() {
       sortOrder: 1,
       docs: [formulaDoc(1), coaDoc(2), artworkDoc(3)],
     },
-    {
-      subCategoryId: subCosmeticLabel.id,
-      code: "COSMETIC_LABEL_AR_EN",
-      nameEn: "Cosmetic label assessment (AR/EN)",
-      nameAr: "تقييم بطاقة مستحضر التجميل (عربي/إنجليزي)",
-      descEn: "Labelling articles review under GSO 1943 for leave-on and rinse-off products.",
-      descAr: "مراجعة مواد بطاقة البيان وفق GSO 1943 للمنتجات التي تُترك أو تُشطف.",
-      basePrice: 3200,
-      slaHours: 96,
-      sortOrder: 1,
-      docs: [artworkDoc(1), inciDoc(2), translationDoc(3), packagingDoc(4)],
-    },
-    {
-      subCategoryId: subIngredient.id,
-      code: "INCI_ANNEX_SCREEN",
-      nameEn: "INCI annex screening",
-      nameAr: "فحص مكونات INCI مقابل الملاحق",
-      descEn: "Set-difference screening against prohibited/restricted annex substances and limits.",
-      descAr: "فحص فرق المجموعات مقابل المواد المحظورة/المقيدة وحدود التركيز.",
-      basePrice: 2800,
-      slaHours: 72,
-      sortOrder: 1,
-      docs: [inciDoc(1), formulaDoc(2), cpsrDoc(3)],
-    },
-    {
-      subCategoryId: subCosmeticClaims.id,
-      code: "COSMETIC_CLAIMS_REVIEW",
-      nameEn: "Cosmetic claims review",
-      nameAr: "مراجعة ادعاءات مستحضرات التجميل",
-      descEn: "Review of efficacy and marketing claims against GSO rules and SFDA guidance.",
-      descAr: "مراجعة ادعاءات الفاعلية والتسويق وفق قواعد GSO وإرشادات الهيئة.",
-      basePrice: 2500,
-      slaHours: 72,
-      sortOrder: 1,
-      docs: [artworkDoc(1), claimsDoc(2), inciDoc(3)],
-    },
-    {
-      subCategoryId: subSafety.id,
-      code: "CPSR_PIF_COMPLETE",
-      nameEn: "CPSR / PIF completeness review",
-      nameAr: "مراجعة اكتمال تقرير السلامة وملف معلومات المنتج",
-      descEn: "Document-sufficiency review of CPSR Parts A/B and PIF structure.",
-      descAr: "مراجعة كفاية مستندات تقرير السلامة (أ/ب) وهيكل ملف معلومات المنتج.",
-      basePrice: 4000,
-      slaHours: 120,
-      sortOrder: 1,
-      docs: [cpsrDoc(1), pifDoc(2), inciDoc(3), formulaDoc(4), coaDoc(5)],
-    },
-    {
-      subCategoryId: subNotification.id,
-      code: "GHAD_NOTIFICATION_READY",
-      nameEn: "SFDA GHAD notification readiness",
-      nameAr: "جاهزية إخطار غد لدى الهيئة",
-      descEn: "Checklist review of fields and attachments before GHAD submission.",
-      descAr: "مراجعة قائمة التحقق للحقول والمرفقات قبل تقديم الإخطار عبر غد.",
-      basePrice: 1500,
-      slaHours: 48,
-      sortOrder: 1,
-      docs: [ghadDoc(1), artworkDoc(2), inciDoc(3)],
-    },
   ] as const;
 
-  const createdServiceItems = [];
-  for (const seed of serviceItemSeeds) {
-    const isCosmetic = [
-      subCosmeticLabel.id,
-      subIngredient.id,
-      subCosmeticClaims.id,
-      subSafety.id,
-      subNotification.id,
-    ].includes(seed.subCategoryId);
-    createdServiceItems.push(
+  const createdFoodItems = [];
+  for (const seed of foodServiceItemSeeds) {
+    createdFoodItems.push(
       await createServiceItem({
         ...seed,
         docs: [...seed.docs],
-        productAttrSchema: isCosmetic ? cosmeticAttrs : foodSupplementAttrs,
-        checkSets: (isCosmetic ? cosmeticCheckSets : foodCheckSets) as unknown as Prisma.InputJsonValue,
+        productAttrSchema: foodSupplementAttrs,
+        checkSets: foodCheckSets as unknown as Prisma.InputJsonValue,
       }),
     );
   }
 
-  const byCode = Object.fromEntries(
-    createdServiceItems.map((item) => [item.code, item]),
-  ) as Record<string, (typeof createdServiceItems)[number]>;
+  // ── Reconciled Cosmetics services (SFDA-COS-001..004) ────────────────────
+  const svcCosLabelAssessment = await createServiceItem({
+    subCategoryId: subCosmeticLabelling.id,
+    code: "SFDA-COS-001",
+    nameEn: "Technical Label Assessment",
+    nameAr: "التقييم الفني لملصق المنتج",
+    descEn:
+      "Technical assessment of cosmetic product labeling to verify compliance with SFDA regulations and applicable Gulf standards.",
+    descAr: "تقييم فني لملصق المنتج التجميلي للتحقق من مطابقته لمتطلبات الهيئة العامة للغذاء والدواء والمواصفات الخليجية.",
+    basePrice: 1500,
+    slaHours: 72,
+    sortOrder: 2,
+    docs: [
+      {
+        code: "PRODUCT_ARTWORK",
+        nameEn: "Product artwork",
+        nameAr: "تصميم المنتج",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
+        sortOrder: 1,
+      },
+      {
+        code: "INGREDIENT_LIST_INCI",
+        nameEn: "Ingredient list (INCI)",
+        nameAr: "قائمة المكونات (INCI)",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 2,
+      },
+    ],
+    productAttrSchema: {
+      type: "object",
+      required: ["product_name", "brand_name", "client_name"],
+      properties: {
+        product_name: { type: "string", titleEn: "Product name", titleAr: "اسم المنتج" },
+        brand_name: { type: "string", titleEn: "Brand name", titleAr: "اسم العلامة التجارية" },
+        client_name: { type: "string", titleEn: "Client name", titleAr: "اسم العميل" },
+      },
+    },
+    checkSets: [{ code: "GSO_1943", titleEn: "GSO 1943 — Cosmetic labelling", titleAr: "GSO 1943 — بطاقة مستحضرات التجميل" }],
+    deliverableEn: "Technical Label Assessment Report",
+    deliverableAr: "تقرير التقييم الفني للملصق",
+    deliverableType: DeliverableType.INTERNAL_REPORT,
+    requiredCredentialPlatform: null,
+    defaultEvaluatorId: evaluator.id,
+  });
 
-  const svcSupplementFull = byCode.SUPPLEMENT_LABEL_FULL;
-  const svcNutrition = byCode.NUTRITION_FACTS_VERIFY;
-  const svcClaimsFull = byCode.CLAIMS_SUBSTANTIATION;
-  const svcCosmeticLabel = byCode.COSMETIC_LABEL_AR_EN;
-  const svcInciScreen = byCode.INCI_ANNEX_SCREEN;
-  const svcGhadReady = byCode.GHAD_NOTIFICATION_READY;
+  const svcCosScoc = await createServiceItem({
+    subCategoryId: subCosmeticCertification.id,
+    code: "SFDA-COS-002",
+    nameEn: "Cosmetic Shipment Certificate of Conformity (SCOC)",
+    nameAr: "شهادة مطابقة إرسالية لمستحضرات التجميل",
+    descEn: "Issuance of a Shipment Certificate of Conformity (SCOC) after completing the conformity assessment process.",
+    descAr: "إصدار شهادة مطابقة إرسالية لمستحضرات التجميل بعد استكمال إجراءات تقييم المطابقة.",
+    basePrice: 1200,
+    slaHours: 48,
+    sortOrder: 1,
+    docs: [
+      {
+        code: "PRODUCT_ARTWORK",
+        nameEn: "Product artwork",
+        nameAr: "تصميم المنتج",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
+        sortOrder: 1,
+      },
+      {
+        code: "INGREDIENT_LIST",
+        nameEn: "Ingredient list",
+        nameAr: "قائمة المكونات",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 2,
+      },
+      {
+        code: "COMMERCIAL_INVOICE_BATCH",
+        nameEn: "Commercial invoice with batch number",
+        nameAr: "الفاتورة التجارية مع رقم الدفعة",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 3,
+      },
+      {
+        code: "PACKING_LIST",
+        nameEn: "Packing list",
+        nameAr: "قائمة التعبئة",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 4,
+      },
+    ],
+    productAttrSchema: {
+      type: "object",
+      required: ["faseh_request_no", "importer", "country_of_origin"],
+      properties: {
+        faseh_request_no: { type: "string", titleEn: "FASEH request #", titleAr: "رقم طلب فسح" },
+        importer: { type: "string", titleEn: "Importer", titleAr: "المستورد" },
+        country_of_origin: { type: "string", titleEn: "Country of origin", titleAr: "بلد المنشأ" },
+      },
+    },
+    checkSets: [],
+    deliverableEn: "Shipment Certificate of Conformity (SCOC)",
+    deliverableAr: "شهادة مطابقة إرسالية",
+    deliverableType: DeliverableType.EXTERNAL_CERTIFICATE,
+    requiredCredentialPlatform: null,
+  });
+
+  const svcCosGhadRegistration = await createServiceItem({
+    subCategoryId: subCosmeticCertification.id,
+    code: "SFDA-COS-003",
+    nameEn: "GHAD Product Registration",
+    nameAr: "تسجيل المنتجات في نظام غد",
+    descEn: "Registration of cosmetic products in the SFDA GHAD system and follow-up until approval.",
+    descAr: "تسجيل المنتجات التجميلية في نظام غد ومتابعة الطلب حتى اكتمال إجراءات التسجيل.",
+    basePrice: 2000,
+    slaHours: 240,
+    sortOrder: 2,
+    docs: [
+      {
+        code: "PRODUCT_ARTWORK",
+        nameEn: "Product artwork",
+        nameAr: "تصميم المنتج",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
+        sortOrder: 1,
+      },
+      {
+        code: "INGREDIENT_LIST",
+        nameEn: "Ingredient list",
+        nameAr: "قائمة المكونات",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 2,
+      },
+      {
+        code: "PRODUCT_IMAGES",
+        nameEn: "Product images",
+        nameAr: "صور المنتج",
+        mandatory: true,
+        acceptedMimeTypes: ["image/png", "image/jpeg"],
+        sortOrder: 3,
+      },
+      {
+        code: "AUTHORIZATION_LETTER",
+        nameEn: "Authorization letter",
+        nameAr: "خطاب تفويض",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 4,
+      },
+    ],
+    productAttrSchema: {
+      type: "object",
+      required: ["client_name"],
+      properties: { client_name: { type: "string", titleEn: "Client name", titleAr: "اسم العميل" } },
+    },
+    checkSets: [],
+    deliverableEn: "Certificate for Cosmetic Product Notification",
+    deliverableAr: "شهادة إخطار المنتج التجميلي",
+    deliverableType: DeliverableType.EXTERNAL_CERTIFICATE,
+    requiredCredentialPlatform: PlatformType.GHAD,
+  });
+
+  const svcCosFasahCert = await createServiceItem({
+    subCategoryId: subCosmeticCertification.id,
+    code: "SFDA-COS-004",
+    nameEn: "FASAH Shipment Certificate Application",
+    nameAr: "رفع طلب شهادة المطابقة عبر منصة فسح",
+    descEn: "Submission and follow-up of cosmetic shipment certificate applications through the FASAH platform.",
+    descAr: "رفع ومتابعة طلب شهادة مطابقة الإرسالية عبر منصة فسح.",
+    basePrice: 1000,
+    slaHours: 48,
+    sortOrder: 3,
+    docs: [
+      {
+        code: "COMMERCIAL_INVOICE",
+        nameEn: "Commercial invoice",
+        nameAr: "الفاتورة التجارية",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 1,
+      },
+      {
+        code: "PACKING_LIST",
+        nameEn: "Packing list",
+        nameAr: "قائمة التعبئة",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 2,
+      },
+      {
+        code: "BILL_OF_LADING_AWB",
+        nameEn: "Bill of lading / air waybill",
+        nameAr: "بوليصة الشحن / بوليصة الشحن الجوي",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 3,
+      },
+    ],
+    productAttrSchema: {
+      type: "object",
+      required: ["product_notification_number", "importer_information", "port_of_entry"],
+      properties: {
+        product_notification_number: { type: "string", titleEn: "Product notification number", titleAr: "رقم إخطار المنتج" },
+        importer_information: { type: "string", titleEn: "Importer information", titleAr: "معلومات المستورد" },
+        port_of_entry: { type: "string", titleEn: "Port of entry", titleAr: "منفذ الدخول" },
+      },
+    },
+    checkSets: [],
+    deliverableEn: "FASEH Request #",
+    deliverableAr: "رقم طلب فسح",
+    deliverableType: DeliverableType.EXTERNAL_CERTIFICATE,
+    requiredCredentialPlatform: PlatformType.GHAD,
+  });
+
+  // ── SABER services (SAB-001..003) ────────────────────────────────────────
+  const saberTechnicalRegulationEnum = [
+    "TEXTILE",
+    "ORNAMENTS_ACCESSORIES",
+    "PAPER_CARDBOARD",
+    "PACKAGING",
+    "MACHINERY_SAFETY",
+    "KITCHEN_TOOLS_FOOD_SAFETY",
+    "ICT_DEVICES",
+    "BUILDING_MATERIALS_PART5",
+    "BUILDING_MATERIALS_PART4",
+    "BUILDING_MATERIALS_PART1",
+    "LOW_VOLTAGE_ELECTRICAL",
+  ] as const;
+
+  const svcSaberPcoc = await createServiceItem({
+    subCategoryId: subSaberPcoc.id,
+    code: "SAB-001",
+    nameEn: "Product Certificate of Conformity (PCOC)",
+    nameAr: "شهادة مطابقة منتج",
+    descEn: "Issuance of a Product Certificate of Conformity (PCOC) through the SABER platform.",
+    descAr: "إصدار شهادة مطابقة منتج من خلال منصة سابر.",
+    basePrice: 2800,
+    slaHours: 120,
+    sortOrder: 1,
+    docs: [
+      {
+        code: "IMPORTER_DECLARATION",
+        nameEn: "Importer declaration",
+        nameAr: "إقرار المستورد",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 1,
+      },
+      {
+        code: "MANUFACTURER_DECLARATION",
+        nameEn: "Manufacturer declaration",
+        nameAr: "إقرار المصنّع",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 2,
+      },
+      {
+        code: "TEST_REPORT",
+        nameEn: "Test report",
+        nameAr: "تقرير الاختبار",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 3,
+      },
+      {
+        code: "PRODUCT_IMAGES",
+        nameEn: "Product images",
+        nameAr: "صور المنتج",
+        mandatory: true,
+        acceptedMimeTypes: ["image/png", "image/jpeg"],
+        sortOrder: 4,
+      },
+      {
+        code: "PRODUCT_LABEL",
+        nameEn: "Product label",
+        nameAr: "بطاقة المنتج",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
+        sortOrder: 5,
+      },
+    ],
+    // Reconciled per migration 20260806053000: product_name dropped (already
+    // collected via RequestItem.productNameEn/Ar in the same wizard step).
+    productAttrSchema: {
+      type: "object",
+      required: ["product_category", "hs_code", "manufacturer", "country_of_origin", "technical_regulation"],
+      properties: {
+        product_category: { type: "string", titleEn: "Product category", titleAr: "فئة المنتج" },
+        hs_code: { type: "string", titleEn: "HS code", titleAr: "الرمز الجمركي" },
+        manufacturer: { type: "string", titleEn: "Manufacturer", titleAr: "الشركة المصنعة" },
+        country_of_origin: { type: "string", titleEn: "Country of origin", titleAr: "بلد المنشأ" },
+        technical_regulation: {
+          type: "string",
+          enum: saberTechnicalRegulationEnum,
+          titleEn: "Technical regulation",
+          titleAr: "اللائحة الفنية",
+          helpEn:
+            "Textile Products; Ornaments and Accessories; Paper and Cardboard; Packaging; General Requirements for Machinery Safety; Food Safety in Kitchen Tools and Appliances; Communications and ICT Devices; Building Materials Part 5/4/1; GCC Low Voltage Electrical Equipment and Appliances.",
+          helpAr:
+            "المنسوجات؛ الحلي والإكسسوارات؛ الورق والكرتون؛ التغليف؛ السلامة العامة للآلات؛ سلامة أدوات وأجهزة المطبخ؛ أجهزة الاتصالات وتقنية المعلومات؛ مواد البناء الجزء 5/4/1؛ الأجهزة الكهربائية منخفضة الجهد.",
+        },
+      },
+    },
+    checkSets: [{ code: "SABER_TECH_REG", titleEn: "Applicable technical regulation", titleAr: "اللائحة الفنية المعنية" }],
+    deliverableEn: "Product Certificate of Conformity (PCOC)",
+    deliverableAr: "شهادة مطابقة منتج (PCOC)",
+    deliverableType: DeliverableType.EXTERNAL_CERTIFICATE,
+    requiredCredentialPlatform: PlatformType.SABER,
+    defaultEvaluatorId: evaluator.id,
+  });
+
+  const svcSaberScoc = await createServiceItem({
+    subCategoryId: subSaberScoc.id,
+    code: "SAB-002",
+    nameEn: "Shipment Certificate of Conformity (SCOC)",
+    nameAr: "شهادة مطابقة إرسالية",
+    descEn: "Issuance of a Shipment Certificate of Conformity through the SABER platform.",
+    descAr: "إصدار شهادة مطابقة إرسالية من خلال منصة سابر.",
+    basePrice: 1200,
+    slaHours: 48,
+    sortOrder: 2,
+    docs: [
+      {
+        code: "COMMERCIAL_INVOICE",
+        nameEn: "Commercial invoice",
+        nameAr: "الفاتورة التجارية",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 1,
+      },
+      {
+        code: "PACKING_LIST",
+        nameEn: "Packing list",
+        nameAr: "قائمة التعبئة",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 2,
+      },
+      {
+        code: "PRODUCT_CERTIFICATE",
+        nameEn: "Product certificate (PCOC)",
+        nameAr: "شهادة مطابقة المنتج",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 3,
+      },
+    ],
+    productAttrSchema: {
+      type: "object",
+      required: ["shipment_details", "importer_information", "product_certificate_number"],
+      properties: {
+        shipment_details: { type: "string", titleEn: "Shipment details", titleAr: "تفاصيل الإرسالية" },
+        importer_information: { type: "string", titleEn: "Importer information", titleAr: "معلومات المستورد" },
+        product_certificate_number: { type: "string", titleEn: "Product certificate (PCOC) number", titleAr: "رقم شهادة مطابقة المنتج" },
+      },
+    },
+    checkSets: [],
+    deliverableEn: "Shipment Certificate of Conformity",
+    deliverableAr: "شهادة مطابقة إرسالية",
+    deliverableType: DeliverableType.EXTERNAL_CERTIFICATE,
+    requiredCredentialPlatform: PlatformType.SABER,
+  });
+
+  const svcSaberAccountMgmt = await createServiceItem({
+    subCategoryId: subSaberAccountMgmt.id,
+    code: "SAB-003",
+    nameEn: "SABER Account Management",
+    nameAr: "إدارة حساب سابر",
+    descEn:
+      "Complete management of the customer's SABER account, including technical file preparation, product registration, submission of Product and Shipment Certificate applications, and follow-up until completion.",
+    descAr:
+      "إدارة حساب العميل في منصة سابر، وتشمل تجهيز الملف الفني، وتسجيل المنتجات، ورفع طلبات شهادات مطابقة المنتجات والإرساليات، ومتابعة جميع الطلبات حتى اكتمالها.",
+    basePrice: 6000,
+    slaHours: 720,
+    sortOrder: 3,
+    docs: [
+      {
+        code: "PRODUCT_INFORMATION",
+        nameEn: "Product information",
+        nameAr: "معلومات المنتج",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+        sortOrder: 1,
+      },
+    ],
+    productAttrSchema: {
+      type: "object",
+      required: ["saber_login_email", "company_name", "cr_number"],
+      properties: {
+        saber_login_email: { type: "string", titleEn: "SABER login email", titleAr: "البريد الإلكتروني لحساب سابر" },
+        company_name: { type: "string", titleEn: "Company name", titleAr: "اسم الشركة" },
+        cr_number: { type: "string", titleEn: "Commercial registration number", titleAr: "رقم السجل التجاري" },
+      },
+    },
+    checkSets: [],
+    deliverableEn: "Completed Requested Service",
+    deliverableAr: "إنجاز الخدمة المطلوبة",
+    deliverableType: DeliverableType.INTERNAL_REPORT,
+    requiredCredentialPlatform: PlatformType.SABER,
+  });
+
+  // ── Testing Coordination (LAB-001) ───────────────────────────────────────
+  const svcLabTesting = await createServiceItem({
+    subCategoryId: subLabTestingCoordination.id,
+    code: "LAB-001",
+    nameEn: "Laboratory Testing Coordination",
+    nameAr: "تنسيق الاختبارات المخبرية",
+    descEn: "Management and coordination of laboratory testing with accredited laboratories.",
+    descAr: "إدارة وتنسيق الاختبارات المخبرية مع المختبرات المعتمدة.",
+    basePrice: 800,
+    slaHours: 168,
+    sortOrder: 1,
+    docs: [
+      {
+        code: "PRODUCT_SPECIFICATION",
+        nameEn: "Product specification (if available)",
+        nameAr: "مواصفات المنتج (إن وجدت)",
+        mandatory: false,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 1,
+      },
+      {
+        code: "PRODUCT_IMAGES",
+        nameEn: "Product images",
+        nameAr: "صور المنتج",
+        mandatory: true,
+        acceptedMimeTypes: ["image/png", "image/jpeg"],
+        sortOrder: 2,
+      },
+      {
+        code: "TECHNICAL_DATASHEET",
+        nameEn: "Technical datasheet (if available)",
+        nameAr: "النشرة الفنية (إن وجدت)",
+        mandatory: false,
+        acceptedMimeTypes: ["application/pdf"],
+        sortOrder: 3,
+      },
+    ],
+    // Reconciled per migration 20260806053000: product_name dropped.
+    productAttrSchema: {
+      type: "object",
+      required: [],
+      properties: {
+        required_standard: { type: "string", titleEn: "Required standard (if known)", titleAr: "المواصفة المطلوبة (إن وجدت)" },
+        required_tests: {
+          type: "string",
+          titleEn: "Required tests (if specific tests are needed)",
+          titleAr: "الاختبارات المطلوبة (إن وجدت اختبارات محددة)",
+        },
+      },
+    },
+    checkSets: [],
+    deliverableEn: "Laboratory Test Report",
+    deliverableAr: "تقرير الاختبار المخبري",
+    deliverableType: DeliverableType.EXTERNAL_CERTIFICATE,
+    requiredCredentialPlatform: null,
+  });
+
   // ── Coupons ──────────────────────────────────────────────────────────────
   const now = new Date();
   const validFrom = new Date(now.getFullYear(), 0, 1);
@@ -979,18 +1408,25 @@ async function main() {
       createdByUserId: admin.id,
     },
   });
-  // ── Helper: request with events / comments / docs ────────────────────────
+
+  // ── Helper: request with items / events / comments / docs ────────────────
+  type ItemInput = {
+    serviceItem: { id: string; basePrice: Prisma.Decimal; vatRate: Prisma.Decimal; requiredDocuments: { id: string; nameEn: string }[] };
+    productNameEn: string;
+    productNameAr: string;
+    brand?: string;
+    productAttrs: Prisma.InputJsonValue;
+    basePrice?: number;
+    vatRate?: number;
+  };
+
   async function seedRequest(opts: {
     requestNo: string;
     organisationId: string;
-    serviceItem: typeof svcSupplementFull;
     createdByUserId: string;
     assignedToUserId?: string;
     state: RequestState;
-    productNameEn: string;
-    productNameAr: string;
-    brand: string;
-    productAttrs: Prisma.InputJsonValue;
+    items: ItemInput[];
     submissionNo: number;
     priceCharged: number;
     discountApplied?: number;
@@ -1027,15 +1463,10 @@ async function main() {
       data: {
         requestNo: opts.requestNo,
         organisationId: opts.organisationId,
-        serviceItemId: opts.serviceItem.id,
         createdByUserId: opts.createdByUserId,
         assignedToUserId: opts.assignedToUserId,
         state: opts.state,
         heldFromState: opts.heldFromState,
-        productNameEn: opts.productNameEn,
-        productNameAr: opts.productNameAr,
-        brand: opts.brand,
-        productAttrs: opts.productAttrs,
         submissionNo: opts.submissionNo,
         priceCharged: price,
         discountApplied: discount,
@@ -1043,7 +1474,20 @@ async function main() {
         submittedAt: opts.submittedAt,
         closedAt: opts.closedAt,
         slaDueAt: opts.slaDueAt,
+        items: {
+          create: opts.items.map((it, idx) => ({
+            serviceItemId: it.serviceItem.id,
+            productNameEn: it.productNameEn,
+            productNameAr: it.productNameAr,
+            brand: it.brand,
+            productAttrs: it.productAttrs,
+            basePrice: new Prisma.Decimal(it.basePrice ?? it.serviceItem.basePrice),
+            vatRate: new Prisma.Decimal(it.vatRate ?? it.serviceItem.vatRate),
+            sortOrder: idx,
+          })),
+        },
       },
+      include: { items: true },
     });
 
     for (const event of opts.events) {
@@ -1077,11 +1521,13 @@ async function main() {
       });
     }
 
-    if (opts.attachFirstDoc && opts.serviceItem.requiredDocuments[0]) {
-      const required = opts.serviceItem.requiredDocuments[0];
+    if (opts.attachFirstDoc && opts.items[0] && opts.items[0].serviceItem.requiredDocuments[0]) {
+      const firstItem = request.items[0];
+      const required = opts.items[0].serviceItem.requiredDocuments[0];
       const doc = await prisma.requestDocument.create({
         data: {
           requestId: request.id,
+          requestItemId: firstItem.id,
           requiredDocumentId: required.id,
           label: required.nameEn,
         },
@@ -1124,19 +1570,23 @@ async function main() {
   await seedRequest({
     requestNo: "ATL-2026-000401",
     organisationId: alNoor.id,
-    serviceItem: svcSupplementFull,
     createdByUserId: alNoorUser.id,
     state: RequestState.DRAFT,
-    productNameEn: "Pure Quercetin 400 mg Capsules",
-    productNameAr: "كبسولات كيرسيتين النقي 400 ملغ",
-    brand: "Al Noor Vita",
-    productAttrs: {
-      dosage_form: "capsule",
-      target_group: "adult",
-      has_nutrition_claim: false,
-      has_health_claim: true,
-      contains_fish_oil: false,
-    },
+    items: [
+      {
+        serviceItem: svcSupplementFull(),
+        productNameEn: "Pure Quercetin 400 mg Capsules",
+        productNameAr: "كبسولات كيرسيتين النقي 400 ملغ",
+        brand: "Al Noor Vita",
+        productAttrs: {
+          dosage_form: "capsule",
+          target_group: "adult",
+          has_nutrition_claim: false,
+          has_health_claim: true,
+          contains_fish_oil: false,
+        },
+      },
+    ],
     submissionNo: 1,
     priceCharged: 4500,
     events: [
@@ -1150,36 +1600,40 @@ async function main() {
     ],
   });
 
+  function svcSupplementFull() {
+    return createdFoodItems.find((i) => i.code === "SUPPLEMENT_LABEL_FULL")!;
+  }
+  function svcNutrition() {
+    return createdFoodItems.find((i) => i.code === "NUTRITION_FACTS_VERIFY")!;
+  }
+  function svcClaimsFull() {
+    return createdFoodItems.find((i) => i.code === "CLAIMS_SUBSTANTIATION")!;
+  }
+
   // 2) UNDER_INTAKE_REVIEW — Al Noor
   const submitted2 = daysAgo(5);
   await seedRequest({
     requestNo: "ATL-2026-000402",
     organisationId: alNoor.id,
-    serviceItem: svcNutrition,
     createdByUserId: alNoorUser.id,
     assignedToUserId: intake.id,
     state: RequestState.UNDER_INTAKE_REVIEW,
-    productNameEn: "Date Protein Bar 40 g",
-    productNameAr: "بار بروتين التمر 40 غرام",
-    brand: "Oasis Fuel",
-    productAttrs: {
-      dosage_form: "bar",
-      package_size_cm2: 180,
-      has_nutrition_claim: true,
-      has_health_claim: false,
-    },
+    items: [
+      {
+        serviceItem: svcNutrition(),
+        productNameEn: "Date Protein Bar 40 g",
+        productNameAr: "بار بروتين التمر 40 غرام",
+        brand: "Oasis Fuel",
+        productAttrs: { dosage_form: "bar", has_nutrition_claim: true, has_health_claim: false },
+      },
+    ],
     submissionNo: 1,
     priceCharged: 2200,
     submittedAt: submitted2,
-    slaDueAt: hoursFrom(submitted2, svcNutrition.slaHours),
+    slaDueAt: hoursFrom(submitted2, Number(svcNutrition().slaHours)),
     attachFirstDoc: true,
     events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: alNoorUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: daysAgo(6),
-      },
+      { toState: RequestState.DRAFT, actorUserId: alNoorUser.id, actorRole: Role.CLIENT_USER, createdAt: daysAgo(6) },
       {
         fromState: RequestState.DRAFT,
         toState: RequestState.SUBMITTED,
@@ -1214,40 +1668,28 @@ async function main() {
   await seedRequest({
     requestNo: "ATL-2026-000403",
     organisationId: alNoor.id,
-    serviceItem: svcSupplementFull,
     createdByUserId: alNoorOwner.id,
     assignedToUserId: intake.id,
     state: RequestState.RETURNED_TO_CLIENT,
-    productNameEn: "Omega-3 Softgels 1000 mg",
-    productNameAr: "أوميغا-3 سوفتجل 1000 ملغ",
-    brand: "Al Noor Marine",
-    productAttrs: {
-      dosage_form: "softgel",
-      contains_fish_oil: true,
-      target_group: "adult",
-      has_health_claim: true,
-    },
+    items: [
+      {
+        serviceItem: svcSupplementFull(),
+        productNameEn: "Omega-3 Softgels 1000 mg",
+        productNameAr: "أوميغا-3 سوفتجل 1000 ملغ",
+        brand: "Al Noor Marine",
+        productAttrs: { dosage_form: "softgel", contains_fish_oil: true, target_group: "adult", has_health_claim: true, has_nutrition_claim: false },
+      },
+    ],
     submissionNo: 1,
     priceCharged: 4500,
     discountApplied: 500,
     couponCode: couponAtlas500.code,
     submittedAt: submitted3,
-    slaDueAt: hoursFrom(submitted3, svcSupplementFull.slaHours),
+    slaDueAt: hoursFrom(submitted3, Number(svcSupplementFull().slaHours)),
     attachFirstDoc: true,
     events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: alNoorOwner.id,
-        actorRole: Role.CLIENT_OWNER,
-        createdAt: daysAgo(13),
-      },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: alNoorOwner.id,
-        actorRole: Role.CLIENT_OWNER,
-        createdAt: submitted3,
-      },
+      { toState: RequestState.DRAFT, actorUserId: alNoorOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: daysAgo(13) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: alNoorOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: submitted3 },
       {
         fromState: RequestState.SUBMITTED,
         toState: RequestState.UNDER_INTAKE_REVIEW,
@@ -1291,29 +1733,35 @@ async function main() {
     },
   });
 
-  // 4) Resubmission at 50% — same product, submissionNo 2, ACCEPTED → TECHNICAL_REVIEW path start
+  // 4) Resubmission at 50% — same product, submissionNo 2, TECHNICAL_REVIEW
   const submitted4 = daysAgo(7);
   await seedRequest({
     requestNo: "ATL-2026-000404",
     organisationId: alNoor.id,
-    serviceItem: svcSupplementFull,
     createdByUserId: alNoorOwner.id,
     assignedToUserId: reviewer.id,
     state: RequestState.TECHNICAL_REVIEW,
-    productNameEn: "Omega-3 Softgels 1000 mg",
-    productNameAr: "أوميغا-3 سوفتجل 1000 ملغ",
-    brand: "Al Noor Marine",
-    productAttrs: {
-      dosage_form: "softgel",
-      contains_fish_oil: true,
-      target_group: "adult",
-      has_health_claim: true,
-      prior_request_no: "ATL-2026-000403",
-    },
+    items: [
+      {
+        serviceItem: svcSupplementFull(),
+        productNameEn: "Omega-3 Softgels 1000 mg",
+        productNameAr: "أوميغا-3 سوفتجل 1000 ملغ",
+        brand: "Al Noor Marine",
+        productAttrs: {
+          dosage_form: "softgel",
+          contains_fish_oil: true,
+          target_group: "adult",
+          has_health_claim: true,
+          has_nutrition_claim: false,
+          prior_request_no: "ATL-2026-000403",
+        },
+        basePrice: 2250,
+      },
+    ],
     submissionNo: 2,
     priceCharged: 2250,
     submittedAt: submitted4,
-    slaDueAt: hoursFrom(submitted4, svcSupplementFull.slaHours),
+    slaDueAt: hoursFrom(submitted4, Number(svcSupplementFull().slaHours)),
     attachFirstDoc: true,
     events: [
       {
@@ -1324,13 +1772,7 @@ async function main() {
         createdAt: daysAgo(8),
         metadata: { priorRequestNo: "ATL-2026-000403", resubmissionPct: 0.5 },
       },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: alNoorOwner.id,
-        actorRole: Role.CLIENT_OWNER,
-        createdAt: submitted4,
-      },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: alNoorOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: submitted4 },
       {
         fromState: RequestState.SUBMITTED,
         toState: RequestState.UNDER_INTAKE_REVIEW,
@@ -1356,15 +1798,15 @@ async function main() {
       {
         fromState: RequestState.ASSESSMENT_QUEUED,
         toState: RequestState.ASSESSMENT_RUNNING,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
         createdAt: hoursFrom(submitted4, 7),
       },
       {
         fromState: RequestState.ASSESSMENT_RUNNING,
         toState: RequestState.TECHNICAL_REVIEW,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
         note: "Draft evaluation ready for reviewer",
         createdAt: hoursFrom(submitted4, 8),
       },
@@ -1393,38 +1835,26 @@ async function main() {
   await seedRequest({
     requestNo: "ATL-2026-000405",
     organisationId: alNoor.id,
-    serviceItem: svcClaimsFull,
     createdByUserId: alNoorUser.id,
     assignedToUserId: decisionMaker.id,
     state: RequestState.REPORT_ISSUED,
-    productNameEn: "Vitamin D3 5000 IU Tablets",
-    productNameAr: "أقراص فيتامين د3 5000 وحدة دولية",
-    brand: "Al Noor Vita",
-    productAttrs: {
-      dosage_form: "tablet",
-      target_group: "adult",
-      has_health_claim: true,
-      has_nutrition_claim: true,
-    },
+    items: [
+      {
+        serviceItem: svcClaimsFull(),
+        productNameEn: "Vitamin D3 5000 IU Tablets",
+        productNameAr: "أقراص فيتامين د3 5000 وحدة دولية",
+        brand: "Al Noor Vita",
+        productAttrs: { dosage_form: "tablet", target_group: "adult", has_health_claim: true, has_nutrition_claim: true, contains_fish_oil: false },
+      },
+    ],
     submissionNo: 1,
     priceCharged: 3500,
     submittedAt: submitted5,
-    slaDueAt: hoursFrom(submitted5, svcClaimsFull.slaHours),
+    slaDueAt: hoursFrom(submitted5, Number(svcClaimsFull().slaHours)),
     attachFirstDoc: true,
     events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: alNoorUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: daysAgo(42),
-      },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: alNoorUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: submitted5,
-      },
+      { toState: RequestState.DRAFT, actorUserId: alNoorUser.id, actorRole: Role.CLIENT_USER, createdAt: daysAgo(42) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: alNoorUser.id, actorRole: Role.CLIENT_USER, createdAt: submitted5 },
       {
         fromState: RequestState.SUBMITTED,
         toState: RequestState.UNDER_INTAKE_REVIEW,
@@ -1449,15 +1879,15 @@ async function main() {
       {
         fromState: RequestState.ASSESSMENT_QUEUED,
         toState: RequestState.ASSESSMENT_RUNNING,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
         createdAt: hoursFrom(submitted5, 12),
       },
       {
         fromState: RequestState.ASSESSMENT_RUNNING,
         toState: RequestState.TECHNICAL_REVIEW,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
         createdAt: daysAgo(35),
       },
       {
@@ -1481,10 +1911,8 @@ async function main() {
       {
         authorUserId: decisionMaker.id,
         direction: CommentDirection.ATLAS_TO_CLIENT,
-        bodyEn:
-          "Report issued. Executive Summary and Detailed Findings are available for download. Verify at /verify/ATL-2026-000405.",
-        bodyAr:
-          "صدر التقرير. الملخص التنفيذي والتقرير التفصيلي متاحان للتحميل. تحقق عبر /verify/ATL-2026-000405.",
+        bodyEn: "Report issued. Executive Summary and Detailed Findings are available for download. Verify at /verify/ATL-2026-000405.",
+        bodyAr: "صدر التقرير. الملخص التنفيذي والتقرير التفصيلي متاحان للتحميل. تحقق عبر /verify/ATL-2026-000405.",
         createdAt: issued5,
       },
     ],
@@ -1495,38 +1923,28 @@ async function main() {
   await seedRequest({
     requestNo: "ATL-2026-000406",
     organisationId: gulfBeauty.id,
-    serviceItem: svcCosmeticLabel,
     createdByUserId: gulfUser.id,
-    assignedToUserId: reviewer.id,
+    assignedToUserId: evaluator.id,
     state: RequestState.ASSESSMENT_RUNNING,
-    productNameEn: "Hyaluronic Hydra Serum 30 ml",
-    productNameAr: "سيروم الهيالورونيك المرطب 30 مل",
-    brand: "Gulf Glow",
-    productAttrs: {
-      product_type: "leave-on",
-      package_size_cm2: 95,
-    },
+    items: [
+      {
+        serviceItem: svcCosLabelAssessment,
+        productNameEn: "Hyaluronic Hydra Serum 30 ml",
+        productNameAr: "سيروم الهيالورونيك المرطب 30 مل",
+        brand: "Gulf Glow",
+        productAttrs: { product_name: "Hyaluronic Hydra Serum 30 ml", brand_name: "Gulf Glow", client_name: "Gulf Beauty Trading LLC" },
+      },
+    ],
     submissionNo: 1,
-    priceCharged: 2880,
-    discountApplied: 320,
+    priceCharged: 1500,
+    discountApplied: 150,
     couponCode: couponCosmetic10.code,
     submittedAt: submitted6,
-    slaDueAt: hoursFrom(submitted6, svcCosmeticLabel.slaHours),
+    slaDueAt: hoursFrom(submitted6, Number(svcCosLabelAssessment.slaHours)),
     attachFirstDoc: true,
     events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: gulfUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: daysAgo(4),
-      },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: gulfUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: submitted6,
-      },
+      { toState: RequestState.DRAFT, actorUserId: gulfUser.id, actorRole: Role.CLIENT_USER, createdAt: daysAgo(4) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: gulfUser.id, actorRole: Role.CLIENT_USER, createdAt: submitted6 },
       {
         fromState: RequestState.SUBMITTED,
         toState: RequestState.UNDER_INTAKE_REVIEW,
@@ -1551,67 +1969,53 @@ async function main() {
       {
         fromState: RequestState.ASSESSMENT_QUEUED,
         toState: RequestState.ASSESSMENT_RUNNING,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
+        note: "Auto-routed to default Evaluator for Technical Label Assessment",
         createdAt: hoursFrom(submitted6, 10),
       },
     ],
   });
 
-  const req406 = await prisma.request.findUniqueOrThrow({
-    where: { requestNo: "ATL-2026-000406" },
-  });
+  const req406 = await prisma.request.findUniqueOrThrow({ where: { requestNo: "ATL-2026-000406" } });
   await prisma.couponRedemption.create({
     data: {
       couponId: couponCosmetic10.id,
       organisationId: gulfBeauty.id,
       requestId: req406.id,
-      discountApplied: new Prisma.Decimal(320),
+      discountApplied: new Prisma.Decimal(150),
       redeemedAt: submitted6,
     },
   });
-  await prisma.coupon.update({
-    where: { id: couponCosmetic10.id },
-    data: { usedCount: 1 },
-  });
+  await prisma.coupon.update({ where: { id: couponCosmetic10.id }, data: { usedCount: 1 } });
 
-  // 7) CLOSED — Gulf Beauty INCI screen
+  // 7) CLOSED — Gulf Beauty cosmetic SCOC
   const submitted7 = daysAgo(60);
   const closed7 = daysAgo(45);
   await seedRequest({
     requestNo: "ATL-2026-000407",
     organisationId: gulfBeauty.id,
-    serviceItem: svcInciScreen,
     createdByUserId: gulfOwner.id,
     assignedToUserId: decisionMaker.id,
     state: RequestState.CLOSED,
-    productNameEn: "Mineral Sunscreen SPF 50",
-    productNameAr: "واقي شمس معدني عامل حماية 50",
-    brand: "Gulf Glow",
-    productAttrs: {
-      product_type: "leave-on",
-      uv_filters: true,
-    },
+    items: [
+      {
+        serviceItem: svcCosScoc,
+        productNameEn: "Mineral Sunscreen SPF 50",
+        productNameAr: "واقي شمس معدني عامل حماية 50",
+        brand: "Gulf Glow",
+        productAttrs: { faseh_request_no: "FASEH-2025-88213", importer: "Gulf Beauty Trading LLC", country_of_origin: "France" },
+      },
+    ],
     submissionNo: 1,
-    priceCharged: 2800,
+    priceCharged: 1200,
     submittedAt: submitted7,
     closedAt: closed7,
-    slaDueAt: hoursFrom(submitted7, svcInciScreen.slaHours),
+    slaDueAt: hoursFrom(submitted7, Number(svcCosScoc.slaHours)),
     attachFirstDoc: true,
     events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: gulfOwner.id,
-        actorRole: Role.CLIENT_OWNER,
-        createdAt: daysAgo(62),
-      },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: gulfOwner.id,
-        actorRole: Role.CLIENT_OWNER,
-        createdAt: submitted7,
-      },
+      { toState: RequestState.DRAFT, actorUserId: gulfOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: daysAgo(62) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: gulfOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: submitted7 },
       {
         fromState: RequestState.SUBMITTED,
         toState: RequestState.UNDER_INTAKE_REVIEW,
@@ -1636,15 +2040,15 @@ async function main() {
       {
         fromState: RequestState.ASSESSMENT_QUEUED,
         toState: RequestState.ASSESSMENT_RUNNING,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
         createdAt: hoursFrom(submitted7, 11),
       },
       {
         fromState: RequestState.ASSESSMENT_RUNNING,
         toState: RequestState.TECHNICAL_REVIEW,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
         createdAt: daysAgo(55),
       },
       {
@@ -1672,41 +2076,32 @@ async function main() {
     ],
   });
 
-  // 8) ON_HOLD — Gulf Beauty GHAD readiness
+  // 8) ON_HOLD — Gulf Beauty GHAD product registration
   const submitted8 = daysAgo(9);
   await seedRequest({
     requestNo: "ATL-2026-000408",
     organisationId: gulfBeauty.id,
-    serviceItem: svcGhadReady,
     createdByUserId: gulfUser.id,
     assignedToUserId: intake.id,
     state: RequestState.ON_HOLD,
     heldFromState: RequestState.UNDER_INTAKE_REVIEW,
-    productNameEn: "Rose Clay Face Mask 50 ml",
-    productNameAr: "قناع الطين الوردي للوجه 50 مل",
-    brand: "Gulf Glow",
-    productAttrs: {
-      product_type: "rinse-off",
-    },
+    items: [
+      {
+        serviceItem: svcCosGhadRegistration,
+        productNameEn: "Rose Clay Face Mask 50 ml",
+        productNameAr: "قناع الطين الوردي للوجه 50 مل",
+        brand: "Gulf Glow",
+        productAttrs: { client_name: "Gulf Beauty Trading LLC" },
+      },
+    ],
     submissionNo: 1,
-    priceCharged: 1500,
+    priceCharged: 2000,
     submittedAt: submitted8,
-    slaDueAt: hoursFrom(submitted8, svcGhadReady.slaHours),
+    slaDueAt: hoursFrom(submitted8, Number(svcCosGhadRegistration.slaHours)),
     attachFirstDoc: true,
     events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: gulfUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: daysAgo(10),
-      },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: gulfUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: submitted8,
-      },
+      { toState: RequestState.DRAFT, actorUserId: gulfUser.id, actorRole: Role.CLIENT_USER, createdAt: daysAgo(10) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: gulfUser.id, actorRole: Role.CLIENT_USER, createdAt: submitted8 },
       {
         fromState: RequestState.SUBMITTED,
         toState: RequestState.UNDER_INTAKE_REVIEW,
@@ -1747,6 +2142,393 @@ async function main() {
     ],
   });
 
+  // 9) SUBMITTED — Al Noor (SLA at risk demo)
+  const slaRiskSubmit = daysAgo(4);
+  await seedRequest({
+    requestNo: "ATL-2026-000409",
+    organisationId: alNoor.id,
+    createdByUserId: alNoorUser.id,
+    assignedToUserId: intake.id,
+    state: RequestState.SUBMITTED,
+    items: [
+      {
+        serviceItem: svcSupplementFull(),
+        productNameEn: "Vitamin D3 Drops 400 IU",
+        productNameAr: "نقط فيتامين د3 400 وحدة",
+        brand: "Al Noor Kids",
+        productAttrs: {
+          dosage_form: "liquid",
+          target_group: "child",
+          contains_fish_oil: false,
+          has_nutrition_claim: false,
+          has_health_claim: false,
+        },
+      },
+    ],
+    submissionNo: 1,
+    priceCharged: 3200,
+    submittedAt: slaRiskSubmit,
+    slaDueAt: hoursFrom(slaRiskSubmit, 24),
+    attachFirstDoc: true,
+    events: [
+      { toState: RequestState.DRAFT, actorUserId: alNoorUser.id, actorRole: Role.CLIENT_USER, createdAt: daysAgo(5) },
+      {
+        fromState: RequestState.DRAFT,
+        toState: RequestState.SUBMITTED,
+        actorUserId: alNoorUser.id,
+        actorRole: Role.CLIENT_USER,
+        note: "Submitted — demo SLA at-risk item",
+        createdAt: slaRiskSubmit,
+      },
+    ],
+  });
+
+  // 10) TECHNICAL_REVIEW — Gulf Beauty cosmetic label
+  const techSubmit = daysAgo(9);
+  await seedRequest({
+    requestNo: "ATL-2026-000410",
+    organisationId: gulfBeauty.id,
+    createdByUserId: gulfUser.id,
+    assignedToUserId: reviewer.id,
+    state: RequestState.TECHNICAL_REVIEW,
+    items: [
+      {
+        serviceItem: svcCosLabelAssessment,
+        productNameEn: "Niacinamide Serum 10%",
+        productNameAr: "سيروم نياسيناميد 10٪",
+        brand: "Gulf Glow",
+        productAttrs: { product_name: "Niacinamide Serum 10%", brand_name: "Gulf Glow", client_name: "Gulf Beauty Trading LLC" },
+      },
+    ],
+    submissionNo: 1,
+    priceCharged: 1500,
+    submittedAt: techSubmit,
+    slaDueAt: hoursFrom(techSubmit, Number(svcCosLabelAssessment.slaHours)),
+    attachFirstDoc: true,
+    events: [
+      { toState: RequestState.DRAFT, actorUserId: gulfUser.id, actorRole: Role.CLIENT_USER, createdAt: daysAgo(10) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: gulfUser.id, actorRole: Role.CLIENT_USER, createdAt: techSubmit },
+      {
+        fromState: RequestState.SUBMITTED,
+        toState: RequestState.UNDER_INTAKE_REVIEW,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(techSubmit, 3),
+      },
+      {
+        fromState: RequestState.UNDER_INTAKE_REVIEW,
+        toState: RequestState.ACCEPTED,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(techSubmit, 20),
+      },
+      {
+        fromState: RequestState.ACCEPTED,
+        toState: RequestState.ASSESSMENT_QUEUED,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(techSubmit, 20),
+      },
+      {
+        fromState: RequestState.ASSESSMENT_QUEUED,
+        toState: RequestState.ASSESSMENT_RUNNING,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
+        createdAt: hoursFrom(techSubmit, 30),
+      },
+      {
+        fromState: RequestState.ASSESSMENT_RUNNING,
+        toState: RequestState.TECHNICAL_REVIEW,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
+        createdAt: hoursFrom(techSubmit, 50),
+      },
+    ],
+  });
+
+  // 11) DECISION — Al Noor
+  const decisionSubmit = daysAgo(11);
+  await seedRequest({
+    requestNo: "ATL-2026-000411",
+    organisationId: alNoor.id,
+    createdByUserId: alNoorOwner.id,
+    assignedToUserId: decisionMaker.id,
+    state: RequestState.DECISION,
+    items: [
+      {
+        serviceItem: svcNutrition(),
+        productNameEn: "Whey Isolate Vanilla 1 kg",
+        productNameAr: "واي عازل فانيلا 1 كغ",
+        brand: "Al Noor Sport",
+        productAttrs: { dosage_form: "powder", has_nutrition_claim: true, target_group: "athlete", contains_fish_oil: false, has_health_claim: false },
+      },
+    ],
+    submissionNo: 1,
+    priceCharged: 4100,
+    submittedAt: decisionSubmit,
+    slaDueAt: hoursFrom(decisionSubmit, Number(svcNutrition().slaHours)),
+    attachFirstDoc: true,
+    events: [
+      { toState: RequestState.DRAFT, actorUserId: alNoorOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: daysAgo(12) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: alNoorOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: decisionSubmit },
+      {
+        fromState: RequestState.SUBMITTED,
+        toState: RequestState.UNDER_INTAKE_REVIEW,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(decisionSubmit, 2),
+      },
+      {
+        fromState: RequestState.UNDER_INTAKE_REVIEW,
+        toState: RequestState.ACCEPTED,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(decisionSubmit, 10),
+      },
+      {
+        fromState: RequestState.ACCEPTED,
+        toState: RequestState.ASSESSMENT_QUEUED,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(decisionSubmit, 10),
+      },
+      {
+        fromState: RequestState.ASSESSMENT_QUEUED,
+        toState: RequestState.ASSESSMENT_RUNNING,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
+        createdAt: hoursFrom(decisionSubmit, 20),
+      },
+      {
+        fromState: RequestState.ASSESSMENT_RUNNING,
+        toState: RequestState.TECHNICAL_REVIEW,
+        actorUserId: evaluator.id,
+        actorRole: Role.EVALUATOR,
+        createdAt: hoursFrom(decisionSubmit, 40),
+      },
+      {
+        fromState: RequestState.TECHNICAL_REVIEW,
+        toState: RequestState.DECISION,
+        actorUserId: reviewer.id,
+        actorRole: Role.TECHNICAL_REVIEWER,
+        note: "Technical pack complete — ready for decision",
+        createdAt: hoursFrom(decisionSubmit, 70),
+      },
+    ],
+  });
+
+  // 12) RETURNED_TO_CLIENT — Al Noor (second, different reason)
+  const returnedB = daysAgo(3);
+  await seedRequest({
+    requestNo: "ATL-2026-000412",
+    organisationId: alNoor.id,
+    createdByUserId: alNoorOwner.id,
+    assignedToUserId: intake.id,
+    state: RequestState.RETURNED_TO_CLIENT,
+    items: [
+      {
+        serviceItem: svcSupplementFull(),
+        productNameEn: "Collagen Peptides Unflavoured",
+        productNameAr: "ببتيدات الكولاجين بدون نكهة",
+        brand: "Al Noor Beauty In",
+        productAttrs: { dosage_form: "powder", target_group: "adult", contains_fish_oil: false, has_nutrition_claim: false, has_health_claim: false },
+      },
+    ],
+    submissionNo: 1,
+    priceCharged: 3900,
+    submittedAt: daysAgo(6),
+    slaDueAt: hoursFrom(daysAgo(6), Number(svcSupplementFull().slaHours)),
+    attachFirstDoc: true,
+    events: [
+      { toState: RequestState.DRAFT, actorUserId: alNoorOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: daysAgo(7) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: alNoorOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: daysAgo(6) },
+      {
+        fromState: RequestState.SUBMITTED,
+        toState: RequestState.UNDER_INTAKE_REVIEW,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: daysAgo(5),
+      },
+      {
+        fromState: RequestState.UNDER_INTAKE_REVIEW,
+        toState: RequestState.RETURNED_TO_CLIENT,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        reasonCodes: [ReturnReasonCode.LOW_RESOLUTION, ReturnReasonCode.ILLEGIBLE_SCAN],
+        faultAttribution: FaultAttribution.CLIENT_FAULT,
+        note: "Artwork below 300 DPI — please re-upload carton panels.",
+        createdAt: returnedB,
+      },
+    ],
+    comments: [
+      {
+        authorUserId: intake.id,
+        direction: CommentDirection.ATLAS_TO_CLIENT,
+        reasonCode: ReturnReasonCode.LOW_RESOLUTION,
+        bodyEn: "Please supply the carton artwork at 300 DPI minimum. Current files are ~120 DPI and text is not legible for SFDA review.",
+        bodyAr: "يرجى تزويدنا بتصميم الكرتون بدقة 300 DPI كحد أدنى. الملفات الحالية حوالي 120 DPI والنص غير مقروء لمراجعة الهيئة.",
+        createdAt: returnedB,
+      },
+    ],
+  });
+
+  // 13) CANCELLED — Gulf Beauty SABER SCOC, client cancelled after submission
+  const submitted13 = daysAgo(15);
+  const cancelled13 = daysAgo(13);
+  await seedRequest({
+    requestNo: "ATL-2026-000413",
+    organisationId: gulfBeauty.id,
+    createdByUserId: gulfOwner.id,
+    assignedToUserId: intake.id,
+    state: RequestState.CANCELLED,
+    items: [
+      {
+        serviceItem: svcSaberScoc,
+        productNameEn: "Ceramic Diffuser 200 ml",
+        productNameAr: "مبخرة سيراميك 200 مل",
+        brand: "Gulf Home",
+        productAttrs: { shipment_details: "1x40ft container, Jeddah Islamic Port", importer_information: "Gulf Beauty Trading LLC", product_certificate_number: "PCOC-2026-771102" },
+      },
+    ],
+    submissionNo: 1,
+    priceCharged: 1200,
+    submittedAt: submitted13,
+    slaDueAt: hoursFrom(submitted13, Number(svcSaberScoc.slaHours)),
+    events: [
+      { toState: RequestState.DRAFT, actorUserId: gulfOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: daysAgo(16) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: gulfOwner.id, actorRole: Role.CLIENT_OWNER, createdAt: submitted13 },
+      {
+        fromState: RequestState.SUBMITTED,
+        toState: RequestState.UNDER_INTAKE_REVIEW,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(submitted13, 3),
+      },
+      {
+        fromState: RequestState.UNDER_INTAKE_REVIEW,
+        toState: RequestState.CANCELLED,
+        actorUserId: gulfOwner.id,
+        actorRole: Role.CLIENT_OWNER,
+        note: "Shipment cancelled by the client before certification completed.",
+        createdAt: cancelled13,
+      },
+    ],
+    comments: [
+      {
+        authorUserId: gulfOwner.id,
+        direction: CommentDirection.CLIENT_TO_ATLAS,
+        bodyEn: "The underlying shipment order was cancelled by our buyer — please cancel this SCOC request.",
+        bodyAr: "تم إلغاء طلب الشحنة الأساسي من قبل المشتري — يرجى إلغاء طلب شهادة المطابقة هذه.",
+        createdAt: cancelled13,
+      },
+    ],
+  });
+
+  // 14) ACCEPTED — Al Noor multi-item SABER request (PCOC + SCOC bundled)
+  const submitted14 = daysAgo(2);
+  await seedRequest({
+    requestNo: "ATL-2026-000414",
+    organisationId: alNoor.id,
+    createdByUserId: alNoorAdmin.id,
+    assignedToUserId: intake.id,
+    state: RequestState.ACCEPTED,
+    items: [
+      {
+        serviceItem: svcSaberPcoc,
+        productNameEn: "Digital Thermometer TH-220",
+        productNameAr: "ميزان حرارة رقمي TH-220",
+        brand: "Al Noor MedTech",
+        productAttrs: {
+          product_category: "Medical devices",
+          hs_code: "9025.19",
+          manufacturer: "Al Noor MedTech Factory",
+          country_of_origin: "Saudi Arabia",
+          technical_regulation: "LOW_VOLTAGE_ELECTRICAL",
+        },
+      },
+      {
+        serviceItem: svcSaberScoc,
+        productNameEn: "Digital Thermometer TH-220",
+        productNameAr: "ميزان حرارة رقمي TH-220",
+        brand: "Al Noor MedTech",
+        productAttrs: { shipment_details: "2x20ft container, King Abdulaziz Port", importer_information: "Al Noor Pharmaceuticals Co.", product_certificate_number: "Pending PCOC issuance" },
+      },
+    ],
+    submissionNo: 1,
+    priceCharged: 4000,
+    submittedAt: submitted14,
+    slaDueAt: hoursFrom(submitted14, Number(svcSaberPcoc.slaHours)),
+    attachFirstDoc: true,
+    events: [
+      { toState: RequestState.DRAFT, actorUserId: alNoorAdmin.id, actorRole: Role.CLIENT_ADMIN, note: "Bundled PCOC + SCOC cart", createdAt: daysAgo(3) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: alNoorAdmin.id, actorRole: Role.CLIENT_ADMIN, createdAt: submitted14 },
+      {
+        fromState: RequestState.SUBMITTED,
+        toState: RequestState.UNDER_INTAKE_REVIEW,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(submitted14, 2),
+      },
+      {
+        fromState: RequestState.UNDER_INTAKE_REVIEW,
+        toState: RequestState.ACCEPTED,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        note: "Both items documented sufficiently; queued for SABER submission",
+        createdAt: hoursFrom(submitted14, 10),
+      },
+    ],
+  });
+
+  // 15) ASSESSMENT_QUEUED — Gulf Beauty Laboratory Testing Coordination
+  const submitted15 = daysAgo(1);
+  await seedRequest({
+    requestNo: "ATL-2026-000415",
+    organisationId: gulfBeauty.id,
+    createdByUserId: gulfUser.id,
+    assignedToUserId: evaluator.id,
+    state: RequestState.ASSESSMENT_QUEUED,
+    items: [
+      {
+        serviceItem: svcLabTesting,
+        productNameEn: "Charcoal Face Wash 150 ml",
+        productNameAr: "غسول وجه بالفحم 150 مل",
+        brand: "Gulf Glow",
+        productAttrs: { required_standard: "GSO 1943", required_tests: "Microbial limits, heavy metals screen" },
+      },
+    ],
+    submissionNo: 1,
+    priceCharged: 800,
+    submittedAt: submitted15,
+    slaDueAt: hoursFrom(submitted15, Number(svcLabTesting.slaHours)),
+    attachFirstDoc: false,
+    events: [
+      { toState: RequestState.DRAFT, actorUserId: gulfUser.id, actorRole: Role.CLIENT_USER, createdAt: daysAgo(2) },
+      { fromState: RequestState.DRAFT, toState: RequestState.SUBMITTED, actorUserId: gulfUser.id, actorRole: Role.CLIENT_USER, createdAt: submitted15 },
+      {
+        fromState: RequestState.SUBMITTED,
+        toState: RequestState.UNDER_INTAKE_REVIEW,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(submitted15, 2),
+      },
+      {
+        fromState: RequestState.UNDER_INTAKE_REVIEW,
+        toState: RequestState.ACCEPTED,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(submitted15, 6),
+      },
+      {
+        fromState: RequestState.ACCEPTED,
+        toState: RequestState.ASSESSMENT_QUEUED,
+        actorUserId: intake.id,
+        actorRole: Role.INTAKE_OFFICER,
+        createdAt: hoursFrom(submitted15, 6),
+      },
+    ],
+  });
+
   // ── Demo commerce, queues, notifications (full E2E visibility) ───────────
   const allBilled = await prisma.request.findMany({
     where: {
@@ -1766,13 +2548,12 @@ async function main() {
       },
       submittedAt: { not: null },
     },
-    include: { serviceItem: true },
+    include: { items: true },
     orderBy: { requestNo: "asc" },
   });
 
   let invSeq = 1;
   for (const req of allBilled) {
-    if (req.state === RequestState.DRAFT) continue;
     const subtotal = req.priceCharged;
     const discount = req.discountApplied;
     const vat = subtotal.minus(discount).mul(0.15).toDecimalPlaces(2);
@@ -1799,14 +2580,12 @@ async function main() {
         issuedAt: req.submittedAt ?? daysAgo(1),
         dueAt: hoursFrom(req.submittedAt ?? daysAgo(1), 24 * 14),
         lines: {
-          create: [
-            {
-              description: `${req.requestNo} · ${req.productNameEn}`,
-              qty: 1,
-              unitPrice: subtotal,
-              lineTotal: subtotal,
-            },
-          ],
+          create: req.items.map((it) => ({
+            description: `${req.requestNo} · ${it.productNameEn}`,
+            qty: 1,
+            unitPrice: it.basePrice,
+            lineTotal: it.basePrice,
+          })),
         },
       },
     });
@@ -1828,8 +2607,7 @@ async function main() {
     });
 
     if (invoice.status === "PAID" || invoice.status === "PARTIALLY_PAID") {
-      const payAmount =
-        invoice.status === "PAID" ? total : total.mul(0.5).toDecimalPlaces(2);
+      const payAmount = invoice.status === "PAID" ? total : total.mul(0.5).toDecimalPlaces(2);
       const payment = await prisma.payment.create({
         data: {
           organisationId: req.organisationId,
@@ -1839,16 +2617,12 @@ async function main() {
           proofStorageKey: `uploads/${req.organisationId}/payments/${invoiceNo}-proof.pdf`,
           status: "CONFIRMED",
           receivedAt: hoursFrom(req.submittedAt ?? daysAgo(1), 48),
-          confirmedByUserId: admin.id,
+          confirmedByUserId: finance.id,
           confirmedAt: hoursFrom(req.submittedAt ?? daysAgo(1), 50),
         },
       });
       await prisma.paymentAllocation.create({
-        data: {
-          paymentId: payment.id,
-          invoiceId: invoice.id,
-          amount: payAmount,
-        },
+        data: { paymentId: payment.id, invoiceId: invoice.id, amount: payAmount },
       });
       await prisma.ledgerEntry.create({
         data: {
@@ -1861,7 +2635,7 @@ async function main() {
           credit: payAmount,
           descriptionEn: `Payment confirmed for ${invoiceNo}`,
           descriptionAr: `تأكيد دفعة لـ ${invoiceNo}`,
-          createdByUserId: admin.id,
+          createdByUserId: finance.id,
         },
       });
     }
@@ -1891,264 +2665,10 @@ async function main() {
     },
   });
 
-  // Extra open-queue requests so admin dashboard / queues look busy
-  const slaRiskSubmit = daysAgo(4);
-  await seedRequest({
-    requestNo: "ATL-2026-000409",
-    organisationId: alNoor.id,
-    serviceItem: svcSupplementFull,
-    createdByUserId: alNoorUser.id,
-    assignedToUserId: intake.id,
-    state: RequestState.SUBMITTED,
-    productNameEn: "Vitamin D3 Drops 400 IU",
-    productNameAr: "نقط فيتامين د3 400 وحدة",
-    brand: "Al Noor Kids",
-    productAttrs: { dosage_form: "liquid", target_group: "child" },
-    submissionNo: 1,
-    priceCharged: 3200,
-    submittedAt: slaRiskSubmit,
-    // Due soon → SLA at risk on admin dashboard
-    slaDueAt: hoursFrom(slaRiskSubmit, 24),
-    attachFirstDoc: true,
-    events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: alNoorUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: daysAgo(5),
-      },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: alNoorUser.id,
-        actorRole: Role.CLIENT_USER,
-        note: "Submitted — demo SLA at-risk item",
-        createdAt: slaRiskSubmit,
-      },
-    ],
-  });
-
-  const techSubmit = daysAgo(9);
-  await seedRequest({
-    requestNo: "ATL-2026-000410",
-    organisationId: gulfBeauty.id,
-    serviceItem: svcCosmeticLabel,
-    createdByUserId: gulfUser.id,
-    assignedToUserId: reviewer.id,
-    state: RequestState.TECHNICAL_REVIEW,
-    productNameEn: "Niacinamide Serum 10%",
-    productNameAr: "سيروم نياسيناميد 10٪",
-    brand: "Gulf Glow",
-    productAttrs: { product_type: "leave-on", target_group: "adult" },
-    submissionNo: 1,
-    priceCharged: 3600,
-    submittedAt: techSubmit,
-    slaDueAt: hoursFrom(techSubmit, svcCosmeticLabel.slaHours),
-    attachFirstDoc: true,
-    events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: gulfUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: daysAgo(10),
-      },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: gulfUser.id,
-        actorRole: Role.CLIENT_USER,
-        createdAt: techSubmit,
-      },
-      {
-        fromState: RequestState.SUBMITTED,
-        toState: RequestState.UNDER_INTAKE_REVIEW,
-        actorUserId: intake.id,
-        actorRole: Role.INTAKE_OFFICER,
-        createdAt: hoursFrom(techSubmit, 3),
-      },
-      {
-        fromState: RequestState.UNDER_INTAKE_REVIEW,
-        toState: RequestState.ACCEPTED,
-        actorUserId: intake.id,
-        actorRole: Role.INTAKE_OFFICER,
-        createdAt: hoursFrom(techSubmit, 20),
-      },
-      {
-        fromState: RequestState.ACCEPTED,
-        toState: RequestState.ASSESSMENT_QUEUED,
-        actorUserId: intake.id,
-        actorRole: Role.INTAKE_OFFICER,
-        createdAt: hoursFrom(techSubmit, 20),
-      },
-      {
-        fromState: RequestState.ASSESSMENT_QUEUED,
-        toState: RequestState.ASSESSMENT_RUNNING,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
-        createdAt: hoursFrom(techSubmit, 30),
-      },
-      {
-        fromState: RequestState.ASSESSMENT_RUNNING,
-        toState: RequestState.TECHNICAL_REVIEW,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
-        createdAt: hoursFrom(techSubmit, 50),
-      },
-    ],
-  });
-
-  const decisionSubmit = daysAgo(11);
-  await seedRequest({
-    requestNo: "ATL-2026-000411",
-    organisationId: alNoor.id,
-    serviceItem: svcNutrition,
-    createdByUserId: alNoorOwner.id,
-    assignedToUserId: decisionMaker.id,
-    state: RequestState.DECISION,
-    productNameEn: "Whey Isolate Vanilla 1 kg",
-    productNameAr: "واي عازل فانيلا 1 كغ",
-    brand: "Al Noor Sport",
-    productAttrs: {
-      dosage_form: "powder",
-      has_nutrition_claim: true,
-      target_group: "athlete",
-    },
-    submissionNo: 1,
-    priceCharged: 4100,
-    submittedAt: decisionSubmit,
-    slaDueAt: hoursFrom(decisionSubmit, svcNutrition.slaHours),
-    attachFirstDoc: true,
-    events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: alNoorOwner.id,
-        actorRole: Role.CLIENT_OWNER,
-        createdAt: daysAgo(12),
-      },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: alNoorOwner.id,
-        actorRole: Role.CLIENT_OWNER,
-        createdAt: decisionSubmit,
-      },
-      {
-        fromState: RequestState.SUBMITTED,
-        toState: RequestState.UNDER_INTAKE_REVIEW,
-        actorUserId: intake.id,
-        actorRole: Role.INTAKE_OFFICER,
-        createdAt: hoursFrom(decisionSubmit, 2),
-      },
-      {
-        fromState: RequestState.UNDER_INTAKE_REVIEW,
-        toState: RequestState.ACCEPTED,
-        actorUserId: intake.id,
-        actorRole: Role.INTAKE_OFFICER,
-        createdAt: hoursFrom(decisionSubmit, 10),
-      },
-      {
-        fromState: RequestState.ACCEPTED,
-        toState: RequestState.ASSESSMENT_QUEUED,
-        actorUserId: intake.id,
-        actorRole: Role.INTAKE_OFFICER,
-        createdAt: hoursFrom(decisionSubmit, 10),
-      },
-      {
-        fromState: RequestState.ASSESSMENT_QUEUED,
-        toState: RequestState.ASSESSMENT_RUNNING,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
-        createdAt: hoursFrom(decisionSubmit, 20),
-      },
-      {
-        fromState: RequestState.ASSESSMENT_RUNNING,
-        toState: RequestState.TECHNICAL_REVIEW,
-        actorUserId: admin.id,
-        actorRole: Role.SYSTEM_ADMIN,
-        createdAt: hoursFrom(decisionSubmit, 40),
-      },
-      {
-        fromState: RequestState.TECHNICAL_REVIEW,
-        toState: RequestState.DECISION,
-        actorUserId: reviewer.id,
-        actorRole: Role.TECHNICAL_REVIEWER,
-        note: "Technical pack complete — ready for decision",
-        createdAt: hoursFrom(decisionSubmit, 70),
-      },
-    ],
-  });
-
-  // Second returned request (different reason) for attention band + return-reason chart
-  const returnedB = daysAgo(3);
-  await seedRequest({
-    requestNo: "ATL-2026-000412",
-    organisationId: alNoor.id,
-    serviceItem: svcSupplementFull,
-    createdByUserId: alNoorOwner.id,
-    assignedToUserId: intake.id,
-    state: RequestState.RETURNED_TO_CLIENT,
-    productNameEn: "Collagen Peptides Unflavoured",
-    productNameAr: "ببتيدات الكولاجين بدون نكهة",
-    brand: "Al Noor Beauty In",
-    productAttrs: { dosage_form: "powder", target_group: "adult" },
-    submissionNo: 1,
-    priceCharged: 3900,
-    submittedAt: daysAgo(6),
-    slaDueAt: hoursFrom(daysAgo(6), svcSupplementFull.slaHours),
-    attachFirstDoc: true,
-    events: [
-      {
-        toState: RequestState.DRAFT,
-        actorUserId: alNoorOwner.id,
-        actorRole: Role.CLIENT_OWNER,
-        createdAt: daysAgo(7),
-      },
-      {
-        fromState: RequestState.DRAFT,
-        toState: RequestState.SUBMITTED,
-        actorUserId: alNoorOwner.id,
-        actorRole: Role.CLIENT_OWNER,
-        createdAt: daysAgo(6),
-      },
-      {
-        fromState: RequestState.SUBMITTED,
-        toState: RequestState.UNDER_INTAKE_REVIEW,
-        actorUserId: intake.id,
-        actorRole: Role.INTAKE_OFFICER,
-        createdAt: daysAgo(5),
-      },
-      {
-        fromState: RequestState.UNDER_INTAKE_REVIEW,
-        toState: RequestState.RETURNED_TO_CLIENT,
-        actorUserId: intake.id,
-        actorRole: Role.INTAKE_OFFICER,
-        reasonCodes: [ReturnReasonCode.LOW_RESOLUTION, ReturnReasonCode.ILLEGIBLE_SCAN],
-        faultAttribution: FaultAttribution.CLIENT_FAULT,
-        note: "Artwork below 300 DPI — please re-upload carton panels.",
-        createdAt: returnedB,
-      },
-    ],
-    comments: [
-      {
-        authorUserId: intake.id,
-        direction: CommentDirection.ATLAS_TO_CLIENT,
-        reasonCode: ReturnReasonCode.LOW_RESOLUTION,
-        bodyEn:
-          "Please supply the carton artwork at 300 DPI minimum. Current files are ~120 DPI and text is not legible for SFDA review.",
-        bodyAr:
-          "يرجى تزويدنا بتصميم الكرتون بدقة 300 DPI كحد أدنى. الملفات الحالية حوالي 120 DPI والنص غير مقروء لمراجعة الهيئة.",
-        createdAt: returnedB,
-      },
-    ],
-  });
-
   // Push Al Noor over credit limit for admin finance tile
   await prisma.organisation.update({
     where: { id: alNoor.id },
-    data: {
-      creditLimit: new Prisma.Decimal(8000),
-      autoHoldWhenOverLimit: true,
-    },
+    data: { creditLimit: new Prisma.Decimal(8000), autoHoldWhenOverLimit: true },
   });
   await prisma.ledgerEntry.create({
     data: {
@@ -2161,7 +2681,7 @@ async function main() {
       credit: 0,
       descriptionEn: "Demo adjustment — opens an overdue exposure for credit-limit testing",
       descriptionAr: "تسوية تجريبية — تفتح انكشافاً لاختبار حد الائتمان",
-      createdByUserId: admin.id,
+      createdByUserId: finance.id,
     },
   });
 
@@ -2221,11 +2741,8 @@ async function main() {
 
   // Backfill invoices/ledger for any later-seeded open requests still missing commerce
   const stillUnbilled = await prisma.request.findMany({
-    where: {
-      submittedAt: { not: null },
-      state: { not: RequestState.DRAFT },
-      invoices: { none: {} },
-    },
+    where: { submittedAt: { not: null }, state: { not: RequestState.DRAFT }, invoices: { none: {} } },
+    include: { items: true },
   });
   for (const req of stillUnbilled) {
     const subtotal = req.priceCharged;
@@ -2248,14 +2765,12 @@ async function main() {
         issuedAt: req.submittedAt ?? daysAgo(1),
         dueAt: hoursFrom(req.submittedAt ?? daysAgo(1), 24 * 14),
         lines: {
-          create: [
-            {
-              description: `${req.requestNo} · ${req.productNameEn}`,
-              qty: 1,
-              unitPrice: subtotal,
-              lineTotal: subtotal,
-            },
-          ],
+          create: req.items.map((it) => ({
+            description: `${req.requestNo} · ${it.productNameEn}`,
+            qty: 1,
+            unitPrice: it.basePrice,
+            lineTotal: it.basePrice,
+          })),
         },
       },
     });
@@ -2276,9 +2791,13 @@ async function main() {
   }
 
   const requestCount = await prisma.request.count();
+  const requestItemCount = await prisma.requestItem.count();
   const invoiceCount = await prisma.invoice.count();
   const paymentCount = await prisma.payment.count();
   const ledgerCount = await prisma.ledgerEntry.count();
+  const serviceItemCount = await prisma.serviceItem.count();
+  const organisationCount = await prisma.organisation.count();
+  const userCount = await prisma.user.count();
 
   // ── Materialise placeholder files for every seeded storage key ────────────
   // The DB rows reference documents, payment proofs, and logos by storage key;
@@ -2290,9 +2809,7 @@ async function main() {
   });
   // The real Atlas brand logo (from atls.com.sa) ships in the repo; demo client
   // organisations keep a generated initial-tile placeholder.
-  const atlasLogo = await readFile(
-    path.join(process.cwd(), "prisma", "seed-assets", "atlas-logo.svg"),
-  ).catch(() => null);
+  const atlasLogo = await readFile(path.join(process.cwd(), "prisma", "seed-assets", "atlas-logo.svg")).catch(() => null);
   const logoColors = ["#2563eb", "#b45309", "#7c3aed"];
   let placeholderIndex = 0;
   for (const org of orgLogos) {
@@ -2300,20 +2817,12 @@ async function main() {
     const body =
       org.type === OrganisationType.ATLAS && atlasLogo
         ? atlasLogo
-        : placeholderLogoSvg(
-            org.nameEn.trim().charAt(0).toUpperCase() || "A",
-            logoColors[placeholderIndex++ % logoColors.length] ?? "#2563eb",
-          );
+        : placeholderLogoSvg(org.nameEn.trim().charAt(0).toUpperCase() || "A", logoColors[placeholderIndex++ % logoColors.length] ?? "#2563eb");
     await writeSeedFile(org.logoKey, body, "image/svg+xml");
   }
 
-  const docVersions = await prisma.documentVersion.findMany({
-    select: { storageKey: true },
-  });
-  const paymentProofs = await prisma.payment.findMany({
-    where: { proofStorageKey: { not: null } },
-    select: { proofStorageKey: true },
-  });
+  const docVersions = await prisma.documentVersion.findMany({ select: { storageKey: true } });
+  const paymentProofs = await prisma.payment.findMany({ where: { proofStorageKey: { not: null } }, select: { proofStorageKey: true } });
   const pdfKeys = new Set<string>();
   for (const v of docVersions) pdfKeys.add(v.storageKey);
   for (const p of paymentProofs) {
@@ -2329,18 +2838,23 @@ async function main() {
         ok: true,
         password: PASSWORD,
         admin: { email: "admin@atlas.com", password: ADMIN_PASSWORD },
-        organisations: 3,
-        users: 8,
-        serviceItems: createdServiceItems.length,
+        organisations: organisationCount,
+        users: userCount,
+        serviceItems: serviceItemCount,
         coupons: 3,
         requests: requestCount,
+        requestItems: requestItemCount,
         invoices: invoiceCount,
         payments: paymentCount,
         ledgerEntries: ledgerCount,
         staff: {
           intake: intake.email,
+          evaluator: evaluator.email,
           reviewer: reviewer.email,
           decision: decisionMaker.email,
+          finance: finance.email,
+          catalogue: catalogueManager.email,
+          quality: qualityManager.email,
           admin: admin.email,
         },
         tip: "Admin demo: ATLAS_DEMO_USER_EMAIL=admin@atlas.com · Client: owner@alnoorpharma.sa",
@@ -2353,9 +2867,7 @@ async function main() {
 
 main()
   .catch((error: unknown) => {
-    process.stderr.write(
-      `${error instanceof Error ? error.stack ?? error.message : String(error)}\n`,
-    );
+    process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
     process.exitCode = 1;
   })
   .finally(async () => {

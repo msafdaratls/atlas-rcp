@@ -176,9 +176,19 @@ export async function transitionAdminRequest(
 
     const request = await prisma.request.findUnique({
       where: { id: requestId },
-      include: { createdBy: { select: { id: true } } },
+      include: {
+        createdBy: { select: { id: true } },
+        organisation: { select: { nameEn: true, nameAr: true } },
+        items: {
+          take: 1,
+          orderBy: { sortOrder: "asc" },
+          select: { serviceItem: { select: { nameEn: true, nameAr: true } } },
+        },
+      },
     });
     if (!request) return { ok: false, error: "NOT_FOUND" };
+    const serviceNameEn = request.items[0]?.serviceItem.nameEn ?? "";
+    const serviceNameAr = request.items[0]?.serviceItem.nameAr ?? "";
 
     const allowed = allowedTransitionsFor({
       state: request.state,
@@ -436,6 +446,10 @@ export async function transitionAdminRequest(
         if (assignedToUserId) {
           const assignedCopy = notificationCopy("REQUEST_ASSIGNED", {
             requestNo: request.requestNo,
+            customerNameEn: request.organisation.nameEn,
+            customerNameAr: request.organisation.nameAr,
+            serviceNameEn,
+            serviceNameAr,
           });
           await notify(
             {
@@ -458,6 +472,10 @@ export async function transitionAdminRequest(
         if (eventType && request.createdBy) {
           const copy = notificationCopy(eventType, {
             requestNo: request.requestNo,
+            customerNameEn: request.organisation.nameEn,
+            customerNameAr: request.organisation.nameAr,
+            serviceNameEn,
+            serviceNameAr,
             ...(eventType === "CERTIFICATE_REFUSED" ? { reason: note ?? "" } : {}),
           });
           await notify(
@@ -486,6 +504,8 @@ export async function transitionAdminRequest(
           if (eventType === "CERTIFICATE_REFUSED") {
             const closedCopy = notificationCopy("REQUEST_CLOSED", {
               requestNo: request.requestNo,
+              serviceNameEn,
+              serviceNameAr,
             });
             await notify(
               {
@@ -511,6 +531,188 @@ export async function transitionAdminRequest(
           toState,
           error: error instanceof Error ? error.message : "unknown",
         });
+      }
+    });
+
+    revalidatePath("/[locale]/admin/requests", "page");
+    revalidatePath(`/[locale]/admin/requests/${requestId}`, "page");
+    revalidatePath("/[locale]/admin/queues", "page");
+
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    if (message === "CONFLICT") {
+      return { ok: false, error: "CONFLICT" };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const completeApplicationReviewSchema = z.object({
+  requestId: z.string().min(1),
+});
+
+/**
+ * "Complete Application Review": the spec requires this to automatically
+ * move the request to Evaluation and assign the appropriate Evaluator based
+ * on service type, in one action — not three separate manual clicks through
+ * ACCEPTED / ASSESSMENT_QUEUED / ASSESSMENT_RUNNING. This cascades through
+ * those states in a single transaction (each still recorded as its own
+ * RequestEvent for audit trail) and routes to ServiceItem.defaultEvaluatorId.
+ */
+export async function completeApplicationReview(
+  input: z.infer<typeof completeApplicationReviewSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = completeApplicationReviewSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { requestId } = parsed.data;
+
+    const request = await prisma.request.findUnique({
+      where: { id: requestId },
+      include: {
+        createdBy: { select: { id: true } },
+        organisation: { select: { nameEn: true, nameAr: true } },
+        items: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            serviceItem: {
+              select: {
+                nameEn: true,
+                nameAr: true,
+                defaultEvaluatorId: true,
+                defaultEvaluator: { select: { status: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+
+    if (request.state !== "UNDER_INTAKE_REVIEW") {
+      return { ok: false, error: "INVALID_TRANSITION" };
+    }
+
+    if (!canTransitionRequest(session, "ACCEPTED", { fromState: request.state })) {
+      return { ok: false, error: "FORBIDDEN" };
+    }
+
+    const routedItem = request.items.find(
+      (item) =>
+        item.serviceItem.defaultEvaluatorId &&
+        item.serviceItem.defaultEvaluator?.status === "ACTIVE",
+    );
+    const evaluatorId = routedItem?.serviceItem.defaultEvaluatorId ?? null;
+    const serviceNameEn = request.items[0]?.serviceItem.nameEn ?? "";
+    const serviceNameAr = request.items[0]?.serviceItem.nameAr ?? "";
+
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.request.updateMany({
+        where: { id: requestId, state: "UNDER_INTAKE_REVIEW" },
+        data: { state: "ASSESSMENT_RUNNING", assignedToUserId: evaluatorId },
+      });
+      if (updated.count === 0) {
+        throw new Error("CONFLICT");
+      }
+
+      const chain: Array<[RequestState, RequestState]> = [
+        ["UNDER_INTAKE_REVIEW", "ACCEPTED"],
+        ["ACCEPTED", "ASSESSMENT_QUEUED"],
+        ["ASSESSMENT_QUEUED", "ASSESSMENT_RUNNING"],
+      ];
+      for (const [fromState, toState] of chain) {
+        await tx.requestEvent.create({
+          data: {
+            requestId,
+            fromState,
+            toState,
+            actorUserId: session.id,
+            actorRole: session.roles[0] ?? "SYSTEM_ADMIN",
+            note:
+              toState === "ASSESSMENT_RUNNING"
+                ? evaluatorId
+                  ? "Application review completed — auto-assigned to Evaluator by service type"
+                  : "Application review completed — no default Evaluator configured for this service, left unassigned"
+                : "Application review completed (auto-advanced)",
+          },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: session.id,
+          actorRole: session.roles[0],
+          organisationId: request.organisationId,
+          action: "request.completeApplicationReview",
+          entityType: "Request",
+          entityId: requestId,
+          before: { state: request.state, assignedToUserId: request.assignedToUserId },
+          after: { state: "ASSESSMENT_RUNNING", assignedToUserId: evaluatorId },
+        },
+      });
+
+      try {
+        const { notify } = await import("@/server/notifications/notify");
+        const { notificationCopy } = await import("@/server/notifications/copy");
+
+        if (evaluatorId) {
+          await notify(
+            {
+              event: "REQUEST_ASSIGNED",
+              data: {
+                requestId,
+                requestNo: request.requestNo,
+                state: "ASSESSMENT_RUNNING",
+                link: `/admin/requests/${requestId}`,
+                organisationId: request.organisationId,
+                assignedToUserId: evaluatorId,
+                ...notificationCopy("REQUEST_ASSIGNED", {
+                  requestNo: request.requestNo,
+                  customerNameEn: request.organisation.nameEn,
+                  customerNameAr: request.organisation.nameAr,
+                  serviceNameEn,
+                  serviceNameAr,
+                }),
+              },
+            },
+            tx,
+          );
+        }
+
+        if (request.createdBy) {
+          await notify(
+            {
+              event: "REQUEST_ACCEPTED",
+              data: {
+                requestId,
+                requestNo: request.requestNo,
+                state: "ASSESSMENT_RUNNING",
+                link: `/client/requests/${requestId}`,
+                organisationId: request.organisationId,
+                createdByUserId: request.createdBy.id,
+                ...notificationCopy("REQUEST_ACCEPTED", {
+                  requestNo: request.requestNo,
+                }),
+              },
+            },
+            tx,
+          );
+        }
+      } catch (error) {
+        log.error(
+          "admin.requests.completeApplicationReview",
+          "notification delivery failed",
+          {
+            requestId,
+            error: error instanceof Error ? error.message : "unknown",
+          },
+        );
       }
     });
 
@@ -889,6 +1091,12 @@ export async function assignRequest(
         requestNo: true,
         organisationId: true,
         assignedToUserId: true,
+        organisation: { select: { nameEn: true, nameAr: true } },
+        items: {
+          take: 1,
+          orderBy: { sortOrder: "asc" },
+          select: { serviceItem: { select: { nameEn: true, nameAr: true } } },
+        },
       },
     });
     if (!request) return { ok: false, error: "NOT_FOUND" };
@@ -935,6 +1143,10 @@ export async function assignRequest(
           );
           const copy = notificationCopy("REQUEST_ASSIGNED", {
             requestNo: request.requestNo,
+            customerNameEn: request.organisation.nameEn,
+            customerNameAr: request.organisation.nameAr,
+            serviceNameEn: request.items[0]?.serviceItem.nameEn ?? "",
+            serviceNameAr: request.items[0]?.serviceItem.nameAr ?? "",
           });
           await notify(
             {
@@ -2452,6 +2664,7 @@ const updateServiceItemSchema = z.object({
   requiresInspection: z.boolean().optional(),
   requiresLabTesting: z.boolean().optional(),
   requiresFactoryAudit: z.boolean().optional(),
+  defaultEvaluatorId: z.string().min(1).nullable().optional(),
 });
 
 export type UpdateServiceItemInput = z.infer<typeof updateServiceItemSchema>;
@@ -2498,6 +2711,19 @@ export async function updateServiceItem(
     });
     if (!subCategory) return { ok: false, error: "NOT_FOUND" };
 
+    if (data.defaultEvaluatorId) {
+      const evaluator = await prisma.user.findFirst({
+        where: {
+          id: data.defaultEvaluatorId,
+          status: "ACTIVE",
+          organisation: { type: "ATLAS" },
+          roles: { some: { role: "EVALUATOR" } },
+        },
+        select: { id: true },
+      });
+      if (!evaluator) return { ok: false, error: "VALIDATION" };
+    }
+
     try {
       await prisma.serviceItem.update({
         where: { id: existing.id },
@@ -2518,6 +2744,7 @@ export async function updateServiceItem(
           requiresInspection: data.requiresInspection ?? false,
           requiresLabTesting: data.requiresLabTesting ?? false,
           requiresFactoryAudit: data.requiresFactoryAudit ?? false,
+          defaultEvaluatorId: data.defaultEvaluatorId ?? null,
         },
       });
     } catch (error) {

@@ -33,9 +33,15 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
-type Props = { rows: AdminCatalogueItem[]; categoryTree: AdminCategoryTreeNode[] };
+type EvaluatorOption = { id: string; fullNameEn: string; fullNameAr: string };
 
-export function AdminCatalogueTable({ rows, categoryTree }: Props) {
+type Props = {
+  rows: AdminCatalogueItem[];
+  categoryTree: AdminCategoryTreeNode[];
+  evaluators: EvaluatorOption[];
+};
+
+export function AdminCatalogueTable({ rows, categoryTree, evaluators }: Props) {
   const t = useTranslations("adminOps.catalogue");
   const tCommon = useTranslations("common");
   const locale = useLocale();
@@ -204,6 +210,7 @@ export function AdminCatalogueTable({ rows, categoryTree }: Props) {
       <EditServiceDialog
         item={editing}
         categoryTree={categoryTree}
+        evaluators={evaluators}
         onClose={() => setEditing(null)}
         onSaved={() => {
           setEditing(null);
@@ -217,10 +224,12 @@ export function AdminCatalogueTable({ rows, categoryTree }: Props) {
 function EditServiceDialog({
   item,
   categoryTree,
+  evaluators,
   onClose,
   onSaved,
 }: {
   categoryTree: AdminCategoryTreeNode[];
+  evaluators: EvaluatorOption[];
   item: AdminCatalogueItem | null;
   onClose: () => void;
   onSaved: () => void;
@@ -230,6 +239,7 @@ function EditServiceDialog({
   const [pending, startTransition] = useTransition();
   const [mainId, setMainId] = useState(item?.mainCategoryId ?? "");
   const [subId, setSubId] = useState(item?.subCategoryId ?? "");
+  const [evaluatorId, setEvaluatorId] = useState(item?.defaultEvaluatorId ?? "");
 
   const selectedMain = categoryTree.find((m) => m.id === mainId) ?? null;
   const subCategories = selectedMain?.subCategories ?? [];
@@ -272,6 +282,7 @@ function EditServiceDialog({
                 requiresInspection: fd.get("requiresInspection") === "on",
                 requiresLabTesting: fd.get("requiresLabTesting") === "on",
                 requiresFactoryAudit: fd.get("requiresFactoryAudit") === "on",
+                defaultEvaluatorId: evaluatorId || null,
               });
               if (!result.ok) {
                 toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
@@ -487,6 +498,31 @@ function EditServiceDialog({
                 {t("edit.requiresFactoryAudit")}
               </label>
             </div>
+          </div>
+
+          <div>
+            <Label>{t("edit.defaultEvaluator")}</Label>
+            <Select
+              value={evaluatorId || "none"}
+              onValueChange={(v) => setEvaluatorId(v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t("edit.defaultEvaluatorPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">
+                  {t("edit.defaultEvaluatorNone")}
+                </SelectItem>
+                {evaluators.map((ev) => (
+                  <SelectItem key={ev.id} value={ev.id}>
+                    {locale === "ar" ? ev.fullNameAr : ev.fullNameEn}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-ink-500">
+              {t("edit.defaultEvaluatorHint")}
+            </p>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

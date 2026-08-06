@@ -254,6 +254,7 @@ model User {
   createdCredentials       PlatformCredential[]
   externalDeliverablesMade ExternalDeliverable[]
   createdEngagements       Engagement[]
+  defaultEvaluatorFor      ServiceItem[]            @relation("ServiceItemDefaultEvaluator")
 
   @@index([organisationId])
   @@index([status])
@@ -352,16 +353,22 @@ model ServiceItem {
   /// request time (e.g. GHAD Product Registration needs a GHAD login). Null
   /// for services with no external-portal login requirement.
   requiredCredentialPlatform PlatformType?
+  /// Evaluator this service auto-routes to when Application Review is
+  /// completed ("assign to the appropriate Evaluator based on service
+  /// type"). Null means the request lands unassigned in the Evaluator queue.
+  defaultEvaluatorId   String?
   sortOrder            Int     @default(0)
   active               Boolean @default(true)
 
   subCategory       SubCategory        @relation(fields: [subCategoryId], references: [id])
+  defaultEvaluator  User?              @relation("ServiceItemDefaultEvaluator", fields: [defaultEvaluatorId], references: [id])
   requiredDocuments RequiredDocument[]
   requestItems      RequestItem[]
   engagements       Engagement[]
 
   @@unique([subCategoryId, code])
   @@index([subCategoryId, active, sortOrder])
+  @@index([defaultEvaluatorId])
 }
 
 /// Single global reviewer meta-checklist (Evaluation Report reviewed /

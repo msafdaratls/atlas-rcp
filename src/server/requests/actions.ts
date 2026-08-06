@@ -1133,7 +1133,7 @@ export async function submitRequest(
 
       const org = await tx.organisation.findUniqueOrThrow({
         where: { id: orgId },
-        select: { paymentTermsDays: true },
+        select: { paymentTermsDays: true, nameEn: true, nameAr: true },
       });
 
       // Row lock coupon for usage-cap race safety
@@ -1302,6 +1302,10 @@ export async function submitRequest(
             createdByUserId: session.id,
             ...notificationCopy("REQUEST_SUBMITTED", {
               requestNo: updated.requestNo,
+              customerNameEn: org.nameEn,
+              customerNameAr: org.nameAr,
+              serviceNameEn: draft.items[0]?.serviceItem.nameEn ?? "",
+              serviceNameAr: draft.items[0]?.serviceItem.nameAr ?? "",
             }),
           },
         },
@@ -1424,6 +1428,7 @@ export async function resubmitReturnedRequest(
             serviceItem: {
               select: {
                 nameEn: true,
+                nameAr: true,
                 basePrice: true,
                 vatRate: true,
                 slaHours: true,
@@ -1502,7 +1507,7 @@ export async function resubmitReturnedRequest(
 
       const org = await tx.organisation.findUniqueOrThrow({
         where: { id: orgId },
-        select: { paymentTermsDays: true },
+        select: { paymentTermsDays: true, nameEn: true, nameAr: true },
       });
 
       // If the reviewer who returned it is no longer an active intake
@@ -1633,6 +1638,10 @@ export async function resubmitReturnedRequest(
               : null,
             ...notificationCopy("REQUEST_RESUBMITTED", {
               requestNo: row.requestNo,
+              customerNameEn: org.nameEn,
+              customerNameAr: org.nameAr,
+              serviceNameEn: request.items[0]?.serviceItem.nameEn ?? "",
+              serviceNameAr: request.items[0]?.serviceItem.nameAr ?? "",
             }),
           },
         },

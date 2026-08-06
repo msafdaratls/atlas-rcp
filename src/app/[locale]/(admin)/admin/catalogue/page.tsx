@@ -6,7 +6,11 @@ import { PageHeader } from "@/components/atlas/page-header";
 import { requireSession } from "@/lib/auth/session";
 import { isLocale, type Locale } from "@/lib/i18n/config";
 import { requirePagePermission } from "@/lib/page-auth";
-import { listAdminCatalogue, listAdminCategoryTree } from "@/server/admin/queries";
+import {
+  listActiveEvaluators,
+  listAdminCatalogue,
+  listAdminCategoryTree,
+} from "@/server/admin/queries";
 import { Package } from "lucide-react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -27,9 +31,10 @@ export default async function AdminCataloguePage({ params }: Props) {
   const t = await getTranslations("adminOps.catalogue");
   const tAdmin = await getTranslations("adminOps");
   const tNav = await getTranslations("nav.admin");
-  const [items, categoryTree] = await Promise.all([
+  const [items, categoryTree, evaluators] = await Promise.all([
     listAdminCatalogue(),
     listAdminCategoryTree(),
+    listActiveEvaluators(),
   ]);
 
   return (
@@ -48,7 +53,11 @@ export default async function AdminCataloguePage({ params }: Props) {
         }
       />
       {items ? (
-        <AdminCatalogueTable rows={items} categoryTree={categoryTree ?? []} />
+        <AdminCatalogueTable
+          rows={items}
+          categoryTree={categoryTree ?? []}
+          evaluators={evaluators ?? []}
+        />
       ) : (
         <EmptyState
           icon={Package}

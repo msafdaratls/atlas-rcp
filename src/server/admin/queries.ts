@@ -1161,6 +1161,9 @@ export type AdminCatalogueItem = {
   mainCategoryId: string;
   mainCategoryNameEn: string;
   mainCategoryNameAr: string;
+  defaultEvaluatorId: string | null;
+  defaultEvaluatorNameEn: string | null;
+  defaultEvaluatorNameAr: string | null;
 };
 
 export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null> {
@@ -1169,7 +1172,10 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
     requirePermission(session, "catalogue:manage");
 
     const items = await prisma.serviceItem.findMany({
-      include: { subCategory: { include: { mainCategory: true } } },
+      include: {
+        subCategory: { include: { mainCategory: true } },
+        defaultEvaluator: { select: { fullNameEn: true, fullNameAr: true } },
+      },
       orderBy: [{ subCategoryId: "asc" }, { sortOrder: "asc" }],
     });
 
@@ -1197,7 +1203,32 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
       mainCategoryId: item.subCategory.mainCategoryId,
       mainCategoryNameEn: item.subCategory.mainCategory.nameEn,
       mainCategoryNameAr: item.subCategory.mainCategory.nameAr,
+      defaultEvaluatorId: item.defaultEvaluatorId,
+      defaultEvaluatorNameEn: item.defaultEvaluator?.fullNameEn ?? null,
+      defaultEvaluatorNameAr: item.defaultEvaluator?.fullNameAr ?? null,
     }));
+  } catch {
+    return null;
+  }
+}
+
+/** Active Evaluator users, for the catalogue's default-evaluator routing picker. */
+export async function listActiveEvaluators(): Promise<
+  Array<{ id: string; fullNameEn: string; fullNameAr: string }> | null
+> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+
+    return await prisma.user.findMany({
+      where: {
+        status: "ACTIVE",
+        organisation: { type: "ATLAS" },
+        roles: { some: { role: "EVALUATOR" } },
+      },
+      select: { id: true, fullNameEn: true, fullNameAr: true },
+      orderBy: { fullNameEn: "asc" },
+    });
   } catch {
     return null;
   }

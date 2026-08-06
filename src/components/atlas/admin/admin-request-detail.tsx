@@ -34,6 +34,7 @@ import {
   addAdminInternalComment,
   addAtlasClientComment,
   assignRequest,
+  completeApplicationReview,
   decideReopenRequest,
   markAdminRequestCommentsRead,
   reopenRequestByAdmin,
@@ -246,11 +247,18 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   // At DECISION, REPORT_ISSUED/CLOSED are surfaced as the dedicated
   // Grant/Refuse Certification buttons below, not as generic transitions.
   const canDecide = data.state === "DECISION";
+  // "Complete Application Review" is a dedicated one-click action (auto-cascades
+  // to Evaluation and auto-assigns the Evaluator by service type) — not the
+  // generic "Advance to Accepted" transition button.
+  const canCompleteApplicationReview =
+    data.state === "UNDER_INTAKE_REVIEW" &&
+    data.allowedTransitions.includes("ACCEPTED");
   const otherTransitions = data.allowedTransitions.filter(
     (s) =>
       s !== "RETURNED_TO_CLIENT" &&
       s !== "CANCELLED" &&
-      !(canDecide && (s === "REPORT_ISSUED" || s === "CLOSED")),
+      !(canDecide && (s === "REPORT_ISSUED" || s === "CLOSED")) &&
+      !(canCompleteApplicationReview && s === "ACCEPTED"),
   );
 
   /** The three transitions the spec requires a Conflict of Interest declaration before. */
@@ -314,6 +322,18 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
         setRefuseNote("");
         setRefuseDialogOpen(false);
       }
+      router.refresh();
+    });
+  }
+
+  function handleCompleteApplicationReview() {
+    startTransition(async () => {
+      const result = await completeApplicationReview({ requestId: data.id });
+      if (!result.ok) {
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("success"));
       router.refresh();
     });
   }
@@ -624,6 +644,24 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
       {data.allowedTransitions.length > 0 ? (
         <section className="space-y-4 rounded-lg border border-line bg-surface p-4">
           <h2 className="text-sm font-semibold text-ink-900">{t("actionsTitle")}</h2>
+
+          {canCompleteApplicationReview ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={pending}
+                onClick={handleCompleteApplicationReview}
+              >
+                {pending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="size-4" />
+                )}
+                {t("completeApplicationReview")}
+              </Button>
+            </div>
+          ) : null}
 
           {otherTransitions.length > 0 ? (
             <div className="flex flex-wrap gap-2">

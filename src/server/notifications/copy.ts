@@ -38,6 +38,18 @@ export type NotificationCopyVars = {
   message?: string;
   slaHours?: string;
   authorName?: string;
+  /**
+   * Client organisation name, required on every workflow-status
+   * notification. Both language variants are needed because titleEn/bodyEn
+   * and titleAr/bodyAr are interpolated from the same vars object before
+   * per-recipient locale is known — the {customerNameEn} placeholder feeds
+   * the English template, {customerNameAr} the Arabic one.
+   */
+  customerNameEn?: string;
+  customerNameAr?: string;
+  /** Requested service's display name — same EN/AR split as customerName above. */
+  serviceNameEn?: string;
+  serviceNameAr?: string;
 };
 
 export type NotificationCopy = {
@@ -53,8 +65,10 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
   REQUEST_SUBMITTED: {
     titleEn: "New request submitted",
     titleAr: "طلب جديد مُقدَّم",
-    bodyEn: "{requestNo} awaits intake review.",
-    bodyAr: "{requestNo} بانتظار مراجعة الاستلام.",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}) from {customerNameEn} awaits intake review. Required action: Start Application Review.",
+    bodyAr:
+      "{requestNo} ({serviceNameAr}) من العميل {customerNameAr} بانتظار مراجعة الاستلام. الإجراء المطلوب: بدء مراجعة الطلب.",
     ctaLabelEn: "Open in intake",
     ctaLabelAr: "فتح في الاستلام",
   },
@@ -71,16 +85,20 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
   REQUEST_RESUBMITTED: {
     titleEn: "Request resubmitted",
     titleAr: "أُعيد تقديم الطلب",
-    bodyEn: "{requestNo} was resubmitted after client corrections.",
-    bodyAr: "أُعيد تقديم {requestNo} بعد تصحيحات العميل.",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}) from {customerNameEn} was resubmitted after client corrections. Required action: Resume Application Review.",
+    bodyAr:
+      "أُعيد تقديم {requestNo} ({serviceNameAr}) من العميل {customerNameAr} بعد تصحيحات العميل. الإجراء المطلوب: استئناف مراجعة الطلب.",
     ctaLabelEn: "Open in intake",
     ctaLabelAr: "فتح في الاستلام",
   },
   REQUEST_RETURNED: {
     titleEn: "Request returned",
     titleAr: "تم إرجاع الطلب",
-    bodyEn: "{requestNo}: Your request was returned for corrections.",
-    bodyAr: "{requestNo}: تم إرجاع طلبك لإجراء تصحيحات.",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}): Your request was returned for corrections. Required action: Upload the missing information and resubmit.",
+    bodyAr:
+      "{requestNo} ({serviceNameAr}): تم إرجاع طلبك لإجراء تصحيحات. الإجراء المطلوب: تحميل المعلومات الناقصة وإعادة التقديم.",
   },
   REQUEST_ACCEPTED: {
     titleEn: "Request accepted",
@@ -92,54 +110,68 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
   REQUEST_ASSIGNED: {
     titleEn: "Request assigned",
     titleAr: "تم تعيين طلب",
-    bodyEn: "{requestNo} was assigned to you.",
-    bodyAr: "تم تعيين {requestNo} لك.",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}) from {customerNameEn} was assigned to you. Required action: Review and proceed with the next step.",
+    bodyAr:
+      "تم تعيين {requestNo} ({serviceNameAr}) من العميل {customerNameAr} لك. الإجراء المطلوب: المراجعة والمتابعة للخطوة التالية.",
     ctaLabelEn: "Open queue item",
     ctaLabelAr: "فتح عنصر الطابور",
   },
   TECHNICAL_REVIEW_READY: {
     titleEn: "Ready for technical review",
     titleAr: "جاهز للمراجعة الفنية",
-    bodyEn: "{requestNo}: Evaluation is complete and awaiting technical review.",
-    bodyAr: "{requestNo}: اكتمل التقييم وهو بانتظار المراجعة الفنية.",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}) from {customerNameEn}: Evaluation is complete and awaiting technical review. Required action: Perform Technical Review.",
+    bodyAr:
+      "{requestNo} ({serviceNameAr}) من العميل {customerNameAr}: اكتمل التقييم وهو بانتظار المراجعة الفنية. الإجراء المطلوب: إجراء المراجعة الفنية.",
     ctaLabelEn: "Open queue item",
     ctaLabelAr: "فتح عنصر الطابور",
   },
   DECISION_READY: {
     titleEn: "Ready for decision",
     titleAr: "جاهز لاتخاذ القرار",
-    bodyEn: "{requestNo}: Technical review is complete and awaiting a certification decision.",
-    bodyAr: "{requestNo}: اكتملت المراجعة الفنية وهي بانتظار قرار المطابقة.",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}) from {customerNameEn}: Technical review is complete and awaiting a certification decision. Required action: Grant or Refuse the Certificate of Conformity.",
+    bodyAr:
+      "{requestNo} ({serviceNameAr}) من العميل {customerNameAr}: اكتملت المراجعة الفنية وهي بانتظار قرار المطابقة. الإجراء المطلوب: منح أو رفض شهادة المطابقة.",
     ctaLabelEn: "Open queue item",
     ctaLabelAr: "فتح عنصر الطابور",
   },
   CERTIFICATE_GRANTED: {
     titleEn: "Certificate granted — issuance needed",
     titleAr: "تم منح الشهادة — بانتظار الإصدار",
-    bodyEn: "{requestNo}: Certification was granted. Obtain the certificate from the external platform and complete issuance.",
-    bodyAr: "{requestNo}: تم منح شهادة المطابقة. يرجى استخراج الشهادة من المنصة الخارجية وإكمال إصدارها.",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}) from {customerNameEn}: Certification was granted. Required action: Obtain the certificate from the external platform and complete issuance.",
+    bodyAr:
+      "{requestNo} ({serviceNameAr}) من العميل {customerNameAr}: تم منح شهادة المطابقة. الإجراء المطلوب: استخراج الشهادة من المنصة الخارجية وإكمال إصدارها.",
     ctaLabelEn: "Open queue item",
     ctaLabelAr: "فتح عنصر الطابور",
   },
   REPORT_ISSUED: {
-    titleEn: "Report issued",
-    titleAr: "تم إصدار التقرير",
-    bodyEn: "{requestNo}: Your certificate of conformity report is ready.",
-    bodyAr: "{requestNo}: تقرير شهادة المطابقة جاهز الآن.",
+    titleEn: "Certificate issued",
+    titleAr: "تم إصدار الشهادة",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}): Your certificate of conformity is ready. Required action: Download it from the Customer Portal.",
+    bodyAr:
+      "{requestNo} ({serviceNameAr}): شهادة المطابقة جاهزة الآن. الإجراء المطلوب: تنزيلها من بوابة العملاء.",
   },
   CERTIFICATE_REFUSED: {
     titleEn: "Certification refused",
     titleAr: "تم رفض شهادة المطابقة",
-    bodyEn: "{requestNo}: Certification was refused. {reason}",
-    bodyAr: "{requestNo}: تم رفض شهادة المطابقة. {reason}",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}) from {customerNameEn}: Certification was refused. Reason: {reason}",
+    bodyAr:
+      "{requestNo} ({serviceNameAr}) من العميل {customerNameAr}: تم رفض شهادة المطابقة. السبب: {reason}",
     ctaLabelEn: "Open request",
     ctaLabelAr: "فتح الطلب",
   },
   REQUEST_CLOSED: {
     titleEn: "Request closed",
     titleAr: "تم إغلاق الطلب",
-    bodyEn: "{requestNo} is now closed. Documents and certificates remain available for download.",
-    bodyAr: "{requestNo} مغلق الآن. تبقى المستندات والشهادات متاحة للتنزيل.",
+    bodyEn:
+      "{requestNo} ({serviceNameEn}) is now closed. Documents and certificates remain available for download.",
+    bodyAr:
+      "{requestNo} ({serviceNameAr}) مغلق الآن. تبقى المستندات والشهادات متاحة للتنزيل.",
     ctaLabelEn: "Open request",
     ctaLabelAr: "فتح الطلب",
   },
