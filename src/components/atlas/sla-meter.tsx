@@ -6,6 +6,7 @@
 import type { RequestState } from "@prisma/client";
 import { differenceInHours, differenceInMinutes } from "date-fns";
 import { useLocale, useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 type SlaMeterProps = {
@@ -48,6 +49,17 @@ export function SlaMeter({ dueAt, state, startedAt, className }: SlaMeterProps) 
   const locale = useLocale();
   const paused = state === "RETURNED_TO_CLIENT" || state === "ON_HOLD";
 
+  // `now` is only known on the client, and differs from the server's render
+  // time by however long the request took — using `new Date()` directly in
+  // render causes a hydration mismatch. Render deterministically (as if
+  // "now" were `start`) until mount, then swap in the real clock.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   if (!dueAt) {
     return null;
   }
@@ -56,14 +68,14 @@ export function SlaMeter({ dueAt, state, startedAt, className }: SlaMeterProps) 
   const start = startedAt
     ? new Date(startedAt)
     : new Date(due.getTime() - 48 * 60 * 60 * 1000);
-  const now = new Date();
+  const effectiveNow = now ?? start;
   const totalMs = Math.max(due.getTime() - start.getTime(), 1);
   const elapsedMs = Math.min(
-    Math.max(now.getTime() - start.getTime(), 0),
+    Math.max(effectiveNow.getTime() - start.getTime(), 0),
     totalMs * 2,
   );
   const progress = Math.min(elapsedMs / totalMs, 1);
-  const minutesLeft = differenceInMinutes(due, now);
+  const minutesLeft = differenceInMinutes(due, effectiveNow);
   const overdue = minutesLeft < 0;
   const nearBreach = !overdue && progress >= 0.8;
 
@@ -82,7 +94,8 @@ export function SlaMeter({ dueAt, state, startedAt, className }: SlaMeterProps) 
       ? t("overdue", { time: formatDuration(minutesLeft, locale, t) })
       : t("remaining", {
           time: formatDuration(
-            differenceInHours(due, now) * 60 + (Math.abs(minutesLeft) % 60),
+            differenceInHours(due, effectiveNow) * 60 +
+              (Math.abs(minutesLeft) % 60),
             locale,
             t,
           ),

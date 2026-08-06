@@ -7,6 +7,13 @@ import { toast } from "sonner";
 import { MoneyValue } from "@/components/atlas/money-value";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -36,6 +43,7 @@ import type {
   DraftRequestItemView,
   DraftRequestView,
 } from "@/server/requests/queries";
+import { createCredential } from "@/server/company/credentials";
 import type { PlatformCredentialSummary } from "@/server/company/credentials";
 
 type UploadSlotState = {
@@ -189,11 +197,24 @@ export function NewRequestWizard({
   initialMainId,
   redirectBasePath = "/client/requests",
   onBehalf = false,
-  credentials = [],
+  credentials: initialCredentials = [],
   engagementId = null,
 }: Props) {
   const t = useTranslations("newRequest");
+  const tCredentials = useTranslations("company.credentials");
   const locale = useLocale();
+  const [credentials, setCredentials] = useState(initialCredentials);
+  const [credentialDialogPlatform, setCredentialDialogPlatform] = useState<
+    PlatformCredentialSummary["platform"] | null
+  >(null);
+  const [credentialLabel, setCredentialLabel] = useState("");
+  const [credentialLoginIdentifier, setCredentialLoginIdentifier] =
+    useState("");
+  const [credentialSecret, setCredentialSecret] = useState("");
+  const [credentialPending, setCredentialPending] = useState(false);
+  const [credentialTargetItemId, setCredentialTargetItemId] = useState<
+    string | null
+  >(null);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -464,6 +485,56 @@ export function NewRequestWizard({
     setItems((prev) =>
       prev.map((i) => (i.requestItemId === requestItemId ? { ...i, ...patch } : i)),
     );
+  }
+
+  function openCredentialDialog(
+    requestItemId: string,
+    platform: PlatformCredentialSummary["platform"],
+  ) {
+    setCredentialTargetItemId(requestItemId);
+    setCredentialDialogPlatform(platform);
+    setCredentialLabel("");
+    setCredentialLoginIdentifier("");
+    setCredentialSecret("");
+  }
+
+  function handleCreateCredential() {
+    if (
+      !credentialDialogPlatform ||
+      !credentialTargetItemId ||
+      !credentialLoginIdentifier.trim() ||
+      !credentialSecret
+    ) {
+      toast.error(tCredentials("errors.VALIDATION"));
+      return;
+    }
+    setCredentialPending(true);
+    createCredential({
+      platform: credentialDialogPlatform,
+      label: credentialLabel.trim() || undefined,
+      loginIdentifier: credentialLoginIdentifier.trim(),
+      secret: credentialSecret,
+    })
+      .then((result) => {
+        if (!result.ok) {
+          toast.error(tCredentials(`errors.${result.error}` as never));
+          return;
+        }
+        const created: PlatformCredentialSummary = {
+          id: result.data.id,
+          platform: credentialDialogPlatform,
+          label: credentialLabel.trim() || null,
+          loginIdentifier: credentialLoginIdentifier.trim(),
+          active: true,
+          createdAt: new Date(),
+        };
+        setCredentials((prev) => [created, ...prev]);
+        updateItem(credentialTargetItemId, { platformCredentialId: created.id });
+        toast.success(tCredentials("created"));
+        setCredentialDialogPlatform(null);
+        setCredentialTargetItemId(null);
+      })
+      .finally(() => setCredentialPending(false));
   }
 
   function goStep3() {
@@ -1133,6 +1204,19 @@ export function NewRequestWizard({
                             })}
                           </p>
                         ) : null}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            openCredentialDialog(
+                              item.requestItemId,
+                              catalogueItem.requiredCredentialPlatform as PlatformCredentialSummary["platform"],
+                            )
+                          }
+                        >
+                          {tCredentials("add")}
+                        </Button>
                       </div>
                     ) : null}
                   </div>
@@ -1448,6 +1532,69 @@ export function NewRequestWizard({
           </div>
         </dl>
       </aside>
+
+      <Dialog
+        open={credentialDialogPlatform !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCredentialDialogPlatform(null);
+            setCredentialTargetItemId(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tCredentials("add")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{tCredentials("label")}</Label>
+              <Input
+                value={credentialLabel}
+                onChange={(e) => setCredentialLabel(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{tCredentials("loginIdentifier")}</Label>
+              <Input
+                value={credentialLoginIdentifier}
+                onChange={(e) => setCredentialLoginIdentifier(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{tCredentials("secret")}</Label>
+              <Input
+                type="password"
+                value={credentialSecret}
+                onChange={(e) => setCredentialSecret(e.target.value)}
+                autoComplete="new-password"
+              />
+              <p className="text-xs text-ink-500">
+                {tCredentials("secretHelp")}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCredentialDialogPlatform(null);
+                setCredentialTargetItemId(null);
+              }}
+            >
+              {tCredentials("cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={credentialPending}
+              onClick={handleCreateCredential}
+            >
+              {tCredentials("save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

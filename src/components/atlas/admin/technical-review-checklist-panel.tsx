@@ -91,16 +91,23 @@ export function TechnicalReviewChecklistPanel({
 
   function save() {
     startTransition(async () => {
-      const result = await saveTechnicalReviewChecklist({
-        requestId,
-        verdicts,
-      });
-      if (!result.ok) {
-        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
-        return;
+      try {
+        const result = await saveTechnicalReviewChecklist({
+          requestId,
+          verdicts,
+        });
+        if (!result.ok) {
+          toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+          return;
+        }
+        setDirty(false);
+        toast.success(t("saved"));
+      } catch {
+        // Network/transport failure (e.g. a 503) never reaches the
+        // `{ok:false}` branch above — without this, the save silently
+        // fails with no feedback and "Unsaved changes" is the only clue.
+        toast.error(t("errors.SAVE_FAILED"));
       }
-      setDirty(false);
-      toast.success(t("saved"));
     });
   }
 

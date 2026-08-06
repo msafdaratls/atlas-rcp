@@ -900,12 +900,13 @@ async function main() {
         sortOrder: 2,
       },
     ],
+    // product_name/brand_name are intentionally omitted here — they'd
+    // duplicate the wizard's built-in productNameEn/productNameAr and brand
+    // fields, which every service already collects.
     productAttrSchema: {
       type: "object",
-      required: ["product_name", "brand_name", "client_name"],
+      required: ["client_name"],
       properties: {
-        product_name: { type: "string", titleEn: "Product name", titleAr: "اسم المنتج" },
-        brand_name: { type: "string", titleEn: "Brand name", titleAr: "اسم العلامة التجارية" },
         client_name: { type: "string", titleEn: "Client name", titleAr: "اسم العميل" },
       },
     },

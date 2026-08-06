@@ -109,63 +109,68 @@ export function AdminDashboard({ data }: Props) {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-line bg-surface p-4">
-          <h2 className="mb-3 text-sm font-semibold text-ink-900">
-            {t("revenueTitle", { month: data.revenue.monthLabel })}
-          </h2>
-          <dl className="space-y-2 text-sm">
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-500">{t("revenueOriginal")}</dt>
-              <dd className="font-data" dir="ltr">
-                <MoneyValue amount={data.revenue.original} />
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-500">{t("revenueResubmission")}</dt>
-              <dd className="font-data" dir="ltr">
-                <MoneyValue amount={data.revenue.resubmission} />
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
-              <dt>{t("revenueTotal")}</dt>
-              <dd className="font-data" dir="ltr">
-                <MoneyValue
-                  amount={
-                    data.revenue.original + data.revenue.resubmission
-                  }
-                />
-              </dd>
-            </div>
-          </dl>
-        </div>
+      {data.canSeeFinance ? (
+        <section className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-line bg-surface p-4">
+            <h2 className="mb-3 text-sm font-semibold text-ink-900">
+              {t("revenueTitle", { month: data.revenue.monthLabel })}
+            </h2>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-500">{t("revenueOriginal")}</dt>
+                <dd className="font-data" dir="ltr">
+                  <MoneyValue amount={data.revenue.original} />
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-500">{t("revenueResubmission")}</dt>
+                <dd className="font-data" dir="ltr">
+                  <MoneyValue amount={data.revenue.resubmission} />
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
+                <dt>{t("revenueTotal")}</dt>
+                <dd className="font-data" dir="ltr">
+                  <MoneyValue
+                    amount={
+                      data.revenue.original + data.revenue.resubmission
+                    }
+                  />
+                </dd>
+              </div>
+            </dl>
+          </div>
 
-        <div className="rounded-lg border border-line bg-surface p-4">
-          <h2 className="mb-3 text-sm font-semibold text-ink-900">
-            {t("overLimitTitle")}
-          </h2>
-          {data.overLimit.length === 0 ? (
-            <p className="text-sm text-ink-500">{t("overLimitEmpty")}</p>
-          ) : (
-            <ul className="space-y-2">
-              {data.overLimit.map((c) => (
-                <li
-                  key={c.organisationId}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2 last:border-0"
-                >
-                  <span className="text-sm font-medium text-ink-900">
-                    {locale === "ar" ? c.nameAr : c.nameEn}
-                  </span>
-                  <span className="font-data text-xs text-state-bad" dir="ltr">
-                    <MoneyValue amount={c.balance} /> /{" "}
-                    <MoneyValue amount={c.creditLimit} />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
+          <div className="rounded-lg border border-line bg-surface p-4">
+            <h2 className="mb-3 text-sm font-semibold text-ink-900">
+              {t("overLimitTitle")}
+            </h2>
+            {data.overLimit.length === 0 ? (
+              <p className="text-sm text-ink-500">{t("overLimitEmpty")}</p>
+            ) : (
+              <ul className="space-y-2">
+                {data.overLimit.map((c) => (
+                  <li
+                    key={c.organisationId}
+                    className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2 last:border-0"
+                  >
+                    <span className="text-sm font-medium text-ink-900">
+                      {locale === "ar" ? c.nameAr : c.nameEn}
+                    </span>
+                    <span
+                      className="font-data text-xs text-state-bad"
+                      dir="ltr"
+                    >
+                      <MoneyValue amount={c.balance} /> /{" "}
+                      <MoneyValue amount={c.creditLimit} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

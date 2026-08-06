@@ -208,6 +208,7 @@ export function AdminCatalogueTable({ rows, categoryTree, evaluators }: Props) {
       )}
 
       <EditServiceDialog
+        key={editing?.id ?? "none"}
         item={editing}
         categoryTree={categoryTree}
         evaluators={evaluators}

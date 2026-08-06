@@ -137,33 +137,35 @@ export function AdminAnalyticsView({ data }: Props) {
           </dl>
         </div>
 
-        <div className="rounded-lg border border-line bg-surface p-4">
-          <h2 className="mb-3 text-sm font-semibold text-ink-900">
-            {t("revenueMixTitle", { month: data.revenue.monthLabel })}
-          </h2>
-          <dl className="space-y-2 text-sm">
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-500">{t("revenueOriginal")}</dt>
-              <dd className="font-data" dir="ltr">
-                <MoneyValue amount={data.revenue.original} />
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-500">{t("revenueResubmission")}</dt>
-              <dd className="font-data" dir="ltr">
-                <MoneyValue amount={data.revenue.resubmission} />
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
-              <dt>{t("revenueTotal")}</dt>
-              <dd className="font-data" dir="ltr">
-                <MoneyValue
-                  amount={data.revenue.original + data.revenue.resubmission}
-                />
-              </dd>
-            </div>
-          </dl>
-        </div>
+        {data.canSeeFinance ? (
+          <div className="rounded-lg border border-line bg-surface p-4">
+            <h2 className="mb-3 text-sm font-semibold text-ink-900">
+              {t("revenueMixTitle", { month: data.revenue.monthLabel })}
+            </h2>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-500">{t("revenueOriginal")}</dt>
+                <dd className="font-data" dir="ltr">
+                  <MoneyValue amount={data.revenue.original} />
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-500">{t("revenueResubmission")}</dt>
+                <dd className="font-data" dir="ltr">
+                  <MoneyValue amount={data.revenue.resubmission} />
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
+                <dt>{t("revenueTotal")}</dt>
+                <dd className="font-data" dir="ltr">
+                  <MoneyValue
+                    amount={data.revenue.original + data.revenue.resubmission}
+                  />
+                </dd>
+              </div>
+            </dl>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-lg border border-line bg-surface p-4">
