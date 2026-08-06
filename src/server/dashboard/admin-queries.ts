@@ -71,6 +71,7 @@ export type AdminDashboardView = {
     balance: number;
     creditLimit: number;
   }>;
+  canSeeFinance: boolean;
 };
 
 export async function getAdminDashboard(): Promise<AdminDashboardView | null> {
@@ -250,6 +251,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardView | null> {
       })),
       revenue,
       overLimit,
+      canSeeFinance,
     };
   } catch {
     return null;

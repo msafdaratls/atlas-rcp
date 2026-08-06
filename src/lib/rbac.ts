@@ -241,6 +241,10 @@ const INTAKE_OFFICER_TRANSITIONS: RequestState[] = [
 const EVALUATOR_TRANSITIONS: RequestState[] = [
   "ASSESSMENT_QUEUED",
   "ASSESSMENT_RUNNING",
+  // The Evaluator clicks "Complete Evaluation" to hand the request to the
+  // Technical Reviewer — this is the Evaluator's own outgoing transition,
+  // not something only an admin should be able to trigger.
+  "TECHNICAL_REVIEW",
   "REPORT_ISSUED",
   "ON_HOLD",
   "RETURNED_TO_CLIENT",
@@ -249,6 +253,9 @@ const EVALUATOR_TRANSITIONS: RequestState[] = [
 
 const TECHNICAL_REVIEWER_TRANSITIONS: RequestState[] = [
   "TECHNICAL_REVIEW",
+  // The reviewer clicks "Complete Technical Review" to hand the request to
+  // the Decision Maker — same reasoning as EVALUATOR_TRANSITIONS above.
+  "DECISION",
   "ON_HOLD",
   "RETURNED_TO_CLIENT",
   "CANCELLED",

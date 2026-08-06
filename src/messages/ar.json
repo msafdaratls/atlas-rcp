@@ -781,7 +781,7 @@
         "REFUSAL_REASON_REQUIRED": "أضف سبباً قبل رفض شهادة المطابقة.",
         "COI_ACKNOWLEDGEMENT_REQUIRED": "أكّد إقرار تعارض المصالح للمتابعة.",
         "EVALUATION_REPORT_REQUIRED": "ارفع تقرير التقييم لكل عنصر قبل إكمال التقييم.",
-        "CERTIFICATE_REQUIRED": "أرفق الشهادة المستخرجة من المنصة الخارجية قبل إكمال الإصدار.",
+        "CERTIFICATE_REQUIRED": "أرفق الشهادة أو التقرير النهائي قبل إكمال الإصدار.",
         "TECHNICAL_REVIEW_CHECKLIST_INCOMPLETE": "أكمل جميع بنود قائمة المراجعة الفنية قبل اتخاذ القرار.",
         "MIME_REJECTED": "نوع الملف غير مدعوم. استخدم PDF أو PNG أو JPG.",
         "FILE_TOO_LARGE": "حجم الملف كبير جداً.",

@@ -61,6 +61,12 @@ const ASSESSMENT_EDIT_STATES: RequestState[] = [
   "ASSESSMENT_RUNNING",
   "TECHNICAL_REVIEW",
   "DECISION",
+  // ExternalDeliverablePanel's `certificateRequired` (and therefore its
+  // visibility for INTERNAL_REPORT services, which are hidden earlier)
+  // only turns on at REPORT_ISSUED — it must stay editable here too, or
+  // the Evaluator has no way to ever attach the certificate that unblocks
+  // REPORT_ISSUED -> CLOSED.
+  "REPORT_ISSUED",
 ];
 
 type ReopenTargetState =

@@ -781,7 +781,7 @@
         "REFUSAL_REASON_REQUIRED": "Add a reason before refusing certification.",
         "COI_ACKNOWLEDGEMENT_REQUIRED": "Confirm the conflict of interest declaration to continue.",
         "EVALUATION_REPORT_REQUIRED": "Upload an Evaluation Report for every item before completing evaluation.",
-        "CERTIFICATE_REQUIRED": "Attach the certificate obtained from the external platform before completing issuance.",
+        "CERTIFICATE_REQUIRED": "Attach the final certificate or report before completing issuance.",
         "TECHNICAL_REVIEW_CHECKLIST_INCOMPLETE": "Complete every item on the technical review checklist before deciding.",
         "MIME_REJECTED": "That file type isn't supported. Use PDF, PNG, or JPG.",
         "FILE_TOO_LARGE": "That file is too large.",
