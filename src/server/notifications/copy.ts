@@ -12,6 +12,7 @@ export type NotificationCopyKey =
   | "REQUEST_ASSIGNED"
   | "TECHNICAL_REVIEW_READY"
   | "DECISION_READY"
+  | "CERTIFICATE_GRANTED"
   | "REPORT_ISSUED"
   | "CERTIFICATE_REFUSED"
   | "REQUEST_CLOSED"
@@ -109,6 +110,14 @@ const CATALOG: Record<NotificationCopyKey, NotificationCopy> = {
     titleAr: "جاهز لاتخاذ القرار",
     bodyEn: "{requestNo}: Technical review is complete and awaiting a certification decision.",
     bodyAr: "{requestNo}: اكتملت المراجعة الفنية وهي بانتظار قرار المطابقة.",
+    ctaLabelEn: "Open queue item",
+    ctaLabelAr: "فتح عنصر الطابور",
+  },
+  CERTIFICATE_GRANTED: {
+    titleEn: "Certificate granted — issuance needed",
+    titleAr: "تم منح الشهادة — بانتظار الإصدار",
+    bodyEn: "{requestNo}: Certification was granted. Obtain the certificate from the external platform and complete issuance.",
+    bodyAr: "{requestNo}: تم منح شهادة المطابقة. يرجى استخراج الشهادة من المنصة الخارجية وإكمال إصدارها.",
     ctaLabelEn: "Open queue item",
     ctaLabelAr: "فتح عنصر الطابور",
   },

@@ -712,6 +712,7 @@
       "resume": "Resume intake",
       "issueReport": "Issue report",
       "close": "Mark as done",
+      "completeCertificateIssuance": "Complete certificate issuance",
       "cancel": "Cancel request",
       "grantCertification": "Grant certification",
       "refuseCertification": "Refuse certification",
@@ -778,13 +779,16 @@
         "CANCEL_NOTE_REQUIRED": "Add a reason before cancelling the request.",
         "REFUSAL_REASON_REQUIRED": "Add a reason before refusing certification.",
         "COI_ACKNOWLEDGEMENT_REQUIRED": "Confirm the conflict of interest declaration to continue.",
+        "EVALUATION_REPORT_REQUIRED": "Upload an Evaluation Report for every item before completing evaluation.",
+        "CERTIFICATE_REQUIRED": "Attach the certificate obtained from the external platform before completing issuance.",
+        "TECHNICAL_REVIEW_CHECKLIST_INCOMPLETE": "Complete every item on the technical review checklist before deciding.",
         "MIME_REJECTED": "That file type isn't supported. Use PDF, PNG, or JPG.",
         "FILE_TOO_LARGE": "That file is too large.",
         "INFECTED_FILE": "That file failed a virus scan and was not uploaded.",
         "AV_UNAVAILABLE": "File scanning is temporarily unavailable. Try again shortly.",
         "VALIDATION": "Check the form and try again.",
         "SAVE_FAILED": "Could not save. Try again.",
-        "INVALID_STATE": "You can't message on this request yet.",
+        "INVALID_STATE": "You can't message on this request in its current state.",
         "CONFLICT": "This request changed while you were working. Refresh and try again.",
         "TARGET_STATE_REQUIRED": "Choose a stage to resume this request at.",
         "REJECT_NOTE_REQUIRED": "Explain why the reopen request is being rejected.",
@@ -835,6 +839,35 @@
           "SAVE_FAILED": "Could not save the assessment. Try again."
         }
       },
+      "technicalReviewChecklist": {
+        "title": "Technical review checklist",
+        "subtitle": "Confirm every item before completing technical review.",
+        "progress": "{done} of {total} items confirmed",
+        "save": "Save checklist",
+        "saved": "Checklist saved",
+        "unsaved": "Unsaved changes",
+        "readOnly": "This checklist is read-only in the current state.",
+        "verdict": {
+          "COMPLIANT": "Confirmed",
+          "NON_COMPLIANT": "Not confirmed",
+          "NA": "N/A"
+        },
+        "status": {
+          "ACCEPTED": "Complete",
+          "ACCEPTED_WITH_REMARKS": "Complete, with remarks",
+          "REJECTED": "Items not confirmed",
+          "INCOMPLETE": "Checklist incomplete"
+        },
+        "errors": {
+          "VALIDATION": "Some entries were invalid.",
+          "NOT_FOUND": "Request not found.",
+          "INVALID_STATE": "The checklist can only be edited during technical review.",
+          "NO_CHECKLIST": "No technical review checklist is configured.",
+          "FORBIDDEN": "You do not have permission.",
+          "UNAUTHORIZED": "Sign in again to continue.",
+          "SAVE_FAILED": "Could not save the checklist. Try again."
+        }
+      },
       "activities": {
         "title": "Evaluation activities",
         "subtitle": "Optional inspection, testing, and audit steps required by this service.",
@@ -881,6 +914,13 @@
           "UNAUTHORIZED": "Sign in again to continue.",
           "SAVE_FAILED": "Could not save. Try again."
         }
+      },
+      "evaluationReport": {
+        "title": "Evaluation report",
+        "missing": "Not uploaded",
+        "uploaded": "Uploaded",
+        "upload": "Upload report",
+        "replace": "Replace report"
       },
       "externalDeliverable": {
         "title": "External submission",
@@ -1343,7 +1383,26 @@
       "website": "Website",
       "tabs": {
         "organisation": "Organisation",
-        "staff": "Staff"
+        "staff": "Staff",
+        "technicalReviewChecklist": "Technical review checklist"
+      },
+      "technicalReviewChecklist": {
+        "title": "Technical review checklist",
+        "subtitle": "Shown to the Technical Reviewer on every request before Certification Decision. Changes apply platform-wide.",
+        "code": "Code",
+        "titleEn": "Title (English)",
+        "titleAr": "Title (Arabic)",
+        "addItem": "Add item",
+        "remove": "Remove item",
+        "save": "Save checklist",
+        "saved": "Checklist saved",
+        "errors": {
+          "VALIDATION": "Check every item has a code and both titles.",
+          "DUPLICATE_CODE": "Item codes must be unique.",
+          "FORBIDDEN": "You do not have permission.",
+          "UNAUTHORIZED": "Sign in again to continue.",
+          "SAVE_FAILED": "Could not save. Try again."
+        }
       },
       "staff": {
         "help": "System admins manage staff accounts and roles. Other Atlas roles can view the staff list only.",
@@ -1366,6 +1425,7 @@
         },
         "roles": {
           "INTAKE_OFFICER": "Intake officer",
+          "EVALUATOR": "Evaluator",
           "TECHNICAL_REVIEWER": "Technical reviewer",
           "DECISION_MAKER": "Decision maker",
           "FINANCE": "Finance",

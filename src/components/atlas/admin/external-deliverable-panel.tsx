@@ -26,6 +26,12 @@ type Props = {
   deliverable: Deliverable | null;
   editable: boolean;
   locale: string;
+  /**
+   * True once the request has reached REPORT_ISSUED or later: the Evaluator
+   * must attach the real certificate obtained from SABER/SFDA before closing,
+   * regardless of whether the service is normally EXTERNAL_CERTIFICATE-typed.
+   */
+  certificateRequired: boolean;
 };
 
 const STATUS_TONE: Record<Deliverable["status"], string> = {
@@ -45,6 +51,7 @@ export function ExternalDeliverablePanel({
   serviceItem,
   deliverable,
   editable,
+  certificateRequired,
 }: Props) {
   const t = useTranslations("adminOps.requestDetail.externalDeliverable");
 
@@ -63,7 +70,9 @@ export function ExternalDeliverablePanel({
   const [issuePending, startIssueTransition] = useTransition();
   const [rejectPending, startRejectTransition] = useTransition();
 
-  if (serviceItem.deliverableType !== "EXTERNAL_CERTIFICATE") return null;
+  if (serviceItem.deliverableType !== "EXTERNAL_CERTIFICATE" && !certificateRequired) {
+    return null;
+  }
 
   function doSubmit() {
     if (!externalRefType.trim()) {

@@ -11,6 +11,7 @@ import { issueVerificationToken } from "@/lib/auth/tokens";
 import {
   computeAssessment,
   hasCheckItems,
+  parseAssessment,
   parseCheckSets,
   type AssessmentState,
 } from "@/lib/assessment";
@@ -71,6 +72,7 @@ const REVIEW_ASSIGNMENT_STATES: RequestState[] = [
 type StateNotificationEvent =
   | "REQUEST_RETURNED"
   | "REQUEST_ACCEPTED"
+  | "CERTIFICATE_GRANTED"
   | "REPORT_ISSUED"
   | "TECHNICAL_REVIEW_READY"
   | "DECISION_READY"
@@ -83,13 +85,20 @@ function notificationEventForState(
 ): StateNotificationEvent | null {
   if (toState === "RETURNED_TO_CLIENT") return "REQUEST_RETURNED";
   if (toState === "ACCEPTED") return "REQUEST_ACCEPTED";
-  if (toState === "REPORT_ISSUED") return "REPORT_ISSUED";
+  // Grant hands the request to the Evaluator to fetch/upload the real
+  // external certificate — the customer isn't told yet (see below, fired
+  // only once REPORT_ISSUED -> CLOSED actually completes issuance).
+  if (fromState === "DECISION" && toState === "REPORT_ISSUED") {
+    return "CERTIFICATE_GRANTED";
+  }
   if (toState === "TECHNICAL_REVIEW") return "TECHNICAL_REVIEW_READY";
   if (toState === "DECISION") return "DECISION_READY";
   if (toState === "CLOSED") {
-    // Refusal is the only path straight from DECISION to CLOSED; every other
-    // route to CLOSED (e.g. after REPORT_ISSUED) is a normal closure.
-    return fromState === "DECISION" ? "CERTIFICATE_REFUSED" : "REQUEST_CLOSED";
+    // Refusal (DECISION -> CLOSED) and completed issuance (REPORT_ISSUED ->
+    // CLOSED) are the only two routes to CLOSED; each notifies differently.
+    if (fromState === "DECISION") return "CERTIFICATE_REFUSED";
+    if (fromState === "REPORT_ISSUED") return "REPORT_ISSUED";
+    return "REQUEST_CLOSED";
   }
   return null;
 }
@@ -219,13 +228,64 @@ export async function transitionAdminRequest(
       return { ok: false, error: "COI_ACKNOWLEDGEMENT_REQUIRED" };
     }
 
+    if (
+      request.state === "ASSESSMENT_RUNNING" &&
+      toState === "TECHNICAL_REVIEW" &&
+      !(await hasEvaluationReportForAllItems(request.id))
+    ) {
+      return { ok: false, error: "EVALUATION_REPORT_REQUIRED" };
+    }
+
+    // "Complete Certificate Issuance": the Evaluator cannot close the request
+    // until the real certificate obtained from SABER/SFDA is attached to at
+    // least one ExternalDeliverable on the request — same CERTIFICATE_REQUIRED
+    // check markExternalDeliverableIssued uses to mark a single deliverable
+    // ISSUED, applied here at the request level since not every item needs
+    // its own certificate (e.g. a request with one certified item and one
+    // internal-only item).
+    if (request.state === "REPORT_ISSUED" && toState === "CLOSED") {
+      const docCount = await prisma.requestDocument.count({
+        where: {
+          requestItem: { requestId: request.id },
+          externalDeliverableId: { not: null },
+          currentVersionId: { not: null },
+        },
+      });
+      if (docCount === 0) {
+        return { ok: false, error: "CERTIFICATE_REQUIRED" };
+      }
+    }
+
+    if (request.state === "TECHNICAL_REVIEW" && toState === "DECISION") {
+      const [definition, requestChecklist] = await Promise.all([
+        prisma.technicalReviewChecklist.findUnique({ where: { id: "singleton" } }),
+        prisma.request.findUnique({
+          where: { id: request.id },
+          select: { technicalReviewChecklist: true },
+        }),
+      ]);
+      const checkSets = parseCheckSets(definition?.checkSets);
+      if (hasCheckItems(checkSets)) {
+        const state = parseAssessment(requestChecklist?.technicalReviewChecklist);
+        if (!computeAssessment(checkSets, state).complete) {
+          return { ok: false, error: "TECHNICAL_REVIEW_CHECKLIST_INCOMPLETE" };
+        }
+      }
+    }
+
     const now = new Date();
     const closedAt =
       toState === "CLOSED" ? now : toState === "REPORT_ISSUED" ? null : undefined;
     const assignedToUserId =
-      request.assignedToUserId === null && REVIEW_ASSIGNMENT_STATES.includes(toState)
-        ? session.id
-        : undefined;
+      // Grant is a hand-off, not a self-assign: clear the Decision Maker's
+      // assignment so the request enters the Evaluator queue unassigned,
+      // ready for an Evaluator to pick up and complete certificate issuance.
+      request.state === "DECISION" && toState === "REPORT_ISSUED"
+        ? null
+        : request.assignedToUserId === null &&
+            REVIEW_ASSIGNMENT_STATES.includes(toState)
+          ? session.id
+          : undefined;
 
     const heldFromUpdate =
       toState === "ON_HOLD"
@@ -409,7 +469,8 @@ export async function transitionAdminRequest(
                 state: toState,
                 link:
                   eventType === "TECHNICAL_REVIEW_READY" ||
-                  eventType === "DECISION_READY"
+                  eventType === "DECISION_READY" ||
+                  eventType === "CERTIFICATE_GRANTED"
                     ? `/admin/requests/${requestId}`
                     : `/client/requests/${requestId}`,
                 organisationId: request.organisationId,
@@ -944,9 +1005,12 @@ export async function addAdminInternalComment(
 
     const request = await prisma.request.findUnique({
       where: { id: parsed.data.requestId },
-      select: { id: true, requestNo: true, organisationId: true },
+      select: { id: true, requestNo: true, organisationId: true, state: true },
     });
     if (!request) return { ok: false, error: "NOT_FOUND" };
+    if (!canMessageOnRequestState(request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
 
     let attachment: {
       fileName: string;
@@ -1072,11 +1136,18 @@ export async function addAdminInternalComment(
   }
 }
 
-/** States in which a reviewer may edit the item-level assessment. */
+/**
+ * States in which a reviewer may edit the item-level assessment. REPORT_ISSUED
+ * is included so the Evaluator can submit/upload/mark-issued the real
+ * external certificate during the post-Grant hand-off, before the final
+ * REPORT_ISSUED -> CLOSED close (see markExternalDeliverableIssued's
+ * CERTIFICATE_REQUIRED gate, reused there).
+ */
 const ASSESSMENT_EDIT_STATES: RequestState[] = [
   "ASSESSMENT_RUNNING",
   "TECHNICAL_REVIEW",
   "DECISION",
+  "REPORT_ISSUED",
 ];
 
 const saveAssessmentSchema = z.object({
@@ -1165,6 +1236,181 @@ export async function saveAssessment(
         complete: summary.complete,
       },
     };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const saveTechnicalReviewChecklistSchema = z.object({
+  requestId: z.string().min(1),
+  verdicts: z.record(
+    z.string(),
+    z.enum(["COMPLIANT", "NON_COMPLIANT", "NA"]),
+  ),
+  notes: z.record(z.string(), z.string().trim().max(1000)).optional(),
+});
+
+/**
+ * Technical Reviewer's meta-checklist results, scored against the single
+ * global TechnicalReviewChecklist definition — request-level (not per item),
+ * distinct from saveAssessment's per-service checklist.
+ */
+export async function saveTechnicalReviewChecklist(
+  input: z.infer<typeof saveTechnicalReviewChecklistSchema>,
+): Promise<ActionResult<{ recommendation: string; complete: boolean }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = saveTechnicalReviewChecklistSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const request = await prisma.request.findUnique({
+      where: { id: parsed.data.requestId },
+      select: {
+        id: true,
+        state: true,
+        organisationId: true,
+        technicalReviewChecklist: true,
+      },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+    if (request.state !== "TECHNICAL_REVIEW") {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    const definition = await prisma.technicalReviewChecklist.findUnique({
+      where: { id: "singleton" },
+    });
+    const checkSets = parseCheckSets(definition?.checkSets);
+    if (!hasCheckItems(checkSets)) {
+      return { ok: false, error: "NO_CHECKLIST" };
+    }
+    const known = new Set(checkSets.flatMap((s) => s.items.map((i) => i.code)));
+
+    const verdicts: Record<string, "COMPLIANT" | "NON_COMPLIANT" | "NA"> = {};
+    for (const [code, v] of Object.entries(parsed.data.verdicts)) {
+      if (known.has(code)) verdicts[code] = v;
+    }
+    const notes: Record<string, string> = {};
+    for (const [code, n] of Object.entries(parsed.data.notes ?? {})) {
+      if (known.has(code) && n.trim()) notes[code] = n.trim();
+    }
+
+    const nextState: AssessmentState = {
+      verdicts,
+      notes,
+      updatedAt: new Date().toISOString(),
+      updatedByUserId: session.id,
+    };
+    const summary = computeAssessment(checkSets, nextState);
+
+    await prisma.request.update({
+      where: { id: request.id },
+      data: {
+        technicalReviewChecklist: nextState as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: request.organisationId,
+      action: "request.technicalReviewChecklist.save",
+      entityType: "Request",
+      entityId: request.id,
+      before: { technicalReviewChecklist: request.technicalReviewChecklist },
+      after: {
+        assessed: summary.assessed,
+        total: summary.total,
+        recommendation: summary.recommendation,
+      },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${request.id}`, "page");
+    return {
+      ok: true,
+      data: {
+        recommendation: summary.recommendation,
+        complete: summary.complete,
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const saveTechnicalReviewChecklistDefinitionSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        code: z
+          .string()
+          .trim()
+          .min(1)
+          .max(60)
+          .regex(/^[A-Z0-9_]+$/, "INVALID_CODE"),
+        titleEn: z.string().trim().min(1).max(200),
+        titleAr: z.string().trim().min(1).max(200),
+      }),
+    )
+    .max(50),
+});
+
+/** Admin-editable definition of the single global Technical Review meta-checklist. */
+export async function saveTechnicalReviewChecklistDefinition(
+  input: z.infer<typeof saveTechnicalReviewChecklistDefinitionSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "settings:admin");
+    const parsed = saveTechnicalReviewChecklistDefinitionSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const codes = new Set(parsed.data.items.map((i) => i.code));
+    if (codes.size !== parsed.data.items.length) {
+      return { ok: false, error: "DUPLICATE_CODE" };
+    }
+
+    const checkSets = [
+      {
+        code: "TECHNICAL_REVIEW",
+        titleEn: "Technical Review Checklist",
+        titleAr: "قائمة تدقيق المراجعة الفنية",
+        items: parsed.data.items,
+      },
+    ];
+
+    await prisma.technicalReviewChecklist.upsert({
+      where: { id: "singleton" },
+      create: {
+        id: "singleton",
+        checkSets: checkSets as unknown as Prisma.InputJsonValue,
+        updatedByUserId: session.id,
+      },
+      update: {
+        checkSets: checkSets as unknown as Prisma.InputJsonValue,
+        updatedByUserId: session.id,
+      },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: session.organisationId,
+      action: "settings.technicalReviewChecklist.save",
+      entityType: "TechnicalReviewChecklist",
+      entityId: "singleton",
+      after: { itemCount: parsed.data.items.length },
+    });
+
+    revalidatePath("/[locale]/admin/settings", "page");
+    return { ok: true, data: undefined };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
@@ -1500,6 +1746,152 @@ export async function uploadActivityReport(formData: FormData): Promise<
   }
 }
 
+/**
+ * Marker label identifying an Evaluation Report `RequestDocument` (no
+ * `activityId`/`requiredDocumentId` — a request-item-level document distinct
+ * from activity reports and client-submitted required documents). Mirrors
+ * the `${activity.type} report` label convention `uploadActivityReport`
+ * already uses to distinguish document purpose without a dedicated column.
+ */
+const EVALUATION_REPORT_LABEL = "Evaluation Report";
+const EVALUATION_REPORT_ACCEPTED = ["application/pdf", "image/png", "image/jpeg"];
+const EVALUATION_REPORT_MAX_MB = 50;
+
+/** Every RequestItem on the request has an uploaded, current Evaluation Report. */
+async function hasEvaluationReportForAllItems(requestId: string): Promise<boolean> {
+  const items = await prisma.requestItem.findMany({
+    where: { requestId },
+    select: {
+      documents: {
+        where: { label: EVALUATION_REPORT_LABEL, currentVersionId: { not: null } },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+  return items.length > 0 && items.every((item) => item.documents.length > 0);
+}
+
+export async function uploadEvaluationReport(formData: FormData): Promise<
+  ActionResult<{ documentId: string; fileName: string }>
+> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const requestItemId = String(formData.get("requestItemId") ?? "");
+    if (!requestItemId) return { ok: false, error: "VALIDATION" };
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "NO_FILE" };
+    }
+
+    const item = await prisma.requestItem.findUnique({
+      where: { id: requestItemId },
+      select: {
+        id: true,
+        requestId: true,
+        request: { select: { id: true, state: true, organisationId: true } },
+      },
+    });
+    if (!item) return { ok: false, error: "NOT_FOUND" };
+    if (item.request.state !== "ASSESSMENT_RUNNING") {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    if (!EVALUATION_REPORT_ACCEPTED.includes(file.type)) {
+      return { ok: false, error: "MIME_REJECTED" };
+    }
+    if (file.size > EVALUATION_REPORT_MAX_MB * 1024 * 1024) {
+      return { ok: false, error: "FILE_TOO_LARGE" };
+    }
+
+    const { mimeAllowed, sniffMime } = await import("@/lib/mime-sniff");
+    const { storage } = await import("@/lib/storage");
+    const { createHash } = await import("node:crypto");
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const sniffed = sniffMime(buffer);
+    if (!mimeAllowed(sniffed, EVALUATION_REPORT_ACCEPTED)) {
+      return { ok: false, error: "MIME_REJECTED" };
+    }
+
+    const { getAvScanner } = await import("@/lib/av");
+    const verdict = await getAvScanner().scan(buffer);
+    if (verdict === "INFECTED") {
+      return { ok: false, error: "INFECTED_FILE" };
+    }
+
+    const sha256 = createHash("sha256").update(buffer).digest("hex");
+    const orgId = item.request.organisationId;
+    const requestId = item.requestId;
+    const stored = await storage.put({
+      keyPrefix: `orgs/${orgId}/requests/${requestId}/evaluation-report`,
+      fileName: file.name,
+      mimeType: sniffed,
+      body: buffer,
+    });
+
+    const doc = await prisma.$transaction(async (tx) => {
+      // Re-uploading replaces the prior report as a new version, unlike
+      // Laboratory Testing's multiple-independent-documents pattern — there
+      // is exactly one current Evaluation Report per request item.
+      const existing = await tx.requestDocument.findFirst({
+        where: { requestItemId: item.id, label: EVALUATION_REPORT_LABEL },
+      });
+      const document =
+        existing ??
+        (await tx.requestDocument.create({
+          data: {
+            requestId,
+            requestItemId: item.id,
+            label: EVALUATION_REPORT_LABEL,
+          },
+        }));
+      const priorVersionCount = await tx.documentVersion.count({
+        where: { documentId: document.id },
+      });
+      const version = await tx.documentVersion.create({
+        data: {
+          documentId: document.id,
+          version: priorVersionCount + 1,
+          fileName: file.name,
+          mimeType: sniffed,
+          sizeBytes: buffer.byteLength,
+          storageKey: stored.key,
+          sha256,
+          uploadedByUserId: session.id,
+          avStatus: "CLEAN",
+        },
+      });
+      await tx.requestDocument.update({
+        where: { id: document.id },
+        data: { currentVersionId: version.id },
+      });
+      return document;
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: orgId,
+      action: "request.evaluationReport.upload",
+      entityType: "RequestDocument",
+      entityId: doc.id,
+      after: { requestItemId: item.id, fileName: file.name },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${requestId}`, "page");
+    return { ok: true, data: { documentId: doc.id, fileName: file.name } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    if (message === "AV_UNAVAILABLE") {
+      return { ok: false, error: "AV_UNAVAILABLE" };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
 // ─── External deliverables (SABER/GHAD/FASAH certificates, external lab reports) ──
 
 const submitExternalDeliverableSchema = z.object({
@@ -1509,8 +1901,14 @@ const submitExternalDeliverableSchema = z.object({
 });
 
 /**
- * Marks external submission as started for a EXTERNAL_CERTIFICATE service
- * (e.g. staff just submitted the PCOC application on the SABER portal).
+ * Marks external submission as started — either for a catalogue service
+ * flagged EXTERNAL_CERTIFICATE (e.g. staff just submitted the PCOC
+ * application on the SABER portal) at any evaluation stage, or, at
+ * REPORT_ISSUED, for any granted request regardless of deliverableType: the
+ * real certificate obtained from SABER/SFDA needs a place to live whether or
+ * not the service is normally external-certificate-flavored (see the
+ * REPORT_ISSUED -> CLOSED gate in transitionAdminRequest, which requires one
+ * of these before the Evaluator can complete issuance).
  * Creates the ExternalDeliverable row if one doesn't exist yet.
  */
 export async function submitExternalDeliverable(
@@ -1531,7 +1929,10 @@ export async function submitExternalDeliverable(
       },
     });
     if (!item) return { ok: false, error: "NOT_FOUND" };
-    if (item.serviceItem.deliverableType !== "EXTERNAL_CERTIFICATE") {
+    if (
+      item.serviceItem.deliverableType !== "EXTERNAL_CERTIFICATE" &&
+      item.request.state !== "REPORT_ISSUED"
+    ) {
       return { ok: false, error: "NOT_APPLICABLE" };
     }
     if (!ASSESSMENT_EDIT_STATES.includes(item.request.state)) {
@@ -1846,9 +2247,13 @@ const clientFacingCommentSchema = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 
-/** A request with no lifecycle history (DRAFT) or a dead one (CANCELLED) has no thread to message on. */
+/**
+ * A request with no lifecycle history (DRAFT) or a dead one (CANCELLED) has
+ * no thread to message on. CLOSED requests are locked against further
+ * editing, including new messages, once finalized.
+ */
 function canMessageOnRequestState(state: RequestState): boolean {
-  return state !== "DRAFT" && state !== "CANCELLED";
+  return state !== "DRAFT" && state !== "CANCELLED" && state !== "CLOSED";
 }
 
 export async function addAtlasClientComment(

@@ -7,6 +7,7 @@ export const NOTIFICATION_EVENTS = [
   { type: "REQUEST_ASSIGNED", legalFinancial: false },
   { type: "TECHNICAL_REVIEW_READY", legalFinancial: false },
   { type: "DECISION_READY", legalFinancial: false },
+  { type: "CERTIFICATE_GRANTED", legalFinancial: false },
   { type: "REPORT_ISSUED", legalFinancial: false },
   { type: "CERTIFICATE_REFUSED", legalFinancial: false },
   { type: "REQUEST_CLOSED", legalFinancial: false },

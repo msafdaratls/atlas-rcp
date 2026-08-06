@@ -143,6 +143,21 @@ async function main() {
     prisma.user.create({
       data: {
         organisationId: atlas.id,
+        email: "evaluator@atls.com.sa",
+        username: "evaluator",
+        passwordHash,
+        fullNameEn: "Eng. Faisal Al-Dosari",
+        fullNameAr: "م. فيصل الدوسري",
+        phone: "+966501110005",
+        locale: "ar",
+        status: "ACTIVE",
+        emailVerifiedAt: new Date(),
+        roles: { create: [{ role: Role.EVALUATOR }] },
+      },
+    }),
+    prisma.user.create({
+      data: {
+        organisationId: atlas.id,
         email: "decision@atls.com.sa",
         username: "decision.maker",
         passwordHash,

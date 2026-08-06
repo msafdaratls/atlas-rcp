@@ -506,6 +506,11 @@ export type AdminRequestDetail = {
     phone: string | null;
   };
   items: AdminRequestDetailItem[];
+  /** Doc's reviewer meta-checklist — global definition + this request's results. */
+  technicalReviewChecklist: {
+    checkSets: CheckSet[];
+    results: AssessmentState;
+  };
   createdBy: { id: string; fullNameEn: string; fullNameAr: string; email: string };
   assignedTo: {
     id: string;
@@ -672,6 +677,10 @@ export async function getAdminRequestDetail(
     if (!request) return null;
 
     const pendingReopenRequest = request.reopenRequests[0] ?? null;
+    const technicalReviewChecklistDefinition =
+      await prisma.technicalReviewChecklist.findUnique({
+        where: { id: "singleton" },
+      });
 
     return {
       id: request.id,
@@ -801,6 +810,10 @@ export async function getAdminRequestDetail(
             })),
         })),
       })),
+      technicalReviewChecklist: {
+        checkSets: parseCheckSets(technicalReviewChecklistDefinition?.checkSets),
+        results: parseAssessment(request.technicalReviewChecklist),
+      },
       createdBy: request.createdBy,
       assignedTo: request.assignedTo,
       events: request.events.map((e) => ({
@@ -1518,6 +1531,26 @@ export async function getAtlasSettings(): Promise<AtlasSettings | null> {
       logoKey: atlas.logoKey,
       createdAt: atlas.createdAt.toISOString(),
     };
+  } catch {
+    return null;
+  }
+}
+
+/** The single global Technical Review meta-checklist definition, flattened for editing. */
+export async function getTechnicalReviewChecklistItems(): Promise<
+  { code: string; titleEn: string; titleAr: string }[] | null
+> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "settings:admin");
+
+    const definition = await prisma.technicalReviewChecklist.findUnique({
+      where: { id: "singleton" },
+    });
+    const checkSets = parseCheckSets(definition?.checkSets);
+    return checkSets.flatMap((s) =>
+      s.items.map((i) => ({ code: i.code, titleEn: i.titleEn, titleAr: i.titleAr })),
+    );
   } catch {
     return null;
   }

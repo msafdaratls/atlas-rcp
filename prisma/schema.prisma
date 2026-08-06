@@ -36,6 +36,7 @@ enum Role {
   CLIENT_USER
   CLIENT_FINANCE
   INTAKE_OFFICER
+  EVALUATOR
   TECHNICAL_REVIEWER
   DECISION_MAKER
   FINANCE
@@ -363,6 +364,20 @@ model ServiceItem {
   @@index([subCategoryId, active, sortOrder])
 }
 
+/// Single global reviewer meta-checklist (Evaluation Report reviewed /
+/// standards verified / etc.) shown during Technical Review — distinct from
+/// ServiceItem.checkSets, which is a per-service product-compliance
+/// checklist scored during Evaluation/Technical Review. Same CheckSet[] JSON
+/// shape and scoring engine (src/lib/assessment.ts), different storage
+/// location: one row for the whole platform, not one per catalogue item.
+/// Enforced as a singleton by always reading/writing id "singleton".
+model TechnicalReviewChecklist {
+  id              String   @id @default("singleton")
+  checkSets       Json     @default("[]")
+  updatedAt       DateTime @updatedAt
+  updatedByUserId String?
+}
+
 enum DeliverableType {
   INTERNAL_REPORT
   EXTERNAL_CERTIFICATE
@@ -417,6 +432,11 @@ model Request {
   closedAt         DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+  /// Technical Reviewer's meta-checklist results (was the evaluation report
+  /// reviewed / standards verified / etc.) — request-level, not per item,
+  /// scored against the single global TechnicalReviewChecklist definition.
+  /// Same AssessmentState JSON shape as RequestItem.assessment.
+  technicalReviewChecklist Json? @default("{}")
 
   organisation   Organisation           @relation(fields: [organisationId], references: [id])
   createdBy      User                   @relation("RequestCreatedBy", fields: [createdByUserId], references: [id])

@@ -2,8 +2,10 @@
 
 import { AssessmentPanel } from "@/components/atlas/admin/assessment-panel";
 import { EvaluationActivitiesPanel } from "@/components/atlas/admin/evaluation-activities-panel";
+import { EvaluationReportPanel } from "@/components/atlas/admin/evaluation-report-panel";
 import { ExternalDeliverablePanel } from "@/components/atlas/admin/external-deliverable-panel";
 import { MentionTextarea } from "@/components/atlas/admin/mention-textarea";
+import { TechnicalReviewChecklistPanel } from "@/components/atlas/admin/technical-review-checklist-panel";
 import { renderMentionBody } from "@/components/atlas/admin/mention-text";
 import { DocumentCard, type DocumentVersionView } from "@/components/atlas/document-card";
 import { MoneyValue } from "@/components/atlas/money-value";
@@ -272,7 +274,12 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
       case "CANCELLED":
         return t("cancel");
       case "CLOSED":
-        return t("close");
+        // REPORT_ISSUED -> CLOSED is the Evaluator's "Complete Certificate
+        // Issuance" step; any other route to CLOSED (e.g. admin override)
+        // keeps the generic "close" label.
+        return data.state === "REPORT_ISSUED"
+          ? t("completeCertificateIssuance")
+          : t("close");
       case "REPORT_ISSUED":
         return t("issueReport");
       default:
@@ -1171,6 +1178,17 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
         </Dialog>
       ) : null}
 
+      {["TECHNICAL_REVIEW", "DECISION", "REPORT_ISSUED", "CLOSED"].includes(
+        data.state,
+      ) && hasCheckItems(data.technicalReviewChecklist.checkSets) ? (
+        <TechnicalReviewChecklistPanel
+          requestId={data.id}
+          checkSets={data.technicalReviewChecklist.checkSets}
+          initial={data.technicalReviewChecklist.results}
+          editable={data.state === "TECHNICAL_REVIEW"}
+        />
+      ) : null}
+
       {ASSESSMENT_SHOW_STATES.includes(data.state)
         ? data.items
             .filter((item) => hasCheckItems(item.serviceItem.checkSets))
@@ -1186,6 +1204,20 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                 editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
               />
             ))
+        : null}
+
+      {ASSESSMENT_SHOW_STATES.includes(data.state)
+        ? data.items.map((item) => (
+            <EvaluationReportPanel
+              key={item.id}
+              requestItemId={item.id}
+              title={
+                locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
+              }
+              documents={item.documents}
+              editable={data.state === "ASSESSMENT_RUNNING"}
+            />
+          ))
         : null}
 
       {ASSESSMENT_SHOW_STATES.includes(data.state)
@@ -1214,6 +1246,9 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                 locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
               }
               serviceItem={item.serviceItem}
+              certificateRequired={
+                data.state === "REPORT_ISSUED" || data.state === "CLOSED"
+              }
               deliverable={item.externalDeliverable}
               editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
               locale={locale}

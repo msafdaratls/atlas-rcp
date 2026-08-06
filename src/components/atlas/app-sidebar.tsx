@@ -66,6 +66,7 @@ const CLIENT_NAV: NavItem[] = [
 /** Mirrors Atlas permission → role map in `src/lib/rbac.ts`. */
 const REQUESTS_ADMIN_ROLES: Role[] = [
   "INTAKE_OFFICER",
+  "EVALUATOR",
   "TECHNICAL_REVIEWER",
   "DECISION_MAKER",
   "SYSTEM_ADMIN",

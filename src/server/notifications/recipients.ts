@@ -160,6 +160,9 @@ export async function resolveRecipients(
         },
       });
 
+    case "CERTIFICATE_GRANTED":
+      return activeUsersByRoles(tx, ["EVALUATOR"], "ATLAS");
+
     case "TECHNICAL_REVIEW_READY":
       return activeUsersByRoles(tx, ["TECHNICAL_REVIEWER"], "ATLAS");
 

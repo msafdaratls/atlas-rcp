@@ -1811,9 +1811,13 @@ const clientCommentSchema = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 
-/** A request with no lifecycle history (DRAFT) or a dead one (CANCELLED) has no thread to message on. */
+/**
+ * A request with no lifecycle history (DRAFT) or a dead one (CANCELLED) has
+ * no thread to message on. CLOSED requests are locked against further
+ * editing, including new messages, once finalized.
+ */
 function canMessageOnRequestState(state: string): boolean {
-  return state !== "DRAFT" && state !== "CANCELLED";
+  return state !== "DRAFT" && state !== "CANCELLED" && state !== "CLOSED";
 }
 
 export async function addClientRequestComment(

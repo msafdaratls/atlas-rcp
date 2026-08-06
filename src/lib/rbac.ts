@@ -11,6 +11,7 @@ export function hasAnyRole(session: SessionUser, roles: Role[]): boolean {
 
 const REQUESTS_ADMIN_ROLES: Role[] = [
   "INTAKE_OFFICER",
+  "EVALUATOR",
   "TECHNICAL_REVIEWER",
   "DECISION_MAKER",
   "SYSTEM_ADMIN",
@@ -227,9 +228,26 @@ const INTAKE_OFFICER_TRANSITIONS: RequestState[] = [
   "ACCEPTED",
 ];
 
-const TECHNICAL_REVIEWER_TRANSITIONS: RequestState[] = [
+/**
+ * Evaluation-stage duties, split off TECHNICAL_REVIEWER so the same person
+ * cannot both evaluate a request and technically review their own
+ * evaluation. Also covers the certificate hand-off: once a Decision Maker
+ * grants, the Evaluator uploads the real external certificate and performs
+ * the final close. CLOSED is deliberately excluded here — REPORT_ISSUED ->
+ * CLOSED is granted via the CLOSED_FROM special case below, since CLOSED is
+ * also the target of the unrelated DECISION -> CLOSED refusal path, which
+ * stays a Decision Maker action.
+ */
+const EVALUATOR_TRANSITIONS: RequestState[] = [
   "ASSESSMENT_QUEUED",
   "ASSESSMENT_RUNNING",
+  "REPORT_ISSUED",
+  "ON_HOLD",
+  "RETURNED_TO_CLIENT",
+  "CANCELLED",
+];
+
+const TECHNICAL_REVIEWER_TRANSITIONS: RequestState[] = [
   "TECHNICAL_REVIEW",
   "ON_HOLD",
   "RETURNED_TO_CLIENT",
@@ -239,7 +257,6 @@ const TECHNICAL_REVIEWER_TRANSITIONS: RequestState[] = [
 const DECISION_MAKER_TRANSITIONS: RequestState[] = [
   "DECISION",
   "REPORT_ISSUED",
-  "CLOSED",
   "RETURNED_TO_CLIENT",
   "ON_HOLD",
   "CANCELLED",
@@ -247,6 +264,7 @@ const DECISION_MAKER_TRANSITIONS: RequestState[] = [
 
 const SPECIALIST_TRANSITIONS: Array<[Role, RequestState[]]> = [
   ["INTAKE_OFFICER", INTAKE_OFFICER_TRANSITIONS],
+  ["EVALUATOR", EVALUATOR_TRANSITIONS],
   ["TECHNICAL_REVIEWER", TECHNICAL_REVIEWER_TRANSITIONS],
   ["DECISION_MAKER", DECISION_MAKER_TRANSITIONS],
 ];
@@ -267,6 +285,11 @@ export type TransitionContext = {
  * Special case: any specialist may resume ON_HOLD back to `heldFromState`
  * (including SUBMITTED / ACCEPTED), even when that state is not otherwise
  * in their forward allow-list — otherwise holds become stuck.
+ *
+ * Special case: CLOSED is the target of two unrelated edges that need
+ * different actors — DECISION -> CLOSED is the Decision Maker's refusal
+ * path, REPORT_ISSUED -> CLOSED is the Evaluator completing certificate
+ * issuance — so it's resolved by fromState rather than a flat allow-list.
  */
 export function canTransitionRequest(
   session: SessionUser,
@@ -285,6 +308,15 @@ export function canTransitionRequest(
   );
   if (matchingRoles.length === 0) {
     return false;
+  }
+
+  if (toState === "CLOSED") {
+    if (ctx.fromState === "DECISION") {
+      return matchingRoles.some(([role]) => role === "DECISION_MAKER");
+    }
+    if (ctx.fromState === "REPORT_ISSUED") {
+      return matchingRoles.some(([role]) => role === "EVALUATOR");
+    }
   }
 
   // Resume from hold: any specialist who can place holds may restore prior state.

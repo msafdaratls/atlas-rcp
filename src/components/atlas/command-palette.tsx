@@ -64,6 +64,7 @@ export function CommandPalette({
   ]);
   const canAdminQueues = hasAnyRole(roles, [
     "INTAKE_OFFICER",
+    "EVALUATOR",
     "TECHNICAL_REVIEWER",
     "DECISION_MAKER",
     "SYSTEM_ADMIN",

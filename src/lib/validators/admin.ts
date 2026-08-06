@@ -29,6 +29,7 @@ export type CreateClientInput = z.infer<typeof createClientSchema>;
 /** Atlas-side roles assignable via staff invites (mirrors the client invite flow). */
 export const ATLAS_STAFF_ROLES = [
   "INTAKE_OFFICER",
+  "EVALUATOR",
   "TECHNICAL_REVIEWER",
   "DECISION_MAKER",
   "FINANCE",

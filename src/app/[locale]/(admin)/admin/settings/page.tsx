@@ -1,5 +1,6 @@
 import { AdminSettingsForm } from "@/components/atlas/admin/admin-settings-form";
 import { AdminStaffPanel } from "@/components/atlas/admin/admin-staff-panel";
+import { TechnicalReviewChecklistEditor } from "@/components/atlas/admin/technical-review-checklist-editor";
 import { EmptyState } from "@/components/atlas/empty-state";
 import { PageHeader } from "@/components/atlas/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,7 +8,11 @@ import { requireSession } from "@/lib/auth/session";
 import { isLocale, type Locale } from "@/lib/i18n/config";
 import { requirePagePermission } from "@/lib/page-auth";
 import { hasRole } from "@/lib/rbac";
-import { getAtlasSettings, listAtlasStaff } from "@/server/admin/queries";
+import {
+  getAtlasSettings,
+  getTechnicalReviewChecklistItems,
+  listAtlasStaff,
+} from "@/server/admin/queries";
 import { Settings } from "lucide-react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -28,9 +33,10 @@ export default async function AdminSettingsPage({ params }: Props) {
   const t = await getTranslations("adminOps.settings");
   const tAdmin = await getTranslations("adminOps");
   const tNav = await getTranslations("nav.admin");
-  const [settings, staff] = await Promise.all([
+  const [settings, staff, technicalReviewChecklistItems] = await Promise.all([
     getAtlasSettings(),
     listAtlasStaff(),
+    getTechnicalReviewChecklistItems(),
   ]);
 
   const canManageStaff =
@@ -50,6 +56,11 @@ export default async function AdminSettingsPage({ params }: Props) {
               {t("tabs.organisation")}
             </TabsTrigger>
             <TabsTrigger value="staff">{t("tabs.staff")}</TabsTrigger>
+            {canManageStaff ? (
+              <TabsTrigger value="technicalReviewChecklist">
+                {t("tabs.technicalReviewChecklist")}
+              </TabsTrigger>
+            ) : null}
           </TabsList>
           <TabsContent value="organisation">
             <AdminSettingsForm data={settings} />
@@ -69,6 +80,21 @@ export default async function AdminSettingsPage({ params }: Props) {
               />
             )}
           </TabsContent>
+          {canManageStaff ? (
+            <TabsContent value="technicalReviewChecklist">
+              {technicalReviewChecklistItems ? (
+                <TechnicalReviewChecklistEditor
+                  initial={technicalReviewChecklistItems}
+                />
+              ) : (
+                <EmptyState
+                  icon={Settings}
+                  title={tAdmin("unavailableTitle")}
+                  description={tAdmin("unavailableDescription")}
+                />
+              )}
+            </TabsContent>
+          ) : null}
         </Tabs>
       ) : (
         <EmptyState
