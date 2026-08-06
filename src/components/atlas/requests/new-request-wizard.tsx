@@ -255,6 +255,19 @@ export function NewRequestWizard({
     [catalogue.items, subIds],
   );
 
+  // Deselecting a subcategory (or switching main categories) hides its items
+  // from browsableItems, which would otherwise leave their ids orphaned in
+  // cartIds — still counted in the summary/submission but with no control
+  // left on screen to remove them.
+  useEffect(() => {
+    setCartIds((prev) =>
+      prev.filter((id) => {
+        const item = catalogueItemById.get(id);
+        return item ? subIds.includes(item.subCategoryId) : false;
+      }),
+    );
+  }, [subIds, catalogueItemById]);
+
   const [couponCode, setCouponCode] = useState(initialDraft?.couponCode ?? "");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(
     initialDraft?.couponCode ?? null,
