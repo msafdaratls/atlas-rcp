@@ -182,8 +182,18 @@ export function requirePermission(
       }
       return;
     case "credentials:manage":
-      // Client org owners/admins manage their org's stored portal logins.
-      if (!isClient || !hasAnyRole(session, ["CLIENT_OWNER", "CLIENT_ADMIN"])) {
+      // Client org owners/admins manage their own org's stored portal
+      // logins; Atlas staff with on-behalf authority (same roles as
+      // requests:create-behalf) manage them while building a request for a
+      // client, since the on-behalf wizard can require a saved credential
+      // before a request is even submittable.
+      if (isClient) {
+        if (!hasAnyRole(session, ["CLIENT_OWNER", "CLIENT_ADMIN"])) {
+          throw new Error("FORBIDDEN");
+        }
+        return;
+      }
+      if (!isAtlas || !hasAnyRole(session, CLIENTS_CREATE_ROLES)) {
         throw new Error("FORBIDDEN");
       }
       return;

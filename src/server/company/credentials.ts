@@ -5,7 +5,6 @@ import { requireSession } from "@/lib/auth/session";
 import { writeAuditLog, requestMeta } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac";
-import { scopedDb } from "@/lib/scoped-db";
 import { resolveRequestContext } from "@/lib/request-context";
 import { decryptSecret, encryptSecret } from "@/lib/crypto/vault";
 import {
@@ -52,9 +51,9 @@ export async function createCredential(
   input: unknown,
 ): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "credentials:manage");
-    const { organisationId } = scopedDb(session);
+    const ctx = await resolveRequestContext();
+    requirePermission(ctx.session, "credentials:manage");
+    const { organisationId, session } = ctx;
 
     const parsed = createCredentialSchema.safeParse(input);
     if (!parsed.success) {
@@ -74,7 +73,7 @@ export async function createCredential(
           secretCiphertext: encrypted.ciphertext,
           secretIv: encrypted.iv,
           secretAuthTag: encrypted.authTag,
-          createdByUserId: session.id,
+          createdByUserId: ctx.actorUserId,
         },
       });
 
@@ -98,6 +97,7 @@ export async function createCredential(
     });
 
     revalidatePath("/[locale]/client/company", "page");
+    revalidatePath("/[locale]/admin/requests/new", "page");
     return { ok: true, data: { id: created.id } };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
@@ -112,9 +112,9 @@ export async function deactivateCredential(
   input: unknown,
 ): Promise<ActionResult> {
   try {
-    const session = await requireSession();
-    requirePermission(session, "credentials:manage");
-    const { organisationId } = scopedDb(session);
+    const ctx = await resolveRequestContext();
+    requirePermission(ctx.session, "credentials:manage");
+    const { organisationId, session } = ctx;
 
     const parsed = deactivateCredentialSchema.safeParse(input);
     if (!parsed.success) {
