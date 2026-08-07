@@ -84,6 +84,21 @@ docker compose -f docker-compose.prod.yml exec db \
   pg_dump -U postgres atlas_rcp > backup-$(date +%F).sql
 ```
 
+### Automated daily backups (bundled Postgres only)
+
+`deploy/backup-db.sh` dumps the `db` container's database to `/opt/backups`
+(gzip, reads `POSTGRES_USER`/`POSTGRES_DB` from the container itself, no
+secrets in the script) and prunes anything older than 14 days. Install once:
+
+```bash
+chmod +x deploy/backup-db.sh
+(crontab -l 2>/dev/null; echo "15 3 * * * $(pwd)/deploy/backup-db.sh") | crontab -
+```
+
+Adjust the container name inside the script if you're not using the default
+`coc-db-1` / `atlas-db-1` naming from `docker-compose.droplet.yml` or
+`docker-compose.prod.yml`.
+
 ## Production hardening (recommended)
 
 - **Managed Postgres** — swap the bundled `db` service for DigitalOcean Managed
