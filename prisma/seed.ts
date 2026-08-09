@@ -616,6 +616,9 @@ async function main() {
     deliverableType?: DeliverableType;
     requiredCredentialPlatform?: PlatformType | null;
     defaultEvaluatorId?: string | null;
+    requiresInspection?: boolean;
+    requiresLabTesting?: boolean;
+    requiresFactoryAudit?: boolean;
   }) {
     return prisma.serviceItem.create({
       data: {
@@ -638,6 +641,9 @@ async function main() {
         deliverableType: input.deliverableType ?? DeliverableType.INTERNAL_REPORT,
         requiredCredentialPlatform: input.requiredCredentialPlatform ?? null,
         defaultEvaluatorId: input.defaultEvaluatorId ?? null,
+        requiresInspection: input.requiresInspection ?? false,
+        requiresLabTesting: input.requiresLabTesting ?? false,
+        requiresFactoryAudit: input.requiresFactoryAudit ?? false,
         sortOrder: input.sortOrder,
         active: true,
         requiredDocuments: {
@@ -1328,6 +1334,10 @@ async function main() {
     deliverableAr: "تقرير الاختبار المخبري",
     deliverableType: DeliverableType.EXTERNAL_CERTIFICATE,
     requiredCredentialPlatform: null,
+    // The whole point of this service is coordinating lab testing, so the
+    // Evaluation-stage Laboratory Testing activity panel (schedule/upload
+    // reports/complete) must be available on every request for it.
+    requiresLabTesting: true,
   });
 
   // ── Coupons ──────────────────────────────────────────────────────────────

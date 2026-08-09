@@ -23,13 +23,19 @@ import {
 
 export function AdminOnBehalfPicker({
   clients,
+  defaultOrgId = "",
 }: {
   clients: OnBehalfClientOption[];
+  /** Pre-selects a client (e.g. one pinned from an earlier visit) without
+   * skipping the picker entirely — the staff member still has to confirm it
+   * with one click, so a stale pin from a previous session can never
+   * silently carry a request into the wrong client's account. */
+  defaultOrgId?: string;
 }) {
   const t = useTranslations("adminOps.requests.onBehalf");
   const locale = useLocale();
   const router = useRouter();
-  const [selected, setSelected] = useState<string>("");
+  const [selected, setSelected] = useState<string>(defaultOrgId);
   const [pending, startTransition] = useTransition();
 
   function onContinue() {
@@ -40,7 +46,11 @@ export function AdminOnBehalfPicker({
         toast.error(t(`errors.${result.error}` as "errors.FAILED"));
         return;
       }
-      router.refresh();
+      // A plain refresh would re-run the page with the same URL, and the
+      // page only trusts the pin for a deep link — a `refresh()` here would
+      // just show this same picker again. Marking the navigation as
+      // explicitly confirmed is what lets the page move on to the wizard.
+      router.push(`/${locale}/admin/requests/new?confirmed=1`);
     });
   }
 

@@ -320,7 +320,8 @@
       "vatLine": "ضريبة {vat}",
       "slaLine": "مستوى الخدمة {hours} ساعة",
       "docsLine": "{count} مستندات مطلوبة",
-      "whatWeCheck": "ماذا نتحقق منه"
+      "whatWeCheck": "ماذا نتحقق منه",
+      "noServices": "لا توجد خدمات متاحة حاليًا ضمن هذه الفئة الفرعية."
     },
     "step2": {
       "title": "تفاصيل المنتج"
@@ -698,6 +699,7 @@
       "unassigned": "غير مُسند",
       "assignAction": "تعيين",
       "assignTo": "تعيين إلى",
+      "assignToFiltered": "يعرض الموظفين القادرين على العمل في هذه المرحلة من الطلب.",
       "assignSubmit": "حفظ التعيين",
       "unassignAction": "إلغاء التعيين",
       "actionsTitle": "إجراءات دورة الحياة",
@@ -710,7 +712,7 @@
       "returnSubmit": "إرجاع للعميل",
       "returnCancel": "إلغاء",
       "hold": "تعليق",
-      "resume": "استئناف الاستلام",
+      "resume": "استئناف إلى {state}",
       "issueReport": "إصدار التقرير",
       "close": "وضع علامة تم",
       "completeCertificateIssuance": "إكمال إصدار الشهادة",

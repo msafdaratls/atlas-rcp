@@ -320,7 +320,8 @@
       "vatLine": "VAT {vat}",
       "slaLine": "SLA {hours}h",
       "docsLine": "{count} required documents",
-      "whatWeCheck": "What we check"
+      "whatWeCheck": "What we check",
+      "noServices": "No services are currently offered under this subcategory."
     },
     "step2": {
       "title": "Product details"
@@ -698,6 +699,7 @@
       "unassigned": "Unassigned",
       "assignAction": "Assign",
       "assignTo": "Assign to",
+      "assignToFiltered": "Showing staff who can act on this request's current stage.",
       "assignSubmit": "Save assignment",
       "unassignAction": "Unassign",
       "actionsTitle": "Lifecycle actions",
@@ -710,7 +712,7 @@
       "returnSubmit": "Return to client",
       "returnCancel": "Cancel",
       "hold": "Put on hold",
-      "resume": "Resume intake",
+      "resume": "Resume to {state}",
       "issueReport": "Issue report",
       "close": "Mark as done",
       "completeCertificateIssuance": "Complete certificate issuance",
