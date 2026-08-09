@@ -42,7 +42,7 @@ import {
 } from "@/server/admin/actions";
 import { hasCheckItems } from "@/lib/assessment";
 import type { AdminRequestDetail, AssignableStaffUser } from "@/server/admin/queries";
-import type { FaultAttribution, RequestState, ReturnReasonCode } from "@prisma/client";
+import type { FaultAttribution, RequestState, ReturnReasonCode, Role } from "@prisma/client";
 import { format } from "date-fns";
 import { arSA, enGB } from "date-fns/locale";
 
@@ -68,6 +68,24 @@ const ASSESSMENT_EDIT_STATES: RequestState[] = [
   // REPORT_ISSUED -> CLOSED.
   "REPORT_ISSUED",
 ];
+
+/**
+ * The role actually authorized to act at each stage (per rbac.ts's
+ * SPECIALIST_TRANSITIONS) — used to narrow the "Assign to" picker so it
+ * doesn't offer, say, a Finance-only staff member for an Evaluation-stage
+ * request. SYSTEM_ADMIN can always act, so it's added separately below
+ * rather than repeated in every entry. States with no single responsible
+ * role (ON_HOLD, terminal states, etc.) are left unfiltered.
+ */
+const ROLE_FOR_STATE: Partial<Record<RequestState, Role>> = {
+  SUBMITTED: "INTAKE_OFFICER",
+  UNDER_INTAKE_REVIEW: "INTAKE_OFFICER",
+  ASSESSMENT_QUEUED: "EVALUATOR",
+  ASSESSMENT_RUNNING: "EVALUATOR",
+  REPORT_ISSUED: "EVALUATOR",
+  TECHNICAL_REVIEW: "TECHNICAL_REVIEWER",
+  DECISION: "DECISION_MAKER",
+};
 
 type ReopenTargetState =
   | "SUBMITTED"
@@ -155,6 +173,23 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+
+  const stageRole = ROLE_FOR_STATE[data.state];
+  const staffForStageRole = stageRole
+    ? assignableStaff.filter(
+        (u) =>
+          u.roles.includes(stageRole) ||
+          u.roles.includes("SYSTEM_ADMIN") ||
+          u.id === data.assignedTo?.id,
+      )
+    : assignableStaff;
+  // Fall back to the full list rather than presenting an empty picker if no
+  // one currently holds the stage's role (e.g. it hasn't been assigned to
+  // any staff member yet) — a narrowed-but-empty dropdown would block
+  // assignment entirely instead of just being a helpful default.
+  const assignableForStage =
+    staffForStageRole.length > 0 ? staffForStageRole : assignableStaff;
+  const stageFilterApplied = assignableForStage !== assignableStaff;
 
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignUserId, setAssignUserId] = useState<string>(
@@ -297,7 +332,11 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
       case "REPORT_ISSUED":
         return t("issueReport");
       default:
-        if (data.state === "ON_HOLD") return t("resume");
+        // Resuming from ON_HOLD can land back in Evaluation, Technical
+        // Review, or Decision, not just intake — the label must name the
+        // actual stage it's returning to, or a reviewer mid-Evaluation sees
+        // "Resume intake" and assumes their hold reset the request.
+        if (data.state === "ON_HOLD") return t("resume", { state: tStates(target) });
         return t("advance", { state: tStates(target) });
     }
   }
@@ -1185,13 +1224,18 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                     <SelectValue placeholder={t("assignTo")} />
                   </SelectTrigger>
                   <SelectContent>
-                    {assignableStaff.map((u) => (
+                    {assignableForStage.map((u) => (
                       <SelectItem key={u.id} value={u.id}>
                         {locale === "ar" ? u.fullNameAr : u.fullNameEn}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {stageFilterApplied ? (
+                  <p className="mt-1 text-xs text-ink-500">
+                    {t("assignToFiltered")}
+                  </p>
+                ) : null}
               </div>
             </div>
             <DialogFooter>
