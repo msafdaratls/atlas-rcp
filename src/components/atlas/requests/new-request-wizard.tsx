@@ -929,10 +929,14 @@ export function NewRequestWizard({
                     key={sub.id}
                     type="button"
                     onClick={() => {
+                      // Single-select: these render as a tab bar (one
+                      // highlighted pill), so the underlying state must
+                      // behave like one too. A multi-select toggle here
+                      // let two sub-categories show "selected" at once and
+                      // left a stale service list on screen when switching
+                      // into an empty sub-category.
                       setSubIds((prev) =>
-                        prev.includes(sub.id)
-                          ? prev.filter((id) => id !== sub.id)
-                          : [...prev, sub.id],
+                        prev.length === 1 && prev[0] === sub.id ? [] : [sub.id],
                       );
                     }}
                     className={cn(
@@ -948,7 +952,13 @@ export function NewRequestWizard({
               </div>
             ) : null}
 
-            {subIds.length > 0 ? (
+            {subIds.length > 0 && browsableItems.length === 0 ? (
+              <p className="rounded-lg border border-line bg-surface-alt p-4 text-sm text-ink-500">
+                {t("step1.noServices")}
+              </p>
+            ) : null}
+
+            {subIds.length > 0 && browsableItems.length > 0 ? (
               <ul className="space-y-2">
                 {browsableItems.map((item) => {
                   const vat = item.basePrice * item.vatRate;

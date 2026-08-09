@@ -320,7 +320,8 @@
       "vatLine": "VAT {vat}",
       "slaLine": "SLA {hours}h",
       "docsLine": "{count} required documents",
-      "whatWeCheck": "What we check"
+      "whatWeCheck": "What we check",
+      "noServices": "No services are currently offered under this subcategory."
     },
     "step2": {
       "title": "Product details"

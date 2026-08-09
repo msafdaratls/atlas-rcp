@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ engagement?: string }>;
+  searchParams: Promise<{ engagement?: string; confirmed?: string }>;
 };
 
 export default async function AdminNewRequestPage({ params, searchParams }: Props) {
@@ -49,15 +49,25 @@ export default async function AdminNewRequestPage({ params, searchParams }: Prop
     { label: tReq("newRequest") },
   ];
 
-  // Is a client currently pinned for on-behalf creation?
+  // Is a client currently pinned for on-behalf creation? Only trust it to
+  // skip straight into the wizard when we arrived via an explicit deep link
+  // (e.g. "new request under this engagement", which pins the org itself
+  // right before redirecting here) or the on-behalf picker below just
+  // confirmed it. Landing on the plain /admin/requests/new entry point
+  // always re-confirms the client, even if a pin from an earlier, unrelated
+  // visit is still sitting in the cookie — otherwise a stale pin can
+  // silently attach a new request (and its pre-filled draft) to the wrong
+  // client's organisation.
   const store = await cookies();
   const actingOrgId = store.get(ACTING_ORG_COOKIE)?.value ?? null;
-  const actingOrg = actingOrgId
-    ? await prisma.organisation.findFirst({
-        where: { id: actingOrgId, type: "CLIENT", status: "ACTIVE" },
-        select: { nameEn: true, nameAr: true },
-      })
-    : null;
+  const trustPin = Boolean(sp.engagement) || sp.confirmed === "1";
+  const actingOrg =
+    actingOrgId && trustPin
+      ? await prisma.organisation.findFirst({
+          where: { id: actingOrgId, type: "CLIENT", status: "ACTIVE" },
+          select: { nameEn: true, nameAr: true },
+        })
+      : null;
 
   if (!actingOrg) {
     const clients = (await listClientsForOnBehalf()) ?? [];
@@ -68,7 +78,7 @@ export default async function AdminNewRequestPage({ params, searchParams }: Prop
           description={tReq("onBehalf.description")}
           breadcrumbs={breadcrumbs}
         />
-        <AdminOnBehalfPicker clients={clients} />
+        <AdminOnBehalfPicker clients={clients} defaultOrgId={actingOrgId ?? ""} />
       </div>
     );
   }
