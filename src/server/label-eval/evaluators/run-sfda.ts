@@ -14,6 +14,64 @@ export type RunResult = {
 };
 
 /**
+ * Recomputes and stores LabelAssessment.overallRate/finalVerdict from
+ * whatever LabelItemVerdict rows exist right now — no evaluators run, no
+ * fields read. Call this after anything that changes a verdict without
+ * re-running the full rule engine (currently: applyVerdictOverride), since
+ * otherwise the summary/final-verdict bar goes stale and silently disagrees
+ * with the per-item verdicts and the already-correct RequestItem checklist
+ * (which recomputes live on every render via computeAssessment — confirmed
+ * live: after one override the workspace kept showing 92% while the
+ * promoted official checklist correctly showed 91%).
+ */
+export async function recomputeSfdaScore(assessmentId: string): Promise<void> {
+  const verdicts = await prisma.labelItemVerdict.findMany({
+    where: { assessmentId },
+    select: { verdict: true },
+  });
+  const { rate, finalVerdict } = scoreSfdaVerdicts(verdicts.map((v) => v.verdict));
+  await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { overallRate: rate, finalVerdict } });
+}
+
+function scoreSfdaVerdicts(verdicts: string[]): {
+  rate: number | null;
+  finalVerdict: RunResult["finalVerdict"];
+  compliant: number;
+  nonCompliant: number;
+  na: number;
+  needsReview: number;
+  requiresAdditionalData: number;
+} {
+  let compliant = 0;
+  let nonCompliant = 0;
+  let na = 0;
+  let needsReview = 0;
+  let requiresAdditionalData = 0;
+  for (const verdict of verdicts) {
+    switch (verdict) {
+      case "COMPLIANT": compliant++; break;
+      case "NON_COMPLIANT": nonCompliant++; break;
+      case "NA": na++; break;
+      case "NEEDS_REVIEW": needsReview++; break;
+      case "REQUIRES_ADDITIONAL_DATA": requiresAdditionalData++; break;
+    }
+  }
+
+  const rate = compliant + nonCompliant === 0 ? null : compliant / (compliant + nonCompliant);
+  // "Complete" per src/lib/assessment.ts semantics: every item resolved to
+  // compliant/nonCompliant/na. NEEDS_REVIEW and REQUIRES_ADDITIONAL_DATA are
+  // provisional — the reviewer must resolve them before a firm decision.
+  const complete = needsReview === 0 && requiresAdditionalData === 0;
+  const decision = recommendDecision(rate, complete);
+  const finalVerdict: RunResult["finalVerdict"] =
+    decision === "ACCEPTED" ? "accepted" :
+    decision === "ACCEPTED_WITH_REMARKS" ? "accepted_with_remarks" :
+    decision === "REJECTED" ? "rejected" : "incomplete";
+
+  return { rate, finalVerdict, compliant, nonCompliant, na, needsReview, requiresAdditionalData };
+}
+
+/**
  * Runs the full SFDA rule engine over an assessment's CONFIRMED fields only
  * (design doc §1 Principle 3 — unconfirmed fields are never read here), then
  * scores via the exact existing formula (src/lib/assessment.ts, already live
@@ -43,34 +101,23 @@ export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult
   ]);
   const lookups = lookupRows.map((l) => ({ tableKey: l.tableKey, payload: l.payload as Record<string, unknown> }));
 
-  let compliant = 0;
-  let nonCompliant = 0;
-  let na = 0;
-  let needsReview = 0;
-  let requiresAdditionalData = 0;
+  const results = rules.map((rule) => ({
+    rule,
+    result: runEvaluator(rule.evaluatorKey, {
+      code: rule.code,
+      section: rule.section,
+      titleEn: rule.titleEn,
+      titleAr: rule.titleAr,
+      payload: rule.payload as Record<string, unknown>,
+      fields: confirmedFields,
+      classification: null, // SFDA has no classifier
+      lookups,
+    }),
+  }));
 
   await prisma.$transaction(
-    rules.map((rule) => {
-      const result = runEvaluator(rule.evaluatorKey, {
-        code: rule.code,
-        section: rule.section,
-        titleEn: rule.titleEn,
-        titleAr: rule.titleAr,
-        payload: rule.payload as Record<string, unknown>,
-        fields: confirmedFields,
-        classification: null, // SFDA has no classifier
-        lookups,
-      });
-
-      switch (result.verdict) {
-        case "COMPLIANT": compliant++; break;
-        case "NON_COMPLIANT": nonCompliant++; break;
-        case "NA": na++; break;
-        case "NEEDS_REVIEW": needsReview++; break;
-        case "REQUIRES_ADDITIONAL_DATA": requiresAdditionalData++; break;
-      }
-
-      return prisma.labelItemVerdict.upsert({
+    results.map(({ rule, result }) =>
+      prisma.labelItemVerdict.upsert({
         where: { assessmentId_kbRuleId: { assessmentId, kbRuleId: rule.id } },
         create: {
           assessmentId,
@@ -86,26 +133,23 @@ export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult
           evidenceText: result.evidenceText,
           rationale: result.rationale,
         },
-      });
-    }),
+      }),
+    ),
   );
 
-  const rate = compliant + nonCompliant === 0 ? null : compliant / (compliant + nonCompliant);
-  // "Complete" per src/lib/assessment.ts semantics: every item resolved to
-  // compliant/nonCompliant/na. NEEDS_REVIEW and REQUIRES_ADDITIONAL_DATA are
-  // provisional — the reviewer must resolve them before a firm decision.
-  const complete = needsReview === 0 && requiresAdditionalData === 0;
-  const decision = recommendDecision(rate, complete);
-
-  const finalVerdict =
-    decision === "ACCEPTED" ? "accepted" :
-    decision === "ACCEPTED_WITH_REMARKS" ? "accepted_with_remarks" :
-    decision === "REJECTED" ? "rejected" : "incomplete";
-
+  const score = scoreSfdaVerdicts(results.map((r) => r.result.verdict));
   await prisma.labelAssessment.update({
     where: { id: assessmentId },
-    data: { overallRate: rate, finalVerdict },
+    data: { overallRate: score.rate, finalVerdict: score.finalVerdict },
   });
 
-  return { overallRate: rate, finalVerdict, compliant, nonCompliant, na, needsReview, requiresAdditionalData };
+  return {
+    overallRate: score.rate,
+    finalVerdict: score.finalVerdict,
+    compliant: score.compliant,
+    nonCompliant: score.nonCompliant,
+    na: score.na,
+    needsReview: score.needsReview,
+    requiresAdditionalData: score.requiresAdditionalData,
+  };
 }

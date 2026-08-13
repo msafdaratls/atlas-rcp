@@ -163,3 +163,20 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
 
   return { blocked: false, finalVerdict, compliant, nonCompliant, needsReview };
 }
+
+/**
+ * Recomputes and stores LabelAssessment.finalVerdict from whatever
+ * LabelItemVerdict rows exist right now, without re-running the classifier
+ * or evaluators. Mirrors recomputeSfdaScore (run-sfda.ts) — call after
+ * applyVerdictOverride so the summary bar doesn't go stale (see that
+ * function's comment for the confirmed live bug this fixes).
+ */
+export async function recomputeCosmeticsScore(assessmentId: string): Promise<void> {
+  const verdicts = await prisma.labelItemVerdict.findMany({
+    where: { assessmentId },
+    select: { verdict: true },
+  });
+  const nonCompliant = verdicts.filter((v) => v.verdict === "NON_COMPLIANT").length;
+  const finalVerdict = nonCompliant > 0 ? "non_compliant" : "compliant";
+  await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { finalVerdict } });
+}

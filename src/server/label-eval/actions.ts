@@ -11,13 +11,22 @@ import { DOCUMENT_KIND_BY_REQUIRED_CODE } from "@/server/label-eval/fields";
 import { ingestRequestItemDocuments } from "@/server/label-eval/storage";
 import {
   assertRequestItemEvaluable,
+  computeLiveFingerprint,
   EvaluationUnavailableError,
 } from "@/server/label-eval/queries";
-import { assertNoInFlightRun, InFlightRunExistsError, applyVerdictOverride, VerdictConflictError } from "@/server/label-eval/concurrency";
+import {
+  assertNoInFlightRun,
+  InFlightRunExistsError,
+  applyVerdictOverride,
+  VerdictConflictError,
+  claimAssessment,
+  AlreadyClaimedError,
+} from "@/server/label-eval/concurrency";
 import { mandatoryFieldKeys } from "@/server/label-eval/fields";
-import { runSfdaRuleEngine } from "@/server/label-eval/evaluators/run-sfda";
-import { runCosmeticsRuleEngine } from "@/server/label-eval/evaluators/run-cosmetics";
+import { runSfdaRuleEngine, recomputeSfdaScore } from "@/server/label-eval/evaluators/run-sfda";
+import { runCosmeticsRuleEngine, recomputeCosmeticsScore } from "@/server/label-eval/evaluators/run-cosmetics";
 import { saveAssessment } from "@/server/admin/actions";
+import { parseAssessment, parseCheckSets } from "@/lib/assessment";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
@@ -168,6 +177,41 @@ export async function getLabelAssessmentStatus(
   }
 }
 
+/**
+ * Soft-claim check (design doc §13.4), called when a reviewer opens an
+ * existing assessment. `claimAssessment` itself was already implemented but
+ * never called from anywhere — confirmed live: two reviewers could open the
+ * same in-progress item with no warning at all. This is the missing call
+ * site; `force: true` is the reviewer's explicit take-over action.
+ */
+export async function checkAssessmentClaim(
+  assessmentId: string,
+  opts?: { force?: boolean },
+): Promise<ActionResult<{ claimed: true } | { claimed: false; claimedByName: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+
+    try {
+      await claimAssessment(session, assessmentId, opts);
+      return { ok: true, data: { claimed: true } };
+    } catch (e) {
+      if (e instanceof AlreadyClaimedError) {
+        const claimer = await prisma.user.findUnique({
+          where: { id: e.claimedByUserId },
+          select: { fullNameEn: true },
+        });
+        return { ok: true, data: { claimed: false, claimedByName: claimer?.fullNameEn ?? "another reviewer" } };
+      }
+      throw e;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") return { ok: false, error: message };
+    return { ok: false, error: "CLAIM_FAILED" };
+  }
+}
+
 const updateFieldSchema = z.object({
   assessmentId: z.string().min(1),
   fieldKey: z.string().min(1),
@@ -242,10 +286,32 @@ export async function confirmFieldsAndRunAssessment(
 
     const assessment = await prisma.labelAssessment.findUnique({
       where: { id: assessmentId },
-      select: { id: true, domain: true, status: true, fields: { select: { fieldKey: true, valueEn: true, valueAr: true, confirmedAt: true } } },
+      select: {
+        id: true,
+        domain: true,
+        status: true,
+        requestItemId: true,
+        documentsFingerprint: true,
+        fields: { select: { fieldKey: true, valueEn: true, valueAr: true, confirmedAt: true } },
+      },
     });
     if (!assessment) return { ok: false, error: "NOT_FOUND" };
     if (assessment.status !== "AWAITING_REVIEW") return { ok: false, error: "INVALID_STATE" };
+
+    // Race condition guard (design doc §13.5): if the client replaced the
+    // artwork/ingredient list after extraction ran, the confirmed fields
+    // below were read from a now-superseded file. Block rather than let the
+    // reviewer unknowingly confirm and score stale data — confirmed live
+    // this was previously not checked at all. Only re-checked when the item
+    // is still linked; an unlinked item (client hard-deleted the draft cart
+    // row) has no live document to compare against, so the evaluator's own
+    // copy stays the source of truth as designed (§3).
+    if (assessment.requestItemId) {
+      const liveFingerprint = await computeLiveFingerprint(assessment.requestItemId, assessment.domain);
+      if (liveFingerprint && liveFingerprint !== assessment.documentsFingerprint) {
+        return { ok: false, error: "DOCUMENTS_CHANGED" };
+      }
+    }
 
     const byKey = new Map(assessment.fields.map((f) => [f.fieldKey, f]));
     const missing = mandatoryFieldKeys(assessment.domain).filter((def) => {
@@ -305,15 +371,126 @@ export async function overrideItemVerdict(
     const parsed = overrideSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
+    const assessment = await prisma.labelAssessment.findUnique({
+      where: { id: parsed.data.assessmentId },
+      select: { domain: true },
+    });
+    if (!assessment) return { ok: false, error: "NOT_FOUND" };
+
     await applyVerdictOverride(session, parsed.data);
 
-    revalidatePath(`/[locale]/admin/label-evaluator/sfda/${parsed.data.assessmentId}`, "page");
+    // The summary/final-verdict bar reads LabelAssessment.overallRate/
+    // finalVerdict, which the rule engine only sets at run time — without
+    // this, an override silently leaves the displayed score disagreeing
+    // with the per-item verdicts it was just computed from (confirmed live).
+    if (assessment.domain === "SFDA_SUPPLEMENTS") {
+      await recomputeSfdaScore(parsed.data.assessmentId);
+    } else {
+      await recomputeCosmeticsScore(parsed.data.assessmentId);
+    }
+
+    const basePath = assessment.domain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics";
+    revalidatePath(`/[locale]/admin/label-evaluator/${basePath}/${parsed.data.assessmentId}`, "page");
     return { ok: true, data: undefined };
   } catch (error) {
     if (error instanceof VerdictConflictError) return { ok: false, error: "CONFLICT" };
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") return { ok: false, error: message };
     return { ok: false, error: "OVERRIDE_FAILED" };
+  }
+}
+
+/**
+ * Fetches the assessment's verdicts plus the linked RequestItem's official
+ * checklist codes, shared by previewPromotion (dry run) and
+ * promoteToOfficialChecklist (the real write) so the two can never disagree
+ * about what promoting would do.
+ */
+async function planPromotion(assessmentId: string): Promise<
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      requestItemId: string;
+      verdicts: Record<string, "COMPLIANT" | "NON_COMPLIANT" | "NA">;
+      withheld: number;
+      droppedCodes: string[];
+      priorDataExists: boolean;
+    }
+> {
+  const assessment = await prisma.labelAssessment.findUnique({
+    where: { id: assessmentId },
+    select: {
+      id: true,
+      status: true,
+      requestItemId: true,
+      verdicts: { include: { kbRule: { select: { code: true } } } },
+    },
+  });
+  if (!assessment) return { ok: false, error: "NOT_FOUND" };
+  if (assessment.status !== "ASSESSED") return { ok: false, error: "INVALID_STATE" };
+  if (!assessment.requestItemId) return { ok: false, error: "REQUEST_ITEM_UNLINKED" };
+
+  const item = await prisma.requestItem.findUnique({
+    where: { id: assessment.requestItemId },
+    select: { assessment: true, serviceItem: { select: { checkSets: true } } },
+  });
+  if (!item) return { ok: false, error: "NOT_FOUND" };
+
+  // §13.3 constraint #2: saveAssessment silently drops verdicts whose codes
+  // aren't in the service's official checklist. Check alignment ourselves
+  // BEFORE calling it (same code set it uses internally), so a drift — e.g.
+  // a future KB re-upload using different codes — blocks promotion instead
+  // of silently under-writing the checklist with no visible signal.
+  const checkSets = parseCheckSets(item.serviceItem.checkSets);
+  const knownCodes = new Set(checkSets.flatMap((s) => s.items.map((i) => i.code)));
+
+  const verdicts: Record<string, "COMPLIANT" | "NON_COMPLIANT" | "NA"> = {};
+  const droppedCodes: string[] = [];
+  let withheld = 0;
+  for (const v of assessment.verdicts) {
+    if (v.verdict === "COMPLIANT" || v.verdict === "NON_COMPLIANT" || v.verdict === "NA") {
+      if (knownCodes.has(v.kbRule.code)) verdicts[v.kbRule.code] = v.verdict;
+      else droppedCodes.push(v.kbRule.code);
+    } else {
+      withheld++;
+    }
+  }
+
+  const priorState = parseAssessment(item.assessment);
+  const priorDataExists = Object.keys(priorState.verdicts ?? {}).length > 0;
+
+  return { ok: true, requestItemId: assessment.requestItemId, verdicts, withheld, droppedCodes, priorDataExists };
+}
+
+/**
+ * Dry-run for the promotion confirmation dialog (design doc §13.3: "shows a
+ * pre-flight summary before writing... The reviewer confirms explicitly.")
+ * — computes exactly what promoteToOfficialChecklist would do without
+ * writing anything.
+ */
+export async function previewPromotion(
+  assessmentId: string,
+): Promise<ActionResult<{ written: number; withheld: number; wouldDrop: number; priorDataExists: boolean }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+
+    const plan = await planPromotion(assessmentId);
+    if (!plan.ok) return plan;
+
+    return {
+      ok: true,
+      data: {
+        written: Object.keys(plan.verdicts).length,
+        withheld: plan.withheld,
+        wouldDrop: plan.droppedCodes.length,
+        priorDataExists: plan.priorDataExists,
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") return { ok: false, error: message };
+    return { ok: false, error: "PROMOTE_FAILED" };
   }
 }
 
@@ -333,30 +510,13 @@ export async function promoteToOfficialChecklist(
     const session = await requireSession();
     requirePermission(session, "requests:admin");
 
-    const assessment = await prisma.labelAssessment.findUnique({
-      where: { id: assessmentId },
-      select: {
-        id: true,
-        status: true,
-        requestItemId: true,
-        verdicts: { include: { kbRule: { select: { code: true } } } },
-      },
-    });
-    if (!assessment) return { ok: false, error: "NOT_FOUND" };
-    if (assessment.status !== "ASSESSED") return { ok: false, error: "INVALID_STATE" };
-    if (!assessment.requestItemId) return { ok: false, error: "REQUEST_ITEM_UNLINKED" };
+    const plan = await planPromotion(assessmentId);
+    if (!plan.ok) return plan;
+    // Refuse rather than silently under-write (§13.3 constraint #2).
+    if (plan.droppedCodes.length > 0) return { ok: false, error: `CODE_MISMATCH:${plan.droppedCodes.join(",")}` };
 
-    const verdicts: Record<string, "COMPLIANT" | "NON_COMPLIANT" | "NA"> = {};
-    let withheld = 0;
-    for (const v of assessment.verdicts) {
-      if (v.verdict === "COMPLIANT" || v.verdict === "NON_COMPLIANT" || v.verdict === "NA") {
-        verdicts[v.kbRule.code] = v.verdict;
-      } else {
-        withheld++;
-      }
-    }
-
-    const result = await saveAssessment({ requestItemId: assessment.requestItemId, verdicts });
+    const { requestItemId, verdicts, withheld } = plan;
+    const result = await saveAssessment({ requestItemId, verdicts });
     if (!result.ok) return result;
 
     await prisma.labelReport.upsert({
@@ -374,7 +534,7 @@ export async function promoteToOfficialChecklist(
     });
 
     revalidatePath(`/[locale]/admin/label-evaluator/sfda/${assessmentId}`, "page");
-    revalidatePath(`/[locale]/admin/requests/${assessment.requestItemId}`, "page");
+    revalidatePath(`/[locale]/admin/requests/${requestItemId}`, "page");
 
     return {
       ok: true,

@@ -17,12 +17,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { LABEL_FIELD_DEFS, mandatoryFieldKeys } from "@/server/label-eval/fields";
 import {
+  checkAssessmentClaim,
   confirmFieldsAndRunAssessment,
   getLabelAssessmentStatus,
   overrideItemVerdict,
+  previewPromotion,
   promoteToOfficialChecklist,
   reclassifyAssessment,
   updateExtractedField,
@@ -60,6 +63,40 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
   const isAr = locale === "ar";
   const router = useRouter();
 
+  // Soft-claim check (design doc §13.4): runs once when a reviewer opens
+  // this assessment. `claimAssessment` itself already existed but had no
+  // call site anywhere in the app — confirmed live, two reviewers could
+  // open the same in-progress item with zero warning.
+  const [claim, setClaim] = useState<{ claimed: true } | { claimed: false; claimedByName: string } | null>(null);
+  const [takingOver, startTakeOverTransition] = useTransition();
+  useEffect(() => {
+    let cancelled = false;
+    checkAssessmentClaim(detail.id).then((result) => {
+      if (!cancelled && result.ok) setClaim(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail.id]);
+
+  function takeOver() {
+    startTakeOverTransition(async () => {
+      const result = await checkAssessmentClaim(detail.id, { force: true });
+      if (result.ok) setClaim(result.data);
+    });
+  }
+
+  const claimBanner =
+    claim && !claim.claimed ? (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-state-warn/30 bg-state-warn/10 p-3 text-sm text-state-warn">
+        <span>{t("claimedByOther", { name: claim.claimedByName })}</span>
+        <Button size="sm" variant="outline" disabled={takingOver} onClick={takeOver}>
+          {takingOver ? <Loader2 className="size-4 animate-spin" /> : null}
+          {t("takeOver")}
+        </Button>
+      </div>
+    ) : null;
+
   // Poll while extraction/classification is still running async (design doc §5 — never block on it).
   const statusRef = useRef(detail.status);
   statusRef.current = detail.status;
@@ -74,46 +111,70 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
 
   if (detail.status === "EXTRACTING") {
     return (
-      <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-alt/40 p-6">
-        <Loader2 className="size-5 animate-spin text-atlas-green" />
-        <div>
-          <p className="text-sm font-medium text-ink-900">{t("extracting.title")}</p>
-          <p className="text-xs text-ink-500">{t("extracting.description")}</p>
+      <>
+        {claimBanner}
+        <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-alt/40 p-6">
+          <Loader2 className="size-5 animate-spin text-atlas-green" />
+          <div>
+            <p className="text-sm font-medium text-ink-900">{t("extracting.title")}</p>
+            <p className="text-xs text-ink-500">{t("extracting.description")}</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (detail.status === "CLASSIFYING") {
     return (
-      <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-alt/40 p-6">
-        <Loader2 className="size-5 animate-spin text-atlas-green" />
-        <div>
-          <p className="text-sm font-medium text-ink-900">{t("classifying.title")}</p>
-          <p className="text-xs text-ink-500">{t("classifying.description")}</p>
+      <>
+        {claimBanner}
+        <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-alt/40 p-6">
+          <Loader2 className="size-5 animate-spin text-atlas-green" />
+          <div>
+            <p className="text-sm font-medium text-ink-900">{t("classifying.title")}</p>
+            <p className="text-xs text-ink-500">{t("classifying.description")}</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (detail.status === "ERROR") {
     return (
-      <div className="flex items-center gap-3 rounded-lg border border-state-bad/30 bg-state-bad/10 p-6">
-        <XCircle className="size-5 text-state-bad" />
-        <p className="text-sm text-state-bad">{t("errorState")}</p>
-      </div>
+      <>
+        {claimBanner}
+        <div className="flex items-center gap-3 rounded-lg border border-state-bad/30 bg-state-bad/10 p-6">
+          <XCircle className="size-5 text-state-bad" />
+          <p className="text-sm text-state-bad">{t("errorState")}</p>
+        </div>
+      </>
     );
   }
 
   if (detail.status === "AWAITING_REVIEW") {
-    return <VerificationGate detail={detail} domain={domain} t={t} tErrors={tErrors} isAr={isAr} router={router} />;
+    return (
+      <>
+        {claimBanner}
+        <VerificationGate detail={detail} domain={domain} t={t} tErrors={tErrors} isAr={isAr} router={router} />
+      </>
+    );
   }
 
   if (detail.status === "BLOCKED_NO_CATEGORY_MATCH") {
-    return <BlockedNoCategoryMatch detail={detail} t={t} tErrors={tErrors} isAr={isAr} router={router} />;
+    return (
+      <>
+        {claimBanner}
+        <BlockedNoCategoryMatch detail={detail} t={t} tErrors={tErrors} isAr={isAr} router={router} />
+      </>
+    );
   }
 
-  return <AssessedView detail={detail} domain={domain} t={t} tErrors={tErrors} isAr={isAr} router={router} />;
+  return (
+    <>
+      {claimBanner}
+      <AssessedView detail={detail} domain={domain} t={t} tErrors={tErrors} isAr={isAr} router={router} />
+    </>
+  );
 }
 
 // ─── Step: Cosmetics classifier refused to guess (design doc §0.1/§1.4) ────
@@ -229,8 +290,23 @@ function VerificationGate({
   const [pending, startTransition] = useTransition();
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
+  // Optimistic overlay: a successful save confirms a field immediately, but
+  // `detail` only reflects that once router.refresh()'s server round-trip
+  // completes. Without this, the "Needs review" badge and the missing-
+  // fields gate both stayed stale until a manual page reload (confirmed
+  // live). Keyed by fieldKey; cleared implicitly whenever `detail.fields`
+  // is regenerated with confirmedAt already set for that key.
+  const [justSaved, setJustSaved] = useState<Record<string, { valueEn: string; valueAr: string }>>({});
+
+  function effectiveField(key: string) {
+    const base = byKey.get(key);
+    const saved = justSaved[key];
+    if (!saved) return base;
+    return { ...base, valueEn: saved.valueEn, valueAr: saved.valueAr, confirmedAt: base?.confirmedAt ?? "optimistic" };
+  }
+
   const missing = mandatoryFieldKeys(domain).filter((def) => {
-    const f = byKey.get(def.key);
+    const f = effectiveField(def.key);
     return !f?.confirmedAt || !(f.valueEn?.trim() || f.valueAr?.trim());
   });
 
@@ -243,6 +319,7 @@ function VerificationGate({
         toast.error(tErrors(result.error as "SAVE_FAILED"));
         return;
       }
+      setJustSaved((prev) => ({ ...prev, [fieldKey]: { valueEn, valueAr } }));
       router.refresh();
     });
   }
@@ -289,7 +366,7 @@ function VerificationGate({
         </div>
         <div className="divide-y divide-line">
           {fieldDefs.map((def) => {
-            const f = byKey.get(def.key);
+            const f = effectiveField(def.key);
             return (
               <FieldRow
                 key={def.key}
@@ -442,14 +519,32 @@ function AssessedView({
   }, [detail.verdicts]);
 
   const [pending, startTransition] = useTransition();
+  const [previewPending, startPreviewTransition] = useTransition();
+  const [preview, setPreview] = useState<{ written: number; withheld: number; priorDataExists: boolean } | null>(null);
+
+  function openPromoteDialog() {
+    startPreviewTransition(async () => {
+      const result = await previewPromotion(detail.id);
+      if (!result.ok) {
+        toast.error(tErrors(result.error.split(":")[0] as "PROMOTE_FAILED"));
+        return;
+      }
+      if (result.data.wouldDrop > 0) {
+        toast.error(tErrors("CODE_MISMATCH"));
+        return;
+      }
+      setPreview({ written: result.data.written, withheld: result.data.withheld, priorDataExists: result.data.priorDataExists });
+    });
+  }
 
   function promote() {
     startTransition(async () => {
       const result = await promoteToOfficialChecklist(detail.id);
       if (!result.ok) {
-        toast.error(tErrors(result.error as "PROMOTE_FAILED"));
+        toast.error(tErrors(result.error.split(":")[0] as "PROMOTE_FAILED"));
         return;
       }
+      setPreview(null);
       toast.success(t("promoted", { written: result.data.written, withheld: result.data.withheld }));
       router.refresh();
     });
@@ -497,14 +592,39 @@ function AssessedView({
             detail.promotedAt ? (
               <span className="text-xs text-ink-500">{t("alreadyPromoted")}</span>
             ) : (
-              <Button disabled={pending} onClick={promote}>
-                {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+              <Button disabled={previewPending} onClick={openPromoteDialog}>
+                {previewPending ? <Loader2 className="size-4 animate-spin" /> : null}
                 {t("promoteButton")}
               </Button>
             )
           ) : null}
         </div>
       </div>
+
+      <Dialog open={!!preview} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("promoteConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {preview ? t("promoteConfirmSummary", { written: preview.written, withheld: preview.withheld }) : null}
+            </DialogDescription>
+          </DialogHeader>
+          {preview?.priorDataExists ? (
+            <p className="rounded-lg border border-state-warn/30 bg-state-warn/10 p-3 text-sm text-state-warn">
+              {t("promoteConfirmOverwriteWarning")}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreview(null)} disabled={pending}>
+              {t("promoteConfirmCancel")}
+            </Button>
+            <Button onClick={promote} disabled={pending}>
+              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {t("promoteConfirmButton")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

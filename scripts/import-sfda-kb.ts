@@ -3,7 +3,12 @@
  * Bypasses the admin-UI upload action (which needs a real HTTP session) —
  * this is a trusted operator script, same trust level as prisma/seed.ts.
  *
- *   npx tsx scripts/import-sfda-kb.ts <path-to-workbook.xlsx> [--activate]
+ *   npx tsx scripts/import-sfda-kb.ts <path-to-workbook.xlsx> [--activate] [--force]
+ *
+ * --force bypasses the checksum-dedup check — needed when re-importing the
+ * SAME workbook file after a parser/classification code change, since the
+ * file bytes (and therefore checksum) haven't changed even though the
+ * parsed output has.
  */
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -14,8 +19,9 @@ import { createDraftKbVersion, diffAgainstActive, activateKbVersion } from "../s
 async function main() {
   const filePath = process.argv[2];
   const shouldActivate = process.argv.includes("--activate");
+  const force = process.argv.includes("--force");
   if (!filePath) {
-    console.error("Usage: npx tsx scripts/import-sfda-kb.ts <path-to-workbook.xlsx> [--activate]");
+    console.error("Usage: npx tsx scripts/import-sfda-kb.ts <path-to-workbook.xlsx> [--activate] [--force]");
     process.exit(1);
   }
 
@@ -23,8 +29,8 @@ async function main() {
   const checksum = createHash("sha256").update(buffer).digest("hex");
 
   const dup = await prisma.labelKbVersion.findFirst({ where: { domain: "SFDA_SUPPLEMENTS", checksum } });
-  if (dup) {
-    console.log(`Already imported as ${dup.versionLabel} (status ${dup.status}, id ${dup.id}). Nothing to do.`);
+  if (dup && !force) {
+    console.log(`Already imported as ${dup.versionLabel} (status ${dup.status}, id ${dup.id}). Nothing to do. Pass --force to re-import anyway (e.g. after a parser code change).`);
     return;
   }
 

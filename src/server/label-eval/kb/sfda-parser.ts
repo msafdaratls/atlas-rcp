@@ -85,9 +85,29 @@ function classifyFamilyA(titleEn: string, compliantWhen: string | null): { evalu
   return { evaluatorKey: "presence", autoVerifiable: true };
 }
 
+/**
+ * Catches Family B's "Where <specific substance(s)> is/are used, has <X> been
+ * verified/calculated/complied with?" items (e.g. FD_2500 items 5, 9-15).
+ * These name one or more particular substances and ask whether *their*
+ * usage was verified/quantified — a question the generic `lookup` evaluator
+ * cannot safely answer, because matching *any* unrelated ingredient against
+ * *any* row in the section's lookup table would satisfy the item even when
+ * the named substance isn't present on the label at all (confirmed live: a
+ * product with no gelatin/lecithin was marked Compliant on the gelatin
+ * sourcing-verification item because "Citric Acid" matched an unrelated GMP
+ * additive record). NEEDS_EXTERNAL_DATA already catches most of these via
+ * "calculated as X" phrasing, but not every verb the workbook uses
+ * ("calculated according to", "calculated correctly", "verified") — this
+ * pattern matches the conditional-trigger structure itself, independent of
+ * the verb, so it doesn't need to enumerate every phrasing.
+ */
+const CONDITIONAL_SUBSTANCE_TRIGGER = /^where\b.+\b(is|are)\s+used\b/i;
+
 function classifyFamilyB(titleEn: string, decisionRule: string | null): { evaluatorKey: string; autoVerifiable: boolean } {
   const text = `${titleEn} ${decisionRule ?? ""}`;
-  if (NEEDS_EXTERNAL_DATA.test(text)) return { evaluatorKey: "requires_additional_data", autoVerifiable: false };
+  if (NEEDS_EXTERNAL_DATA.test(text) || CONDITIONAL_SUBSTANCE_TRIGGER.test(titleEn)) {
+    return { evaluatorKey: "requires_additional_data", autoVerifiable: false };
+  }
   return { evaluatorKey: "lookup", autoVerifiable: true };
 }
 

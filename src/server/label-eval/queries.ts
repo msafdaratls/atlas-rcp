@@ -147,6 +147,35 @@ export async function listNeedsEvaluation(
   }
 }
 
+/**
+ * Live fingerprint of a single RequestItem's current in-scope source
+ * documents (design doc §13.5 race condition: "if a source document's
+ * current version changes while an assessment is AWAITING_REVIEW... the UI
+ * blocks 'Data confirmed'"). Shares the exact scoping logic with
+ * listNeedsEvaluation above — same in-scope codes, same hash source — so
+ * the two can never disagree about what "the current documents" means.
+ * Returns null if the item has no in-scope documents at all (nothing to
+ * compare against).
+ */
+export async function computeLiveFingerprint(
+  requestItemId: string,
+  domain: LabelEvalDomain,
+): Promise<string | null> {
+  const inScopeCodes = new Set(Object.keys(DOCUMENT_KIND_BY_REQUIRED_CODE[domain]));
+  const documents = await prisma.requestDocument.findMany({
+    where: { requestItemId },
+    select: {
+      requiredDocument: { select: { code: true } },
+      currentVersion: { select: { sha256: true } },
+    },
+  });
+  const hashes = documents
+    .filter((d) => d.requiredDocument && inScopeCodes.has(d.requiredDocument.code) && d.currentVersion?.sha256)
+    .map((d) => d.currentVersion!.sha256);
+  if (hashes.length === 0) return null;
+  return computeDocumentsFingerprint(hashes);
+}
+
 export class EvaluationUnavailableError extends Error {
   constructor(public readonly currentState: RequestState) {
     super(`Request is not in an evaluable state: ${currentState}`);
