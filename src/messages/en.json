@@ -65,6 +65,8 @@
       "clients": "Clients",
       "catalogue": "Catalogue",
       "engagements": "Engagements",
+      "labelEvalSfda": "SFDA Supplement Evaluator",
+      "labelEvalCosmetics": "Cosmetics Evaluator",
       "coupons": "Coupons",
       "finance": "Finance",
       "quality": "Quality",
@@ -1735,6 +1737,153 @@
       "INVALID_TOKEN": "This reset link is invalid or has expired. Request a new one.",
       "RATE_LIMITED": "Too many attempts. Wait a few minutes and try again.",
       "SAVE_FAILED": "Could not update your password. Try again."
+    }
+  },
+  "labelEval": {
+    "queue": {
+      "description": "Requests submitted and accepted, not yet evaluated by the system — including resubmissions with replaced artwork.",
+      "empty": "Nothing needs evaluation right now",
+      "emptyDescription": "SFDA supplement requests will appear here once they reach the Assessment stage.",
+      "emptyDescriptionCosmetics": "Cosmetics label-assessment requests will appear here once they reach the Assessment stage.",
+      "columns": {
+        "request": "Request",
+        "product": "Product",
+        "client": "Client",
+        "sla": "SLA",
+        "submission": "Submission",
+        "action": "Action"
+      },
+      "badge": {
+        "firstSubmission": "First submission",
+        "resubmission": "Resubmission"
+      },
+      "startEvaluation": "Start evaluation"
+    },
+    "workspace": {
+      "kbVersionLabel": "Active dataset: {version}",
+      "extracting": {
+        "title": "Extracting label data…",
+        "description": "This runs in the background — you can leave this page and come back."
+      },
+      "errorState": "Extraction failed after repeated attempts. Contact an administrator.",
+      "missingBanner": "The following required fields are not yet confirmed:",
+      "readyBanner": "All required fields are confirmed. You can continue the assessment.",
+      "missingFieldsToast": "Confirm all required fields before continuing.",
+      "assessmentComplete": "Assessment complete.",
+      "extractedDataTitle": "Extracted data and text",
+      "extractedDataSubtitle": "Data was extracted automatically — review and correct any error before the assessment runs. Editing a field confirms it.",
+      "confirmAndContinue": "Data confirmed — continue assessment",
+      "needsReview": "Needs review",
+      "confirmed": "Confirmed",
+      "englishPlaceholder": "English",
+      "arabicPlaceholder": "Arabic",
+      "save": "Save",
+      "scoreCounts": "Compliant {compliant} · Non-compliant {nonCompliant} · Needs review {needsReview} · Requires data {requiresData}",
+      "overallRate": "Overall rate",
+      "sectionCounts": "{compliant}/{total} compliant · {nonCompliant} non-compliant",
+      "decision": {
+        "accepted": "Accepted",
+        "accepted_with_remarks": "Accepted with remarks",
+        "rejected": "Rejected",
+        "incomplete": "Incomplete — pending review",
+        "compliant": "Compliant",
+        "non_compliant": "Non-compliant"
+      },
+      "alreadyPromoted": "Already promoted to the official checklist.",
+      "promoteButton": "Promote to official checklist",
+      "promoted": "Promoted {written} verdicts ({withheld} withheld pending review).",
+      "verdict": {
+        "COMPLIANT": "Compliant",
+        "NON_COMPLIANT": "Non-compliant",
+        "NA": "N/A",
+        "NEEDS_REVIEW": "Needs review",
+        "REQUIRES_ADDITIONAL_DATA": "Requires additional data"
+      },
+      "evidenceLabel": "On the label",
+      "manuallyOverridden": "Manually overridden by a reviewer.",
+      "changeAssessment": "Change assessment",
+      "classifying": {
+        "title": "Classifying product…",
+        "description": "Determining the applicable category from confirmed data."
+      },
+      "blockedTitle": "No confident category match",
+      "blockedDescription": "The system could not confidently match this product to a cosmetics category from the confirmed data — this may mean it is not a cosmetic at all. It will not guess. A reviewer must reclassify manually to continue, or return the request if it does not belong in this evaluator.",
+      "noCategoriesAvailable": "No categories are defined in the active dataset yet.",
+      "reclassify": "Reclassify",
+      "reclassifyHint": "Select the correct category for this product:",
+      "classificationTitle": "Automatic product classification",
+      "requiredTestsTitle": "Required tests ({count})",
+      "requiredTestsColumns": {
+        "test": "Test",
+        "reason": "Reason",
+        "rule": "Rule"
+      }
+    },
+    "errors": {
+      "VALIDATION": "Invalid input.",
+      "NOT_FOUND": "Not found.",
+      "UNAUTHORIZED": "You must sign in to do this.",
+      "FORBIDDEN": "You don't have permission to do this.",
+      "WRONG_DOMAIN": "This item does not belong to this evaluator.",
+      "NOT_EVALUABLE": "This request is no longer available for evaluation.",
+      "IN_FLIGHT": "An evaluation is already in progress for this item.",
+      "NO_ACTIVE_DATASET": "No active dataset for this domain yet — upload one from the dataset admin screen.",
+      "SOURCE_DOCUMENT_UNREADABLE": "Could not read the source document from storage.",
+      "NO_DOCUMENTS": "No artwork or ingredient list is attached to this item yet.",
+      "START_FAILED": "Could not start the evaluation. Try again.",
+      "SAVE_FAILED": "Could not save. Try again.",
+      "RUN_FAILED": "Could not run the assessment. Try again.",
+      "MISSING_FIELDS": "Confirm all required fields first.",
+      "OVERRIDE_FAILED": "Could not change the assessment. Try again.",
+      "CONFLICT": "Another reviewer changed this verdict — refresh and try again.",
+      "PROMOTE_FAILED": "Could not promote to the official checklist.",
+      "INVALID_STATE": "This action isn't available in the current state.",
+      "REQUEST_ITEM_UNLINKED": "This assessment is no longer linked to a request item.",
+      "COSMETICS_SCHEMA_NOT_YET_CONFIRMED": "The cosmetics dataset schema hasn't been confirmed against a real workbook yet.",
+      "DUPLICATE_UPLOAD": "This exact workbook was already imported as version {label}.",
+      "SCHEMA_CONTRACT_VIOLATION": "The workbook doesn't match the expected structure.",
+      "PARSE_FAILED": "Could not parse the workbook.",
+      "MIME_REJECTED": "File must be a .xlsx workbook.",
+      "FILE_TOO_LARGE": "File is too large.",
+      "NO_FILE": "Choose a file first.",
+      "INFECTED_FILE": "This file failed a security scan.",
+      "UPLOAD_FAILED": "Upload failed. Try again.",
+      "ACTIVATE_FAILED": "Could not activate this dataset version.",
+      "DOMAIN_MISMATCH": "This version belongs to a different domain."
+    },
+    "datasets": {
+      "title": "Datasets",
+      "description": "Upload an updated Excel workbook to refresh the rules this evaluator checks against — no redeploy needed.",
+      "activeVersion": "Active version",
+      "none": "No active dataset yet.",
+      "uploadTitle": "Upload a new workbook",
+      "chooseFile": "Choose file",
+      "upload": "Upload",
+      "uploading": "Uploading…",
+      "diffTitle": "Changes vs. the current active version",
+      "added": "{count} added",
+      "removed": "{count} removed",
+      "changed": "{count} changed",
+      "unchanged": "{count} unchanged",
+      "warningsTitle": "Warnings",
+      "activate": "Activate",
+      "activating": "Activating…",
+      "activated": "Dataset activated.",
+      "uploaded": "Workbook parsed — review the diff below before activating.",
+      "history": "Version history",
+      "columns": {
+        "version": "Version",
+        "status": "Status",
+        "uploaded": "Uploaded",
+        "activated": "Activated"
+      },
+      "status": {
+        "DRAFT": "Draft",
+        "ACTIVE": "Active",
+        "ARCHIVED": "Archived"
+      },
+      "rollback": "Reactivate",
+      "counts": "{rules} rule(s) · {lookups} lookup record(s)"
     }
   }
 }

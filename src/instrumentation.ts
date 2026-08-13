@@ -1,14 +1,21 @@
 /**
- * Next.js instrumentation — notification cron (Node runtime only).
- * Runs by default; set NOTIFICATIONS_WORKER=0 to disable.
+ * Next.js instrumentation — notification + label-evaluator cron (Node
+ * runtime only). Runs by default; set NOTIFICATIONS_WORKER=0 /
+ * LABEL_EVAL_WORKER=0 to disable each independently.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return;
-  if (process.env.NOTIFICATIONS_WORKER === "0") return;
 
-  // Relative import so Turbopack/Node resolve without the `@/` alias at runtime.
-  const { startNotificationJobs } = await import(
-    "./server/notifications/jobs"
-  );
-  startNotificationJobs();
+  // Relative imports so Turbopack/Node resolve without the `@/` alias at runtime.
+  if (process.env.NOTIFICATIONS_WORKER !== "0") {
+    const { startNotificationJobs } = await import(
+      "./server/notifications/jobs"
+    );
+    startNotificationJobs();
+  }
+
+  if (process.env.LABEL_EVAL_WORKER !== "0") {
+    const { startLabelEvalJobs } = await import("./server/label-eval/jobs");
+    startLabelEvalJobs();
+  }
 }

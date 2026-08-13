@@ -235,18 +235,18 @@ model User {
   roles              UserRole[]
   verificationTokens VerificationToken[]
 
-  createdRequests         Request[]                @relation("RequestCreatedBy")
-  assignedRequests        Request[]                @relation("RequestAssignedTo")
-  uploadedVersions        DocumentVersion[]
-  requestEvents           RequestEvent[]
-  requestComments         RequestComment[]
-  commentMentions         RequestCommentMention[]
-  reopenRequestsMade      RequestReopenRequest[]   @relation("ReopenRequestedBy")
-  reopenRequestsDecided   RequestReopenRequest[]   @relation("ReopenRequestDecidedBy")
-  activitiesAssigned      RequestItemActivity[]    @relation("ActivityAssignedTo")
-  activitiesCreated       RequestItemActivity[]    @relation("ActivityCreatedBy")
-  ledgerEntries           LedgerEntry[]
-  confirmedPayments       Payment[]                @relation("PaymentConfirmedBy")
+  createdRequests          Request[]                @relation("RequestCreatedBy")
+  assignedRequests         Request[]                @relation("RequestAssignedTo")
+  uploadedVersions         DocumentVersion[]
+  requestEvents            RequestEvent[]
+  requestComments          RequestComment[]
+  commentMentions          RequestCommentMention[]
+  reopenRequestsMade       RequestReopenRequest[]   @relation("ReopenRequestedBy")
+  reopenRequestsDecided    RequestReopenRequest[]   @relation("ReopenRequestDecidedBy")
+  activitiesAssigned       RequestItemActivity[]    @relation("ActivityAssignedTo")
+  activitiesCreated        RequestItemActivity[]    @relation("ActivityCreatedBy")
+  ledgerEntries            LedgerEntry[]
+  confirmedPayments        Payment[]                @relation("PaymentConfirmedBy")
   createdCoupons           Coupon[]
   notifications            Notification[]
   notificationPreferences  NotificationPreference[]
@@ -318,37 +318,37 @@ model SubCategory {
 }
 
 model ServiceItem {
-  id                   String  @id @default(cuid())
-  subCategoryId        String
-  code                 String
-  nameEn               String
-  nameAr               String
-  descEn               String?
-  descAr               String?
-  basePrice            Decimal @db.Decimal(14, 2)
-  vatRate              Decimal @default(0.15) @db.Decimal(5, 4)
-  resubmissionPricePct Decimal @default(0.50) @db.Decimal(5, 4)
-  slaHours             Int
-  freeResubmissions    Int     @default(0)
-  maxResubmissions     Int     @default(3)
+  id                         String          @id @default(cuid())
+  subCategoryId              String
+  code                       String
+  nameEn                     String
+  nameAr                     String
+  descEn                     String?
+  descAr                     String?
+  basePrice                  Decimal         @db.Decimal(14, 2)
+  vatRate                    Decimal         @default(0.15) @db.Decimal(5, 4)
+  resubmissionPricePct       Decimal         @default(0.50) @db.Decimal(5, 4)
+  slaHours                   Int
+  freeResubmissions          Int             @default(0)
+  maxResubmissions           Int             @default(3)
   /// JSON Schema describing product attributes collected at request time.
-  productAttrSchema    Json    @default("{}")
+  productAttrSchema          Json            @default("{}")
   /// Requirement sets shown in "What we check" [{ code, titleEn, titleAr }]
-  checkSets            Json    @default("[]")
+  checkSets                  Json            @default("[]")
   /// Optional evaluation activities: when true, the corresponding
   /// RequestItemActivity card is offered during ASSESSMENT_RUNNING.
-  requiresInspection   Boolean @default(false)
-  requiresLabTesting   Boolean @default(false)
-  requiresFactoryAudit Boolean @default(false)
+  requiresInspection         Boolean         @default(false)
+  requiresLabTesting         Boolean         @default(false)
+  requiresFactoryAudit       Boolean         @default(false)
   /// Client-facing label for what this service produces, e.g. "Shipment
   /// Certificate of Conformity (SCOC)" — shown on the catalogue/service card.
-  deliverableEn        String?
-  deliverableAr        String?
+  deliverableEn              String?
+  deliverableAr              String?
   /// INTERNAL_REPORT: Atlas issues its own report at REPORT_ISSUED (the
   /// default, existing flow). EXTERNAL_CERTIFICATE: the deliverable is a
   /// certificate/number obtained from an external portal (SABER/GHAD/FASAH)
   /// or lab — tracked via ExternalDeliverable instead of an internal review.
-  deliverableType      DeliverableType @default(INTERNAL_REPORT)
+  deliverableType            DeliverableType @default(INTERNAL_REPORT)
   /// Set when this service needs a client PlatformCredential selected at
   /// request time (e.g. GHAD Product Registration needs a GHAD login). Null
   /// for services with no external-portal login requirement.
@@ -356,9 +356,9 @@ model ServiceItem {
   /// Evaluator this service auto-routes to when Application Review is
   /// completed ("assign to the appropriate Evaluator based on service
   /// type"). Null means the request lands unassigned in the Evaluator queue.
-  defaultEvaluatorId   String?
-  sortOrder            Int     @default(0)
-  active               Boolean @default(true)
+  defaultEvaluatorId         String?
+  sortOrder                  Int             @default(0)
+  active                     Boolean         @default(true)
 
   subCategory       SubCategory        @relation(fields: [subCategoryId], references: [id])
   defaultEvaluator  User?              @relation("ServiceItemDefaultEvaluator", fields: [defaultEvaluatorId], references: [id])
@@ -413,37 +413,37 @@ model RequiredDocument {
 // ─── Requests ────────────────────────────────────────────────────────────────
 
 model Request {
-  id               String        @id @default(cuid())
-  requestNo        String        @unique
-  organisationId   String
-  createdByUserId  String
-  assignedToUserId String?
+  id                       String        @id @default(cuid())
+  requestNo                String        @unique
+  organisationId           String
+  createdByUserId          String
+  assignedToUserId         String?
   /// Set when this request was opened under a standing Engagement (e.g. a
   /// SABER Account Management retainer) rather than as a stand-alone order.
-  engagementId     String?
-  state            RequestState  @default(DRAFT)
+  engagementId             String?
+  state                    RequestState  @default(DRAFT)
   /// Prior state when moved to ON_HOLD; resume must return here.
-  heldFromState    RequestState?
-  submissionNo     Int           @default(1)
+  heldFromState            RequestState?
+  submissionNo             Int           @default(1)
   /// Order-level totals: sum of all RequestItem prices, minus the single
   /// order-wide coupon discount (a coupon applies once to the whole order).
-  priceCharged     Decimal       @default(0) @db.Decimal(14, 2)
-  discountApplied  Decimal       @default(0) @db.Decimal(14, 2)
-  couponCode       String?
+  priceCharged             Decimal       @default(0) @db.Decimal(14, 2)
+  discountApplied          Decimal       @default(0) @db.Decimal(14, 2)
+  couponCode               String?
   /// Client-supplied key; submitRequest is idempotent on this value.
-  idempotencyKey   String?       @unique
-  slaDueAt         DateTime?
+  idempotencyKey           String?       @unique
+  slaDueAt                 DateTime?
   /// When set, SLA clock is paused (ON_HOLD / RETURNED_TO_CLIENT).
-  slaPausedAt      DateTime?
-  submittedAt      DateTime?
-  closedAt         DateTime?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  slaPausedAt              DateTime?
+  submittedAt              DateTime?
+  closedAt                 DateTime?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
   /// Technical Reviewer's meta-checklist results (was the evaluation report
   /// reviewed / standards verified / etc.) — request-level, not per item,
   /// scored against the single global TechnicalReviewChecklist definition.
   /// Same AssessmentState JSON shape as RequestItem.assessment.
-  technicalReviewChecklist Json? @default("{}")
+  technicalReviewChecklist Json?         @default("{}")
 
   organisation   Organisation           @relation(fields: [organisationId], references: [id])
   createdBy      User                   @relation("RequestCreatedBy", fields: [createdByUserId], references: [id])
@@ -468,20 +468,20 @@ model Request {
 /// one item; multiple items let a client bundle several services (possibly
 /// from different subcategories) into a single request/invoice.
 model RequestItem {
-  id            String  @id @default(cuid())
-  requestId     String
-  serviceItemId String
-  productNameEn String  @default("")
-  productNameAr String  @default("")
-  brand         String?
-  productAttrs  Json    @default("{}")
+  id                   String  @id @default(cuid())
+  requestId            String
+  serviceItemId        String
+  productNameEn        String  @default("")
+  productNameAr        String  @default("")
+  brand                String?
+  productAttrs         Json    @default("{}")
   /// Technical-review verdicts per check item: { verdicts, notes, updatedAt, updatedByUserId }.
-  assessment    Json    @default("{}")
+  assessment           Json    @default("{}")
   /// Snapshot of the service item's price/VAT at the time it was added, so
   /// later catalogue price changes don't retroactively alter an open draft.
-  basePrice     Decimal @db.Decimal(14, 2)
-  vatRate       Decimal @db.Decimal(5, 4)
-  sortOrder     Int     @default(0)
+  basePrice            Decimal @db.Decimal(14, 2)
+  vatRate              Decimal @db.Decimal(5, 4)
+  sortOrder            Int     @default(0)
   /// Reference to the org's stored government-portal login (GHAD/SABER/FASAH)
   /// used for this item's external submission. Kept out of productAttrs so a
   /// loosely-typed JSON blob never carries a secret reference.
@@ -491,16 +491,20 @@ model RequestItem {
   /// Application feeding a Cosmetic SCOC), point at that item. Convenience
   /// only — not a hard validation gate, since a number can also be entered
   /// manually if it originated outside this system.
-  sourceRequestItemId String?
+  sourceRequestItemId  String?
 
-  request             Request               @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  serviceItem         ServiceItem           @relation(fields: [serviceItemId], references: [id])
-  platformCredential  PlatformCredential?   @relation(fields: [platformCredentialId], references: [id])
-  sourceRequestItem   RequestItem?          @relation("ItemInputSource", fields: [sourceRequestItemId], references: [id])
-  suppliedToItems     RequestItem[]         @relation("ItemInputSource")
-  documents           RequestDocument[]
-  activities          RequestItemActivity[]
+  request              Request               @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  serviceItem          ServiceItem           @relation(fields: [serviceItemId], references: [id])
+  platformCredential   PlatformCredential?   @relation(fields: [platformCredentialId], references: [id])
+  sourceRequestItem    RequestItem?          @relation("ItemInputSource", fields: [sourceRequestItemId], references: [id])
+  suppliedToItems      RequestItem[]         @relation("ItemInputSource")
+  documents            RequestDocument[]
+  activities           RequestItemActivity[]
   externalDeliverables ExternalDeliverable[]
+  /// Label Evaluator runs against this item (src/server/label-eval). Optional
+  /// on the LabelAssessment side with onDelete: SetNull — this back-relation
+  /// adds no column here, so draft-cart item deletion is unaffected.
+  labelAssessments     LabelAssessment[]
 
   @@index([requestId])
   @@index([platformCredentialId])
@@ -509,19 +513,19 @@ model RequestItem {
 }
 
 model RequestDocument {
-  id                 String   @id @default(cuid())
-  requestId          String
-  requestItemId      String
-  requiredDocumentId String?
+  id                    String   @id @default(cuid())
+  requestId             String
+  requestItemId         String
+  requiredDocumentId    String?
   /// Set when this document is a report attached to an evaluation activity
   /// (Inspection/Lab/Audit report) rather than a catalogue-required document.
-  activityId         String?
+  activityId            String?
   /// Set when this document is the certificate/report attached to an
   /// external deliverable (SABER/GHAD/FASAH certificate, external lab report).
   externalDeliverableId String?
-  label              String
-  currentVersionId   String?  @unique
-  createdAt          DateTime @default(now())
+  label                 String
+  currentVersionId      String?  @unique
+  createdAt             DateTime @default(now())
 
   request             Request              @relation(fields: [requestId], references: [id], onDelete: Cascade)
   requestItem         RequestItem          @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
@@ -1024,4 +1028,322 @@ model VerificationToken {
 
   @@index([userId, type])
   @@index([expiresAt])
+}
+
+// ─── Label Evaluator (SFDA Supplements + Cosmetics) ───────────────────────────
+// Additive only. Reads Request/RequestItem/RequestDocument/DocumentVersion/
+// Organisation/User read-only; the only touch to an existing model is the
+// RequestItem.labelAssessments back-relation above (no new column). Design:
+// docs/superpowers/specs/2026-08-12-label-evaluator-design.md
+
+enum LabelEvalDomain {
+  SFDA_SUPPLEMENTS
+  COSMETICS
+}
+
+enum LabelKbStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum LabelDocumentKind {
+  ARTWORK
+  INGREDIENT_LIST
+}
+
+enum LabelRuleType {
+  CHECKLIST_ITEM // SFDA: all 113 items
+  LABEL_REQUIREMENT_ITEM // Cosmetics: GSO 1943 presence/format
+  CLAIM_PHASE_ITEM // Cosmetics: GSO 2528 claims-judgment framework
+  REQUIRED_TEST_RULE // Cosmetics: SFDA Tests v4.0 triggers
+}
+
+enum LabelAssessmentStatus {
+  EXTRACTING
+  AWAITING_REVIEW
+  CLASSIFYING // cosmetics only
+  ASSESSED
+  BLOCKED_NO_CATEGORY_MATCH // cosmetics only — explicit refusal state, never a guessed category
+  ERROR
+}
+
+enum LabelVerdict {
+  COMPLIANT
+  NON_COMPLIANT
+  NA
+  NEEDS_REVIEW // LLM-proposed, awaiting human confirmation
+  REQUIRES_ADDITIONAL_DATA // needs formulation/lab/dossier input; also the fail-safe outcome of a lookup miss
+}
+
+model LabelKbVersion {
+  id                String          @id @default(cuid())
+  domain            LabelEvalDomain
+  versionLabel      String
+  sourceFilename    String
+  uploadedByUserId  String
+  uploadedAt        DateTime        @default(now())
+  status            LabelKbStatus   @default(DRAFT)
+  activatedAt       DateTime?
+  activatedByUserId String?
+  checksum          String
+  notes             String?
+
+  rules       LabelKbRule[]
+  lookups     LabelKbLookup[]
+  categories  LabelKbCategory[]
+  assessments LabelAssessment[]
+
+  @@unique([domain, versionLabel])
+  @@index([domain, status])
+}
+
+model LabelKbRule {
+  id             String          @id @default(cuid())
+  kbVersionId    String
+  domain         LabelEvalDomain
+  ruleType       LabelRuleType
+  /// MUST equal the corresponding code in ServiceItem.checkSets (e.g.
+  /// "GSO_9_01") wherever promotion (saveAssessment) is intended — that
+  /// action silently drops verdicts whose codes are absent from the service
+  /// checklist.
+  code           String
+  section        String?
+  titleEn        String?
+  titleAr        String
+  priority       String? // null for the 33 SFDA items with no Priority column in the source (FD 2333 + FD 2500)
+  evaluatorKey   String
+  /// Rule-type-specific fields. SFDA GSO_9/FD_55/FD_2233 carry
+  /// `compliantWhen`; FD_2333/FD_2500 instead carry `decisionRule` +
+  /// `referenceRange` + `applicability`. Cosmetics shapes per the design doc.
+  payload        Json            @default("{}")
+  autoVerifiable Boolean         @default(true)
+
+  kbVersion LabelKbVersion     @relation(fields: [kbVersionId], references: [id], onDelete: Cascade)
+  verdicts  LabelItemVerdict[]
+
+  @@unique([kbVersionId, code])
+  @@index([kbVersionId, ruleType])
+}
+
+model LabelKbLookup {
+  id          String          @id @default(cuid())
+  kbVersionId String
+  domain      LabelEvalDomain
+  tableKey    String // e.g. food_additives_13_6, gmp_additives, cosing_annex_ii
+  payload     Json
+
+  kbVersion LabelKbVersion @relation(fields: [kbVersionId], references: [id], onDelete: Cascade)
+
+  @@index([kbVersionId, tableKey])
+}
+
+/// Cosmetics only — the category taxonomy driving claims scope and test
+/// rules. Empty for SFDA versions (no category branching in that domain).
+model LabelKbCategory {
+  id          String          @id @default(cuid())
+  kbVersionId String
+  domain      LabelEvalDomain
+  code        String
+  nameEn      String
+  nameAr      String
+  icon        String?
+  properties  Json            @default("[]")
+  sortOrder   Int             @default(0)
+
+  kbVersion LabelKbVersion @relation(fields: [kbVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([kbVersionId, code])
+}
+
+/// Explicit admin-managed opt-in list of which ServiceItems this feature
+/// applies to — NOT a code/name pattern match. Keeps GHAD registration,
+/// FASAH shipment cert, and Conformity Certificate out of the evaluation
+/// queue even though they live under the same MainCategory as the
+/// label-assessment services.
+model LabelEvalServiceMapping {
+  id            String          @id @default(cuid())
+  serviceItemId String          @unique
+  domain        LabelEvalDomain
+
+  @@index([domain])
+}
+
+/// One row per evaluation RUN. A resubmission with new artwork creates a NEW
+/// row; prior runs are never overwritten — full immutable history per
+/// RequestItem (contrast with RequestItem.assessment, a single
+/// overwritten JSON blob with no history).
+model LabelAssessment {
+  id          String          @id @default(cuid())
+  domain      LabelEvalDomain
+  kbVersionId String // stamped at run start, immutable
+
+  /// Optional + SetNull: clients can hard-delete RequestItems from a draft
+  /// cart (createOrSelectDraft). A required FK would make that delete throw
+  /// and break a live client flow; Cascade would destroy certification
+  /// records. The snapshot fields below keep this row self-contained and
+  /// auditable if the link is ever severed.
+  requestItemId    String?
+  requestNo        String // immutable snapshot
+  organisationId   String // immutable snapshot
+  organisationName String // immutable snapshot
+  serviceItemCode  String // immutable snapshot
+
+  /// sha256 of the sorted sha256s of the source documents this run used.
+  /// Scalar, indexable — drives the "needs (re-)evaluation" queue check.
+  documentsFingerprint String
+
+  createdByUserId   String
+  status            LabelAssessmentStatus @default(EXTRACTING)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  confirmedAt       DateTime?
+  confirmedByUserId String?
+  finalVerdict      String?
+  overallRate       Float? // SFDA only
+  /// Soft claim so two reviewers don't unknowingly duplicate work.
+  claimedByUserId   String?
+  claimedAt         DateTime?
+
+  kbVersion      LabelKbVersion        @relation(fields: [kbVersionId], references: [id])
+  requestItem    RequestItem?          @relation(fields: [requestItemId], references: [id], onDelete: SetNull)
+  documents      LabelDocument[]
+  fields         LabelExtractedField[]
+  classification LabelClassification?
+  verdicts       LabelItemVerdict[]
+  requiredTests  LabelRequiredTest[]
+  report         LabelReport?
+  extractionJob  LabelExtractionJob?
+
+  @@index([domain, requestItemId, createdAt])
+  @@index([status])
+  @@index([requestItemId, status])
+  @@index([documentsFingerprint])
+}
+
+/// COPY-ON-INGEST, NOT A REFERENCE. Clients can hard-delete
+/// RequestDocuments and their storage files while in DRAFT/RETURNED_TO_CLIENT
+/// (removeRequestDocument). If this model pointed at the request's
+/// storageKey, a client could destroy the artwork underpinning a completed
+/// assessment's audit trail. The evaluator copies each file to its own key
+/// under an evaluator-owned prefix and never deletes it.
+model LabelDocument {
+  id                      String            @id @default(cuid())
+  assessmentId            String
+  kind                    LabelDocumentKind
+  /// Provenance only — may dangle if the client later removes the original.
+  sourceDocumentVersionId String?
+  fileName                String
+  mimeType                String
+  sizeBytes               Int
+  storageKey              String // evaluator-owned copy
+  sha256                  String
+  copiedAt                DateTime          @default(now())
+
+  assessment LabelAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([assessmentId])
+  @@index([sha256])
+}
+
+/// Outbox-style async extraction queue — mirrors NotificationOutbox /
+/// processOutboxBatch (src/server/notifications/worker.ts), the only
+/// async-job pattern already in this repo. No new queue dependency.
+model LabelExtractionJob {
+  id            String       @id @default(cuid())
+  assessmentId  String       @unique
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  nextAttemptAt DateTime     @default(now())
+  lastError     String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  assessment LabelAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+}
+
+model LabelExtractedField {
+  id                   String    @id @default(cuid())
+  assessmentId         String
+  fieldKey             String
+  valueEn              String?
+  valueAr              String?
+  sourceEngine         String // paddleocr_vl | google_vision | manual
+  confidence           Float?
+  needsReview          Boolean   @default(false)
+  originalMachineValue Json? // pre-edit values, for audit
+  confirmedByUserId    String?
+  confirmedAt          DateTime?
+
+  assessment LabelAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, fieldKey])
+}
+
+/// Cosmetics only.
+model LabelClassification {
+  id                   String    @id @default(cuid())
+  assessmentId         String    @unique
+  detectedCategoryCode String?
+  detectedConfidence   Float?
+  /// Set true when the classifier judged the product out of domain entirely
+  /// (e.g. a food supplement submitted to the cosmetics evaluator).
+  notApplicable        Boolean   @default(false)
+  overrideCategoryCode String?
+  overriddenByUserId   String?
+  overriddenAt         DateTime?
+  rationale            String?
+
+  assessment LabelAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+}
+
+model LabelItemVerdict {
+  id                 String        @id @default(cuid())
+  assessmentId       String
+  kbRuleId           String
+  verdict            LabelVerdict
+  autoOrManual       String // auto | llm_proposed | manual_override
+  evidenceText       String?
+  rationale          String?
+  llmModel           String?
+  llmPromptVersion   String?
+  overriddenByUserId String?
+  overriddenAt       DateTime?
+  previousVerdict    LabelVerdict?
+
+  assessment LabelAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  kbRule     LabelKbRule     @relation(fields: [kbRuleId], references: [id])
+
+  @@unique([assessmentId, kbRuleId])
+}
+
+/// Cosmetics only.
+model LabelRequiredTest {
+  id            String  @id @default(cuid())
+  assessmentId  String
+  testCode      String
+  mandatory     Boolean @default(true)
+  ruleCode      String // e.g. RULE-SFDA-TEST-060
+  reasonEn      String?
+  reasonAr      String?
+  triggerSource String?
+  addedManually Boolean @default(false)
+
+  assessment LabelAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([assessmentId])
+}
+
+model LabelReport {
+  id               String    @id @default(cuid())
+  assessmentId     String    @unique
+  generatedAt      DateTime  @default(now())
+  pdfStorageKey    String?
+  snapshot         Json // frozen: fields + verdicts + classification + kbVersion
+  promotedAt       DateTime? // set when the "promote to official checklist" action ran
+  promotedByUserId String?
+
+  assessment LabelAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 }
