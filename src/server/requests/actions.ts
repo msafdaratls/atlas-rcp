@@ -43,24 +43,29 @@ export type ActionResult<T = undefined> =
 async function nextRequestNo(tx: Prisma.TransactionClient): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `ATL-${year}-`;
-  const latest = await tx.request.findFirst({
-    where: { requestNo: { startsWith: prefix } },
-    orderBy: { requestNo: "desc" },
-    select: { requestNo: true },
-  });
-  const seq = latest ? Number(latest.requestNo.slice(prefix.length)) + 1 : 1;
+  // Plain `ORDER BY requestNo DESC` breaks the moment a non-sequential
+  // requestNo exists (e.g. a test fixture like "ATL-2026-DEMO01") — it sorts
+  // after every zero-padded numeric one, so Number(suffix) becomes NaN and
+  // poisons every future call. Restrict to rows matching the strict
+  // <prefix><6 digits> shape before taking the max.
+  const rows = await tx.$queryRaw<{ requestNo: string }[]>(
+    Prisma.sql`SELECT "requestNo" FROM "Request" WHERE "requestNo" ~ ${`^${prefix}[0-9]{6}$`} ORDER BY "requestNo" DESC LIMIT 1`,
+  );
+  const latest = rows[0]?.requestNo;
+  const seq = latest ? Number(latest.slice(prefix.length)) + 1 : 1;
   return `${prefix}${String(seq).padStart(6, "0")}`;
 }
 
 async function nextInvoiceNo(tx: Prisma.TransactionClient): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `INV-${year}-`;
-  const latest = await tx.invoice.findFirst({
-    where: { invoiceNo: { startsWith: prefix } },
-    orderBy: { invoiceNo: "desc" },
-    select: { invoiceNo: true },
-  });
-  const seq = latest ? Number(latest.invoiceNo.slice(prefix.length)) + 1 : 1;
+  // Same fragile-sort hazard as nextRequestNo above — restrict to the strict
+  // <prefix><6 digits> shape before taking the max.
+  const rows = await tx.$queryRaw<{ invoiceNo: string }[]>(
+    Prisma.sql`SELECT "invoiceNo" FROM "Invoice" WHERE "invoiceNo" ~ ${`^${prefix}[0-9]{6}$`} ORDER BY "invoiceNo" DESC LIMIT 1`,
+  );
+  const latest = rows[0]?.invoiceNo;
+  const seq = latest ? Number(latest.slice(prefix.length)) + 1 : 1;
   return `${prefix}${String(seq).padStart(6, "0")}`;
 }
 
