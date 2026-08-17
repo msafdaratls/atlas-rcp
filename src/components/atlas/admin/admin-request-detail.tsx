@@ -61,11 +61,9 @@ const ASSESSMENT_EDIT_STATES: RequestState[] = [
   "ASSESSMENT_RUNNING",
   "TECHNICAL_REVIEW",
   "DECISION",
-  // ExternalDeliverablePanel's `certificateRequired` (and therefore its
-  // visibility for INTERNAL_REPORT services, which are hidden earlier)
-  // only turns on at REPORT_ISSUED — it must stay editable here too, or
-  // the Evaluator has no way to ever attach the certificate that unblocks
-  // REPORT_ISSUED -> CLOSED.
+  // EXTERNAL_CERTIFICATE-typed services still need to attach their real
+  // certificate during the post-Grant hand-off, before the final
+  // REPORT_ISSUED -> CLOSED close.
   "REPORT_ISSUED",
 ];
 
@@ -1334,9 +1332,6 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                 locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
               }
               serviceItem={item.serviceItem}
-              certificateRequired={
-                data.state === "REPORT_ISSUED" || data.state === "CLOSED"
-              }
               deliverable={item.externalDeliverable}
               editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
               locale={locale}

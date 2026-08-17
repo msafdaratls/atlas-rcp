@@ -246,23 +246,32 @@ export async function transitionAdminRequest(
       return { ok: false, error: "EVALUATION_REPORT_REQUIRED" };
     }
 
-    // "Complete Certificate Issuance": the Evaluator cannot close the request
-    // until the real certificate obtained from SABER/SFDA is attached to at
-    // least one ExternalDeliverable on the request — same CERTIFICATE_REQUIRED
-    // check markExternalDeliverableIssued uses to mark a single deliverable
-    // ISSUED, applied here at the request level since not every item needs
-    // its own certificate (e.g. a request with one certified item and one
-    // internal-only item).
+    // "Complete Certificate Issuance": if the request has any EXTERNAL_CERTIFICATE
+    // item (e.g. SCOC), the Evaluator cannot close it until the real certificate
+    // obtained from SABER/SFDA is attached to at least one ExternalDeliverable on
+    // the request — same CERTIFICATE_REQUIRED check markExternalDeliverableIssued
+    // uses to mark a single deliverable ISSUED, applied here at the request level
+    // since not every item needs its own certificate (e.g. a request with one
+    // certified item and one internal-only item). Requests with no
+    // EXTERNAL_CERTIFICATE item (e.g. PCOC-only) skip this entirely.
     if (request.state === "REPORT_ISSUED" && toState === "CLOSED") {
-      const docCount = await prisma.requestDocument.count({
+      const certificateItemCount = await prisma.requestItem.count({
         where: {
-          requestItem: { requestId: request.id },
-          externalDeliverableId: { not: null },
-          currentVersionId: { not: null },
+          requestId: request.id,
+          serviceItem: { deliverableType: "EXTERNAL_CERTIFICATE" },
         },
       });
-      if (docCount === 0) {
-        return { ok: false, error: "CERTIFICATE_REQUIRED" };
+      if (certificateItemCount > 0) {
+        const docCount = await prisma.requestDocument.count({
+          where: {
+            requestItem: { requestId: request.id },
+            externalDeliverableId: { not: null },
+            currentVersionId: { not: null },
+          },
+        });
+        if (docCount === 0) {
+          return { ok: false, error: "CERTIFICATE_REQUIRED" };
+        }
       }
     }
 
@@ -2113,14 +2122,12 @@ const submitExternalDeliverableSchema = z.object({
 });
 
 /**
- * Marks external submission as started — either for a catalogue service
- * flagged EXTERNAL_CERTIFICATE (e.g. staff just submitted the PCOC
- * application on the SABER portal) at any evaluation stage, or, at
- * REPORT_ISSUED, for any granted request regardless of deliverableType: the
- * real certificate obtained from SABER/SFDA needs a place to live whether or
- * not the service is normally external-certificate-flavored (see the
- * REPORT_ISSUED -> CLOSED gate in transitionAdminRequest, which requires one
- * of these before the Evaluator can complete issuance).
+ * Marks external submission as started for a catalogue service flagged
+ * EXTERNAL_CERTIFICATE (e.g. staff just submitted a SCOC application on the
+ * SABER portal). The real certificate obtained from SABER/SFDA is required
+ * before the Evaluator can complete issuance — see the REPORT_ISSUED ->
+ * CLOSED gate in transitionAdminRequest, which requires one of these on any
+ * EXTERNAL_CERTIFICATE item on the request.
  * Creates the ExternalDeliverable row if one doesn't exist yet.
  */
 export async function submitExternalDeliverable(
@@ -2141,10 +2148,7 @@ export async function submitExternalDeliverable(
       },
     });
     if (!item) return { ok: false, error: "NOT_FOUND" };
-    if (
-      item.serviceItem.deliverableType !== "EXTERNAL_CERTIFICATE" &&
-      item.request.state !== "REPORT_ISSUED"
-    ) {
+    if (item.serviceItem.deliverableType !== "EXTERNAL_CERTIFICATE") {
       return { ok: false, error: "NOT_APPLICABLE" };
     }
     if (!ASSESSMENT_EDIT_STATES.includes(item.request.state)) {

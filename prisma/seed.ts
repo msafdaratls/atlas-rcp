@@ -1214,7 +1214,10 @@ async function main() {
     checkSets: [{ code: "SABER_TECH_REG", titleEn: "Applicable technical regulation", titleAr: "اللائحة الفنية المعنية" }],
     deliverableEn: "Product Certificate of Conformity (PCOC)",
     deliverableAr: "شهادة مطابقة منتج (PCOC)",
-    deliverableType: DeliverableType.EXTERNAL_CERTIFICATE,
+    // INTERNAL_REPORT per migration 20260817150000: the External submission
+    // panel (and the certificate-attachment requirement to close) no longer
+    // applies to PCOC.
+    deliverableType: DeliverableType.INTERNAL_REPORT,
     requiredCredentialPlatform: PlatformType.SABER,
     defaultEvaluatorId: evaluator.id,
   });
