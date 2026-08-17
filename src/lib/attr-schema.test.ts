@@ -39,3 +39,56 @@ describe("validateProductAttrs", () => {
     );
   });
 });
+
+const arraySchema = {
+  type: "object",
+  required: ["certificates"],
+  properties: {
+    certificates: {
+      type: "array",
+      titleEn: "Certificates",
+      titleAr: "Certificates",
+      items: {
+        type: "object",
+        required: ["certificate_number", "models"],
+        properties: {
+          certificate_number: { type: "string", titleEn: "Certificate number", titleAr: "Certificate number" },
+          models: { type: "string", titleEn: "Models", titleAr: "Models" },
+        },
+      },
+    },
+  },
+};
+
+describe("validateProductAttrs with array fields", () => {
+  it("requires at least one entry when required", () => {
+    assert.equal(validateProductAttrs(arraySchema, { certificates: [] }), "ATTR_REQUIRED");
+    assert.equal(validateProductAttrs(arraySchema, {}), "ATTR_REQUIRED");
+  });
+
+  it("rejects a non-array value", () => {
+    assert.equal(
+      validateProductAttrs(arraySchema, { certificates: "PCOC-1" }),
+      "ATTR_INVALID",
+    );
+  });
+
+  it("requires each entry's required sub-fields", () => {
+    assert.equal(
+      validateProductAttrs(arraySchema, { certificates: [{ certificate_number: "PCOC-1" }] }),
+      "ATTR_REQUIRED",
+    );
+  });
+
+  it("accepts multiple valid entries", () => {
+    assert.equal(
+      validateProductAttrs(arraySchema, {
+        certificates: [
+          { certificate_number: "PCOC-1", models: "Model A" },
+          { certificate_number: "PCOC-2", models: "Model B, Model C" },
+        ],
+      }),
+      null,
+    );
+  });
+});

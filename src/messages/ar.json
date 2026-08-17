@@ -351,7 +351,9 @@
       "no": "لا",
       "platformCredential": "حساب {platform}",
       "saberAccountLabel": "حساب سابر (على حساب معالجة سابر)",
-      "noCredentials": "لا يوجد حساب {platform} محفوظ بعد — أضف حسابًا من إعدادات الشركة قبل المتابعة."
+      "noCredentials": "لا يوجد حساب {platform} محفوظ بعد — أضف حسابًا من إعدادات الشركة قبل المتابعة.",
+      "addEntry": "إضافة",
+      "removeEntry": "إزالة"
     },
     "enums": {
       "capsule": "كبسولة",

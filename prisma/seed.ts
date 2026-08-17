@@ -1258,13 +1258,39 @@ async function main() {
         sortOrder: 3,
       },
     ],
+    // Reconciled per migration 20260817160000: shipment certificates need the
+    // SABER shipment request number plus one PCOC certificate number per
+    // product in the shipment, each matched to the model(s) it covers.
     productAttrSchema: {
       type: "object",
-      required: ["shipment_details", "importer_information", "product_certificate_number"],
+      required: ["shipment_details", "importer_information", "saber_request_number", "product_certificates"],
       properties: {
-        shipment_details: { type: "string", titleEn: "Shipment details", titleAr: "تفاصيل الإرسالية" },
-        importer_information: { type: "string", titleEn: "Importer information", titleAr: "معلومات المستورد" },
-        product_certificate_number: { type: "string", titleEn: "Product certificate (PCOC) number", titleAr: "رقم شهادة مطابقة المنتج" },
+        shipment_details: { type: "string", sortOrder: 1, titleEn: "Shipment details", titleAr: "تفاصيل الإرسالية" },
+        importer_information: { type: "string", sortOrder: 2, titleEn: "Importer information", titleAr: "معلومات المستورد" },
+        saber_request_number: {
+          type: "string",
+          sortOrder: 3,
+          titleEn: "Request number in SABER",
+          titleAr: "رقم الطلب في سابر",
+          helpEn: "The request number for this shipment on the SABER platform.",
+          helpAr: "رقم هذا الطلب الخاص بالإرسالية على منصة سابر.",
+        },
+        product_certificates: {
+          type: "array",
+          sortOrder: 4,
+          titleEn: "Product certificates (PCOC)",
+          titleAr: "شهادات مطابقة المنتج (PCOC)",
+          helpEn: "Add one entry per product in the shipment: its PCOC certificate number and the model(s) it covers.",
+          helpAr: "أضف إدخالاً لكل منتج في الإرسالية: رقم شهادة مطابقة المنتج (PCOC) والموديل/الموديلات التي يغطيها.",
+          items: {
+            type: "object",
+            required: ["certificate_number", "models"],
+            properties: {
+              certificate_number: { type: "string", sortOrder: 1, titleEn: "PCOC certificate number", titleAr: "رقم شهادة المطابقة" },
+              models: { type: "string", sortOrder: 2, titleEn: "Model(s) covered", titleAr: "الموديل/الموديلات المشمولة" },
+            },
+          },
+        },
       },
     },
     checkSets: [],
@@ -2431,7 +2457,14 @@ async function main() {
         productNameEn: "Ceramic Diffuser 200 ml",
         productNameAr: "مبخرة سيراميك 200 مل",
         brand: "Gulf Home",
-        productAttrs: { shipment_details: "1x40ft container, Jeddah Islamic Port", importer_information: "Gulf Beauty Trading LLC", product_certificate_number: "PCOC-2026-771102" },
+        productAttrs: {
+          shipment_details: "1x40ft container, Jeddah Islamic Port",
+          importer_information: "Gulf Beauty Trading LLC",
+          saber_request_number: "SABER-REQ-2026-55231",
+          product_certificates: [
+            { certificate_number: "PCOC-2026-771102", models: "Ceramic Diffuser 200ml — White" },
+          ],
+        },
       },
     ],
     submissionNo: 1,
@@ -2495,7 +2528,14 @@ async function main() {
         productNameEn: "Digital Thermometer TH-220",
         productNameAr: "ميزان حرارة رقمي TH-220",
         brand: "Al Noor MedTech",
-        productAttrs: { shipment_details: "2x20ft container, King Abdulaziz Port", importer_information: "Al Noor Pharmaceuticals Co.", product_certificate_number: "Pending PCOC issuance" },
+        productAttrs: {
+          shipment_details: "2x20ft container, King Abdulaziz Port",
+          importer_information: "Al Noor Pharmaceuticals Co.",
+          saber_request_number: "SABER-REQ-2026-55898",
+          product_certificates: [
+            { certificate_number: "Pending PCOC issuance", models: "TH-220, TH-220S" },
+          ],
+        },
       },
     ],
     submissionNo: 1,

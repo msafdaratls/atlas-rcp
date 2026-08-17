@@ -23,7 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { parseAttrSchema } from "@/lib/attr-schema";
+import { parseAttrSchema, validateProductAttrs } from "@/lib/attr-schema";
+import { AttrScalarInput } from "@/components/atlas/requests/attr-field-input";
 import { computeOrderBreakdown } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import {
@@ -553,15 +554,9 @@ export function NewRequestWizard({
         return;
       }
       const catalogueItem = catalogueItemById.get(item.serviceItemId);
-      const attrFields = parseAttrSchema(catalogueItem?.productAttrSchema);
-      for (const field of attrFields) {
-        if (
-          field.required &&
-          (item.attrs[field.key] === undefined || item.attrs[field.key] === "")
-        ) {
-          toast.error(t("errors.ATTRS_REQUIRED"));
-          return;
-        }
+      if (validateProductAttrs(catalogueItem?.productAttrSchema, item.attrs)) {
+        toast.error(t("errors.ATTRS_REQUIRED"));
+        return;
       }
       if (catalogueItem?.requiredCredentialPlatform && !item.platformCredentialId) {
         toast.error(t("errors.CREDENTIAL_REQUIRED"));
@@ -1107,64 +1102,95 @@ export function NewRequestWizard({
                         <p className="text-xs text-ink-500">
                           {locale === "ar" ? field.helpAr : field.helpEn}
                         </p>
-                        {field.type === "boolean" ? (
-                          <Select
-                            value={
-                              item.attrs[field.key] === true
-                                ? "true"
-                                : item.attrs[field.key] === false
-                                  ? "false"
-                                  : ""
-                            }
-                            onValueChange={(v) =>
-                              updateItem(item.requestItemId, {
-                                attrs: { ...item.attrs, [field.key]: v === "true" },
-                              })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={t("fields.select")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="true">{t("fields.yes")}</SelectItem>
-                              <SelectItem value="false">{t("fields.no")}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : field.enum ? (
-                          <Select
-                            value={String(item.attrs[field.key] ?? "")}
-                            onValueChange={(v) =>
+                        {field.type === "array" ? (
+                          <div className="space-y-3">
+                            {(Array.isArray(item.attrs[field.key])
+                              ? (item.attrs[field.key] as Record<string, unknown>[])
+                              : []
+                            ).map((row, rowIndex) => (
+                              <div
+                                key={rowIndex}
+                                className="flex flex-col gap-3 rounded-md border border-line bg-canvas p-3 sm:flex-row sm:items-start"
+                              >
+                                <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                                  {(field.items ?? []).map((subField) => (
+                                    <div key={subField.key} className="space-y-1">
+                                      <Label>
+                                        {locale === "ar" ? subField.titleAr : subField.titleEn}
+                                        {subField.required ? (
+                                          <span className="ms-2 text-state-bad">*</span>
+                                        ) : null}
+                                      </Label>
+                                      <AttrScalarInput
+                                        field={subField}
+                                        value={row[subField.key]}
+                                        onChange={(v) => {
+                                          const rows = Array.isArray(item.attrs[field.key])
+                                            ? [...(item.attrs[field.key] as Record<string, unknown>[])]
+                                            : [];
+                                          rows[rowIndex] = { ...rows[rowIndex], [subField.key]: v };
+                                          updateItem(item.requestItemId, {
+                                            attrs: { ...item.attrs, [field.key]: rows },
+                                          });
+                                        }}
+                                        selectPlaceholder={t("fields.select")}
+                                        yesLabel={t("fields.yes")}
+                                        noLabel={t("fields.no")}
+                                        enumLabel={(opt) => t(`enums.${opt}` as never)}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    const rows = Array.isArray(item.attrs[field.key])
+                                      ? (item.attrs[field.key] as Record<string, unknown>[])
+                                      : [];
+                                    updateItem(item.requestItemId, {
+                                      attrs: {
+                                        ...item.attrs,
+                                        [field.key]: rows.filter((_, i) => i !== rowIndex),
+                                      },
+                                    });
+                                  }}
+                                  aria-label={t("fields.removeEntry")}
+                                >
+                                  <X className="size-4" />
+                                </Button>
+                              </div>
+                            ))}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const rows = Array.isArray(item.attrs[field.key])
+                                  ? (item.attrs[field.key] as Record<string, unknown>[])
+                                  : [];
+                                updateItem(item.requestItemId, {
+                                  attrs: { ...item.attrs, [field.key]: [...rows, {}] },
+                                });
+                              }}
+                            >
+                              {t("fields.addEntry")}
+                            </Button>
+                          </div>
+                        ) : (
+                          <AttrScalarInput
+                            field={field}
+                            value={item.attrs[field.key]}
+                            onChange={(v) =>
                               updateItem(item.requestItemId, {
                                 attrs: { ...item.attrs, [field.key]: v },
                               })
                             }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={t("fields.select")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {field.enum.map((opt) => (
-                                <SelectItem key={opt} value={opt}>
-                                  {t(`enums.${opt}` as never)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Input
-                            type={field.type === "number" ? "number" : "text"}
-                            value={String(item.attrs[field.key] ?? "")}
-                            onChange={(e) =>
-                              updateItem(item.requestItemId, {
-                                attrs: {
-                                  ...item.attrs,
-                                  [field.key]:
-                                    field.type === "number"
-                                      ? e.target.valueAsNumber
-                                      : e.target.value,
-                                },
-                              })
-                            }
+                            selectPlaceholder={t("fields.select")}
+                            yesLabel={t("fields.yes")}
+                            noLabel={t("fields.no")}
+                            enumLabel={(opt) => t(`enums.${opt}` as never)}
                           />
                         )}
                       </div>
