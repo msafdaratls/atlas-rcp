@@ -5,8 +5,14 @@ import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac";
 import { toNumber } from "@/lib/pricing";
 import { scopedDb } from "@/lib/scoped-db";
+import { storage } from "@/lib/storage";
 import { invoiceOpenBalance } from "@/server/finance/queries";
 import { exceedsMaxResubmissions } from "@/lib/billing-helpers";
+
+/** Null when no template has been uploaded for this document slot yet. */
+function templateUrlFor(storageKey: string | null): string | null {
+  return storageKey ? storage.publicUrl(storageKey) : null;
+}
 
 export type CatalogueMain = {
   id: string;
@@ -56,6 +62,8 @@ export type CatalogueServiceItem = {
     maxSizeMb: number;
     helpEn: string | null;
     helpAr: string | null;
+    templateUrl: string | null;
+    templateFileName: string | null;
   }>;
 };
 
@@ -156,6 +164,8 @@ export async function getCatalogueForNewRequest(): Promise<CataloguePayload | nu
           maxSizeMb: d.maxSizeMb,
           helpEn: d.helpEn,
           helpAr: d.helpAr,
+          templateUrl: templateUrlFor(d.templateStorageKey),
+          templateFileName: d.templateFileName,
         })),
       })),
     };
@@ -219,6 +229,8 @@ export type DraftRequestItemView = {
     maxSizeMb: number;
     helpEn: string | null;
     helpAr: string | null;
+    templateUrl: string | null;
+    templateFileName: string | null;
   }>;
   documents: DraftRequestDocumentView[];
 };
@@ -292,6 +304,8 @@ export async function getDraftRequest(
           maxSizeMb: d.maxSizeMb,
           helpEn: d.helpEn,
           helpAr: d.helpAr,
+          templateUrl: templateUrlFor(d.templateStorageKey),
+          templateFileName: d.templateFileName,
         })),
         documents: item.documents.map((d) => ({
           id: d.id,
@@ -536,6 +550,10 @@ export type ClientRequestDetailItem = {
     mandatory: boolean;
     acceptedMimeTypes: string[];
     maxSizeMb: number;
+    helpEn: string | null;
+    helpAr: string | null;
+    templateUrl: string | null;
+    templateFileName: string | null;
   }>;
 };
 
@@ -730,6 +748,10 @@ export async function getClientRequestDetail(
           mandatory: d.mandatory,
           acceptedMimeTypes: d.acceptedMimeTypes,
           maxSizeMb: d.maxSizeMb,
+          helpEn: d.helpEn,
+          helpAr: d.helpAr,
+          templateUrl: templateUrlFor(d.templateStorageKey),
+          templateFileName: d.templateFileName,
         })),
       })),
       canResubmit:

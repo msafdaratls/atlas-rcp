@@ -1124,6 +1124,10 @@ async function main() {
         nameAr: "إقرار المستورد",
         mandatory: true,
         acceptedMimeTypes: ["application/pdf"],
+        helpEn:
+          "Download the template, fill it out on your Importer Header Letter, then upload the completed file.",
+        helpAr:
+          "نزّل النموذج، واملأه على الترويسة الرسمية للمستورد (Header Letter)، ثم ارفع الملف المكتمل.",
         sortOrder: 1,
       },
       {
@@ -1132,6 +1136,10 @@ async function main() {
         nameAr: "إقرار المصنّع",
         mandatory: true,
         acceptedMimeTypes: ["application/pdf"],
+        helpEn:
+          "Download the template, fill it out on your Importer Header Letter, then upload the completed file.",
+        helpAr:
+          "نزّل النموذج، واملأه على الترويسة الرسمية للمستورد (Header Letter)، ثم ارفع الملف المكتمل.",
         sortOrder: 2,
       },
       {
@@ -1157,6 +1165,18 @@ async function main() {
         mandatory: true,
         acceptedMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
         sortOrder: 5,
+      },
+      {
+        code: "RISK_ASSESSMENT",
+        nameEn: "Risk assessment",
+        nameAr: "تقييم المخاطر",
+        mandatory: true,
+        acceptedMimeTypes: ["application/pdf"],
+        helpEn:
+          "Download the template, fill it out on your Importer Header Letter, then upload the completed file.",
+        helpAr:
+          "نزّل النموذج، واملأه على الترويسة الرسمية للمستورد (Header Letter)، ثم ارفع الملف المكتمل.",
+        sortOrder: 6,
       },
     ],
     // Reconciled per migration 20260806053000: product_name dropped (already

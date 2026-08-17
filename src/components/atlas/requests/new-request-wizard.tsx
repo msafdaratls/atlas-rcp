@@ -36,7 +36,7 @@ import {
   uploadRequestDocument,
 } from "@/server/requests/actions";
 import { endRequestOnBehalf } from "@/server/requests/on-behalf";
-import { Pill, Sparkles, Upload, X } from "lucide-react";
+import { Download, Pill, Sparkles, Upload, X } from "lucide-react";
 import type {
   CataloguePayload,
   CatalogueServiceItem,
@@ -52,6 +52,10 @@ type UploadSlotState = {
   mandatory: boolean;
   acceptedMimeTypes: string[];
   maxSizeMb: number;
+  helpEn?: string | null;
+  helpAr?: string | null;
+  templateUrl?: string | null;
+  templateFileName?: string | null;
   documentId?: string;
   fileName?: string;
   mimeType?: string;
@@ -123,6 +127,10 @@ function buildSlots(
       mandatory: doc.mandatory,
       acceptedMimeTypes: doc.acceptedMimeTypes,
       maxSizeMb: doc.maxSizeMb,
+      helpEn: doc.helpEn,
+      helpAr: doc.helpAr,
+      templateUrl: doc.templateUrl,
+      templateFileName: doc.templateFileName,
       documentId: existing?.id,
       fileName: existing?.currentVersion?.fileName,
       mimeType: existing?.currentVersion?.mimeType,
@@ -1284,6 +1292,23 @@ export function NewRequestWizard({
                                 </span>
                               )}
                             </p>
+                            {(locale === "ar" ? slot.helpAr : slot.helpEn) ? (
+                              <p className="mt-0.5 text-xs text-ink-500">
+                                {locale === "ar" ? slot.helpAr : slot.helpEn}
+                              </p>
+                            ) : null}
+                            {slot.templateUrl ? (
+                              <a
+                                href={slot.templateUrl}
+                                download={slot.templateFileName ?? undefined}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-atlas-green-600 underline-offset-2 hover:underline"
+                              >
+                                <Download className="size-3.5" />
+                                {t("step3.downloadTemplate")}
+                              </a>
+                            ) : null}
                           </div>
                           {slot.fileName ? (
                             <Button

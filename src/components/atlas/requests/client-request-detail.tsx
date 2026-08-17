@@ -37,6 +37,7 @@ import type { ClientRequestDetail } from "@/server/requests/queries";
 import { format } from "date-fns";
 import { arSA, enGB } from "date-fns/locale";
 import {
+  Download,
   FilePlus2,
   Loader2,
   Lock,
@@ -647,6 +648,23 @@ export function ClientRequestDetailPanel({ data }: Props) {
                                   ? existing.currentVersion.fileName
                                   : t("noFileYet")}
                               </p>
+                              {(locale === "ar" ? slot.helpAr : slot.helpEn) ? (
+                                <p className="mt-0.5 text-xs text-ink-500">
+                                  {locale === "ar" ? slot.helpAr : slot.helpEn}
+                                </p>
+                              ) : null}
+                              {slot.templateUrl ? (
+                                <a
+                                  href={slot.templateUrl}
+                                  download={slot.templateFileName ?? undefined}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-atlas-green-600 underline-offset-2 hover:underline"
+                                >
+                                  <Download className="size-3.5" />
+                                  {tStep3("downloadTemplate")}
+                                </a>
+                              ) : null}
                             </div>
                             <div className="flex items-center gap-2">
                               <input

@@ -401,6 +401,11 @@ model RequiredDocument {
   maxSizeMb         Int      @default(50)
   helpEn            String?
   helpAr            String?
+  /// Set once an admin uploads a blank form via catalogue:manage; null means
+  /// no downloadable template is available for this document slot yet.
+  templateStorageKey String?
+  templateFileName   String?
+  templateMimeType   String?
   sortOrder         Int      @default(0)
 
   serviceItem      ServiceItem       @relation(fields: [serviceItemId], references: [id], onDelete: Cascade)

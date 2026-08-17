@@ -1164,6 +1164,13 @@ export type AdminCatalogueItem = {
   defaultEvaluatorId: string | null;
   defaultEvaluatorNameEn: string | null;
   defaultEvaluatorNameAr: string | null;
+  requiredDocuments: Array<{
+    id: string;
+    nameEn: string;
+    nameAr: string;
+    mandatory: boolean;
+    templateFileName: string | null;
+  }>;
 };
 
 export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null> {
@@ -1175,6 +1182,7 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
       include: {
         subCategory: { include: { mainCategory: true } },
         defaultEvaluator: { select: { fullNameEn: true, fullNameAr: true } },
+        requiredDocuments: { orderBy: { sortOrder: "asc" } },
       },
       orderBy: [{ subCategoryId: "asc" }, { sortOrder: "asc" }],
     });
@@ -1206,6 +1214,13 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
       defaultEvaluatorId: item.defaultEvaluatorId,
       defaultEvaluatorNameEn: item.defaultEvaluator?.fullNameEn ?? null,
       defaultEvaluatorNameAr: item.defaultEvaluator?.fullNameAr ?? null,
+      requiredDocuments: item.requiredDocuments.map((d) => ({
+        id: d.id,
+        nameEn: d.nameEn,
+        nameAr: d.nameAr,
+        mandatory: d.mandatory,
+        templateFileName: d.templateFileName,
+      })),
     }));
   } catch {
     return null;

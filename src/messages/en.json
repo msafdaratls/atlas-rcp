@@ -333,7 +333,8 @@
       "optional": "optional",
       "additional": "Additional documents",
       "drop": "Drop a file or click to upload",
-      "remove": "Remove file"
+      "remove": "Remove file",
+      "downloadTemplate": "Download template"
     },
     "step4": {
       "title": "Review & submit",
@@ -1069,7 +1070,15 @@
         "selectMain": "Select a main category",
         "selectSub": "Select a subcategory",
         "code": "Code",
-        "sortOrder": "Sort order"
+        "sortOrder": "Sort order",
+        "requiredDocuments": "Required documents",
+        "requiredDocumentsHint": "Attach a downloadable blank-form template per document — clients see a \"Download Template\" link before uploading their filled copy.",
+        "noTemplate": "No template uploaded yet",
+        "uploadTemplate": "Upload template",
+        "replaceTemplate": "Replace template",
+        "removeTemplate": "Remove template",
+        "templateUploaded": "Template uploaded",
+        "templateRemoved": "Template removed"
       },
       "errors": {
         "VALIDATION": "Check the form and try again.",
@@ -1080,7 +1089,12 @@
         "CODE_TAKEN": "That code is already in use.",
         "HAS_REQUESTS": "This service has requests on file and can't be deleted. Deactivate it instead.",
         "HAS_SERVICE_ITEMS": "This category still has services in it. Remove or move them first.",
-        "HAS_SUBCATEGORIES": "This main category still has subcategories. Delete them first."
+        "HAS_SUBCATEGORIES": "This main category still has subcategories. Delete them first.",
+        "NO_FILE": "Choose a file to upload.",
+        "MIME_REJECTED": "That file type isn't accepted. Upload a PDF or Word document.",
+        "FILE_TOO_LARGE": "That file is too large.",
+        "INFECTED_FILE": "That file failed a virus scan and was not uploaded.",
+        "AV_UNAVAILABLE": "The virus scanner is unavailable right now. Try again shortly."
       },
       "create": {
         "button": "Create service",

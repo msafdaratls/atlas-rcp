@@ -23,14 +23,16 @@ import { STATE_TONE_CLASS } from "@/lib/request-state";
 import { cn } from "@/lib/utils";
 import {
   deleteServiceItem,
+  removeRequiredDocumentTemplate,
   toggleServiceItemActive,
   updateServiceItem,
+  uploadRequiredDocumentTemplate,
 } from "@/server/admin/actions";
 import type { AdminCatalogueItem, AdminCategoryTreeNode } from "@/server/admin/queries";
-import { Loader2 } from "lucide-react";
+import { Loader2, Upload, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 type EvaluatorOption = { id: string; fullNameEn: string; fullNameAr: string };
@@ -536,7 +538,120 @@ function EditServiceDialog({
             </Button>
           </div>
         </form>
+
+        {item.requiredDocuments.length > 0 ? (
+          <div className="space-y-2 border-t border-line pt-4">
+            <Label>{t("edit.requiredDocuments")}</Label>
+            <p className="text-xs text-ink-500">
+              {t("edit.requiredDocumentsHint")}
+            </p>
+            <ul className="space-y-2">
+              {item.requiredDocuments.map((doc) => (
+                <RequiredDocumentTemplateRow key={doc.id} doc={doc} />
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RequiredDocumentTemplateRow({
+  doc,
+}: {
+  doc: AdminCatalogueItem["requiredDocuments"][number];
+}) {
+  const t = useTranslations("adminOps.catalogue");
+  const locale = useLocale();
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [templateFileName, setTemplateFileName] = useState(doc.templateFileName);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  function handleUpload(file: File) {
+    setPending(true);
+    const fd = new FormData();
+    fd.set("requiredDocumentId", doc.id);
+    fd.set("file", file);
+    void uploadRequiredDocumentTemplate(fd).then((result) => {
+      setPending(false);
+      if (!result.ok) {
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+        return;
+      }
+      setTemplateFileName(result.data.fileName);
+      toast.success(t("edit.templateUploaded"));
+      router.refresh();
+    });
+  }
+
+  function handleRemove() {
+    setPending(true);
+    void removeRequiredDocumentTemplate({ requiredDocumentId: doc.id }).then(
+      (result) => {
+        setPending(false);
+        if (!result.ok) {
+          toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+          return;
+        }
+        setTemplateFileName(null);
+        toast.success(t("edit.templateRemoved"));
+        router.refresh();
+      },
+    );
+  }
+
+  return (
+    <li className="flex flex-col gap-2 rounded-md border border-line bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-sm font-medium text-ink-900">
+          {locale === "ar" ? doc.nameAr : doc.nameEn}
+          {doc.mandatory ? <span className="ms-2 text-state-bad">*</span> : null}
+        </p>
+        <p className="truncate text-xs text-ink-500" dir="ltr">
+          {templateFileName ?? t("edit.noTemplate")}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          className="hidden"
+          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleUpload(file);
+            e.target.value = "";
+          }}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          onClick={() => fileRef.current?.click()}
+        >
+          {pending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Upload className="size-4" />
+          )}
+          {templateFileName ? t("edit.replaceTemplate") : t("edit.uploadTemplate")}
+        </Button>
+        {templateFileName ? (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            disabled={pending}
+            onClick={handleRemove}
+            aria-label={t("edit.removeTemplate")}
+          >
+            <X className="size-4" />
+          </Button>
+        ) : null}
+      </div>
+    </li>
   );
 }

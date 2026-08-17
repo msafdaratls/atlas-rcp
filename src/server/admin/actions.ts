@@ -2840,6 +2840,150 @@ export async function deleteServiceItem(
   }
 }
 
+const TEMPLATE_ACCEPTED_MIME_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+const TEMPLATE_MAX_MB = 20;
+
+/**
+ * Attaches (or replaces) the downloadable blank-form template for a required
+ * document slot — e.g. the SAB-001 "Importer declaration" template clients
+ * fill on their Importer Header Letter before uploading. Not tied to any
+ * request/org, so a catalogue:manage upload is visible to every client.
+ */
+export async function uploadRequiredDocumentTemplate(formData: FormData): Promise<
+  ActionResult<{ requiredDocumentId: string; fileName: string }>
+> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const requiredDocumentId = String(formData.get("requiredDocumentId") ?? "");
+    if (!requiredDocumentId) return { ok: false, error: "VALIDATION" };
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "NO_FILE" };
+    }
+
+    const doc = await prisma.requiredDocument.findUnique({
+      where: { id: requiredDocumentId },
+      select: { id: true, serviceItemId: true, templateStorageKey: true },
+    });
+    if (!doc) return { ok: false, error: "NOT_FOUND" };
+
+    if (!TEMPLATE_ACCEPTED_MIME_TYPES.includes(file.type)) {
+      return { ok: false, error: "MIME_REJECTED" };
+    }
+    if (file.size > TEMPLATE_MAX_MB * 1024 * 1024) {
+      return { ok: false, error: "FILE_TOO_LARGE" };
+    }
+
+    const { mimeAllowed, sniffMime } = await import("@/lib/mime-sniff");
+    const { storage } = await import("@/lib/storage");
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const sniffed = sniffMime(buffer);
+    if (!mimeAllowed(sniffed, TEMPLATE_ACCEPTED_MIME_TYPES)) {
+      return { ok: false, error: "MIME_REJECTED" };
+    }
+
+    const { getAvScanner } = await import("@/lib/av");
+    const verdict = await getAvScanner().scan(buffer);
+    if (verdict === "INFECTED") {
+      return { ok: false, error: "INFECTED_FILE" };
+    }
+
+    const stored = await storage.put({
+      keyPrefix: `templates/service-documents/${doc.serviceItemId}`,
+      fileName: file.name,
+      mimeType: sniffed,
+      body: buffer,
+    });
+
+    const previousKey = doc.templateStorageKey;
+    await prisma.requiredDocument.update({
+      where: { id: doc.id },
+      data: {
+        templateStorageKey: stored.key,
+        templateFileName: file.name,
+        templateMimeType: sniffed,
+      },
+    });
+    if (previousKey) {
+      await storage.delete(previousKey);
+    }
+
+    await writeAuditLog({
+      session,
+      action: "catalogue.requiredDocument.template.upload",
+      entityType: "RequiredDocument",
+      entityId: doc.id,
+      after: { fileName: file.name },
+    });
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: { requiredDocumentId: doc.id, fileName: file.name } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    if (message === "AV_UNAVAILABLE") {
+      return { ok: false, error: "AV_UNAVAILABLE" };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const removeRequiredDocumentTemplateSchema = z.object({
+  requiredDocumentId: z.string().min(1),
+});
+
+export async function removeRequiredDocumentTemplate(
+  input: z.infer<typeof removeRequiredDocumentTemplateSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "catalogue:manage");
+    const parsed = removeRequiredDocumentTemplateSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const doc = await prisma.requiredDocument.findUnique({
+      where: { id: parsed.data.requiredDocumentId },
+      select: { id: true, templateStorageKey: true },
+    });
+    if (!doc) return { ok: false, error: "NOT_FOUND" };
+    if (!doc.templateStorageKey) return { ok: true, data: undefined };
+
+    await prisma.requiredDocument.update({
+      where: { id: doc.id },
+      data: {
+        templateStorageKey: null,
+        templateFileName: null,
+        templateMimeType: null,
+      },
+    });
+    const { storage } = await import("@/lib/storage");
+    await storage.delete(doc.templateStorageKey);
+
+    await writeAuditLog({
+      session,
+      action: "catalogue.requiredDocument.template.remove",
+      entityType: "RequiredDocument",
+      entityId: doc.id,
+    });
+
+    revalidatePath("/[locale]/admin/catalogue", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
 const requiredDocumentInputSchema = z.object({
   code: z.string().trim().min(1).max(40),
   nameEn: z.string().trim().min(1).max(200),

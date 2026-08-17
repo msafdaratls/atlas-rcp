@@ -145,24 +145,35 @@ export async function GET(_request: NextRequest, { params }: Params) {
           throw new Error("FORBIDDEN");
         }
       } else {
-        const org = await prisma.organisation.findFirst({
-          where: { logoKey: key },
-          select: { id: true },
+        const docTemplate = await prisma.requiredDocument.findFirst({
+          where: { templateStorageKey: key },
+          select: { templateFileName: true },
         });
-        if (!org) {
-          return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-        }
-        if (isClient) {
-          assertClientOwns(session, org.id, "company:read");
-        } else if (isAtlas) {
-          if (
-            !checkPermission(session, "settings:admin") &&
-            !checkPermission(session, "staff:manage")
-          ) {
+
+        if (docTemplate) {
+          // A blank form template, not client-specific data — any
+          // authenticated user (client or Atlas staff) may download it.
+          downloadName = docTemplate.templateFileName ?? downloadName;
+        } else {
+          const org = await prisma.organisation.findFirst({
+            where: { logoKey: key },
+            select: { id: true },
+          });
+          if (!org) {
+            return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+          }
+          if (isClient) {
+            assertClientOwns(session, org.id, "company:read");
+          } else if (isAtlas) {
+            if (
+              !checkPermission(session, "settings:admin") &&
+              !checkPermission(session, "staff:manage")
+            ) {
+              throw new Error("FORBIDDEN");
+            }
+          } else {
             throw new Error("FORBIDDEN");
           }
-        } else {
-          throw new Error("FORBIDDEN");
         }
       }
     }
