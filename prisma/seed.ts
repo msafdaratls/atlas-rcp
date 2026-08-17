@@ -1161,11 +1161,14 @@ async function main() {
     ],
     // Reconciled per migration 20260806053000: product_name dropped (already
     // collected via RequestItem.productNameEn/Ar in the same wizard step).
+    // Reconciled per migration 20260817120000: product_category dropped (the
+    // mandatory PRODUCT_IMAGES doc above already covers it); hs_code,
+    // manufacturer and technical_regulation relaxed to optional; added the
+    // optional saber_request_number for clients who already started on SABER.
     productAttrSchema: {
       type: "object",
-      required: ["product_category", "hs_code", "manufacturer", "country_of_origin", "technical_regulation"],
+      required: ["country_of_origin"],
       properties: {
-        product_category: { type: "string", titleEn: "Product category", titleAr: "فئة المنتج" },
         hs_code: { type: "string", titleEn: "HS code", titleAr: "الرمز الجمركي" },
         manufacturer: { type: "string", titleEn: "Manufacturer", titleAr: "الشركة المصنعة" },
         country_of_origin: { type: "string", titleEn: "Country of origin", titleAr: "بلد المنشأ" },
@@ -1178,6 +1181,13 @@ async function main() {
             "Textile Products; Ornaments and Accessories; Paper and Cardboard; Packaging; General Requirements for Machinery Safety; Food Safety in Kitchen Tools and Appliances; Communications and ICT Devices; Building Materials Part 5/4/1; GCC Low Voltage Electrical Equipment and Appliances.",
           helpAr:
             "المنسوجات؛ الحلي والإكسسوارات؛ الورق والكرتون؛ التغليف؛ السلامة العامة للآلات؛ سلامة أدوات وأجهزة المطبخ؛ أجهزة الاتصالات وتقنية المعلومات؛ مواد البناء الجزء 5/4/1؛ الأجهزة الكهربائية منخفضة الجهد.",
+        },
+        saber_request_number: {
+          type: "string",
+          titleEn: "SABER request number",
+          titleAr: "رقم طلب سابر",
+          helpEn: "If you already started this request on the SABER platform, enter its request number.",
+          helpAr: "إذا كنت قد بدأت هذا الطلب بالفعل على منصة سابر، فأدخل رقم الطلب.",
         },
       },
     },

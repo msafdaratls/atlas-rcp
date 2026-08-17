@@ -322,7 +322,6 @@
       "vatLine": "VAT {vat}",
       "slaLine": "SLA {hours}h",
       "docsLine": "{count} required documents",
-      "whatWeCheck": "What we check",
       "noServices": "No services are currently offered under this subcategory."
     },
     "step2": {
@@ -349,6 +348,7 @@
       "yes": "Yes",
       "no": "No",
       "platformCredential": "{platform} account",
+      "saberAccountLabel": "SABER account (On Saber Handling Account)",
       "noCredentials": "No {platform} account saved yet — add one from Company settings before continuing."
     },
     "enums": {
@@ -420,7 +420,7 @@
     },
     "errors": {
       "SELECT_SERVICE": "Select a service item to continue.",
-      "PRODUCT_NAME": "Enter the product name in Arabic and English.",
+      "PRODUCT_NAME": "Enter the product name in English.",
       "ATTRS_REQUIRED": "Complete every required product attribute.",
       "ATTR_REQUIRED": "Complete every required product attribute.",
       "ATTR_INVALID": "One or more product attributes are invalid.",

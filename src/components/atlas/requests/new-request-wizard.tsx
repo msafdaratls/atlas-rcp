@@ -426,10 +426,7 @@ export function NewRequestWizard({
     artworkFinal &&
     items.length > 0 &&
     mandatoryFilled >= mandatoryTotal &&
-    items.every(
-      (i) =>
-        i.productNameEn.trim().length >= 2 && i.productNameAr.trim().length >= 2,
-    ) &&
+    items.every((i) => i.productNameEn.trim().length >= 2) &&
     Boolean(requestId);
 
   function toggleCartItem(itemId: string) {
@@ -539,10 +536,7 @@ export function NewRequestWizard({
 
   function goStep3() {
     for (const item of items) {
-      if (
-        item.productNameEn.trim().length < 2 ||
-        item.productNameAr.trim().length < 2
-      ) {
+      if (item.productNameEn.trim().length < 2) {
         toast.error(t("errors.PRODUCT_NAME"));
         return;
       }
@@ -1068,7 +1062,12 @@ export function NewRequestWizard({
                   </p>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>{t("fields.productNameAr")}</Label>
+                      <Label>
+                        {t("fields.productNameAr")}
+                        <span className="ms-2 text-xs text-ink-500">
+                          ({t("step3.optional")})
+                        </span>
+                      </Label>
                       <Input
                         value={item.productNameAr}
                         onChange={(e) =>
@@ -1079,7 +1078,10 @@ export function NewRequestWizard({
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>{t("fields.productNameEn")}</Label>
+                      <Label>
+                        {t("fields.productNameEn")}
+                        <span className="ms-2 text-state-bad">*</span>
+                      </Label>
                       <Input
                         value={item.productNameEn}
                         onChange={(e) =>
@@ -1090,7 +1092,12 @@ export function NewRequestWizard({
                       />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
-                      <Label>{t("fields.brand")}</Label>
+                      <Label>
+                        {t("fields.brand")}
+                        <span className="ms-2 text-xs text-ink-500">
+                          ({t("step3.optional")})
+                        </span>
+                      </Label>
                       <Input
                         value={item.brand}
                         onChange={(e) =>
@@ -1104,6 +1111,13 @@ export function NewRequestWizard({
                       <div key={field.key} className="space-y-2">
                         <Label>
                           {locale === "ar" ? field.titleAr : field.titleEn}
+                          {field.required ? (
+                            <span className="ms-2 text-state-bad">*</span>
+                          ) : (
+                            <span className="ms-2 text-xs text-ink-500">
+                              ({t("step3.optional")})
+                            </span>
+                          )}
                         </Label>
                         <p className="text-xs text-ink-500">
                           {locale === "ar" ? field.helpAr : field.helpEn}
@@ -1173,9 +1187,12 @@ export function NewRequestWizard({
                     {catalogueItem?.requiredCredentialPlatform ? (
                       <div className="space-y-2">
                         <Label>
-                          {t("fields.platformCredential", {
-                            platform: catalogueItem.requiredCredentialPlatform,
-                          })}
+                          {catalogueItem.requiredCredentialPlatform === "SABER"
+                            ? t("fields.saberAccountLabel")
+                            : t("fields.platformCredential", {
+                                platform: catalogueItem.requiredCredentialPlatform,
+                              })}
+                          <span className="ms-2 text-state-bad">*</span>
                         </Label>
                         <Select
                           value={item.platformCredentialId ?? ""}

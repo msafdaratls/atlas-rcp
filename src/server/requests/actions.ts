@@ -193,7 +193,7 @@ function couponItemContext(items: Array<{
 const draftProductSchema = z.object({
   requestItemId: z.string().min(1),
   productNameEn: z.string().trim().min(2).max(200),
-  productNameAr: z.string().trim().min(2).max(200),
+  productNameAr: z.string().trim().max(200),
   brand: z.string().trim().max(120).nullable().optional(),
   productAttrs: z.record(z.string(), z.unknown()),
   /// Org's stored GHAD/SABER/FASAH login to use for this item's external
@@ -1093,10 +1093,7 @@ export async function submitRequest(
 
     const { validateProductAttrs } = await import("@/lib/attr-schema");
     for (const item of draft.items) {
-      if (
-        item.productNameEn.trim().length < 2 ||
-        item.productNameAr.trim().length < 2
-      ) {
+      if (item.productNameEn.trim().length < 2) {
         return { ok: false, error: "PRODUCT_DETAILS_MISSING" };
       }
       const attrError = validateProductAttrs(

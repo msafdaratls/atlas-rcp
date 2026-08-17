@@ -69,6 +69,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
   const tFault = useTranslations("statusRail");
   const tFields = useTranslations("newRequest.fields");
   const tEnums = useTranslations("newRequest.enums");
+  const tStep3 = useTranslations("newRequest.step3");
   const locale = useLocale();
   const dateLocale = locale === "ar" ? arSA : enGB;
   const router = useRouter();
@@ -146,10 +147,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
   const handleSaveProductDetails = (requestItemId: string) => {
     const item = editItems.find((i) => i.requestItemId === requestItemId);
     if (!item) return;
-    if (
-      item.productNameEn.trim().length < 2 ||
-      item.productNameAr.trim().length < 2
-    ) {
+    if (item.productNameEn.trim().length < 2) {
       toast.error(t("errors.VALIDATION"));
       return;
     }
@@ -487,7 +485,12 @@ export function ClientRequestDetailPanel({ data }: Props) {
                       </h3>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <Label>{tFields("productNameAr")}</Label>
+                          <Label>
+                            {tFields("productNameAr")}
+                            <span className="ms-2 text-xs text-ink-500">
+                              ({tStep3("optional")})
+                            </span>
+                          </Label>
                           <Input
                             value={editItem.productNameAr}
                             onChange={(e) =>
@@ -498,7 +501,10 @@ export function ClientRequestDetailPanel({ data }: Props) {
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label>{tFields("productNameEn")}</Label>
+                          <Label>
+                            {tFields("productNameEn")}
+                            <span className="ms-2 text-state-bad">*</span>
+                          </Label>
                           <Input
                             value={editItem.productNameEn}
                             onChange={(e) =>
@@ -509,7 +515,12 @@ export function ClientRequestDetailPanel({ data }: Props) {
                           />
                         </div>
                         <div className="space-y-1 sm:col-span-2">
-                          <Label>{tFields("brand")}</Label>
+                          <Label>
+                            {tFields("brand")}
+                            <span className="ms-2 text-xs text-ink-500">
+                              ({tStep3("optional")})
+                            </span>
+                          </Label>
                           <Input
                             value={editItem.brand}
                             onChange={(e) =>
@@ -524,6 +535,13 @@ export function ClientRequestDetailPanel({ data }: Props) {
                             <div key={field.key} className="space-y-1">
                               <Label>
                                 {locale === "ar" ? field.titleAr : field.titleEn}
+                                {field.required ? (
+                                  <span className="ms-2 text-state-bad">*</span>
+                                ) : (
+                                  <span className="ms-2 text-xs text-ink-500">
+                                    ({tStep3("optional")})
+                                  </span>
+                                )}
                               </Label>
                               {field.type === "boolean" ? (
                                 <Select
