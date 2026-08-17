@@ -1190,10 +1190,10 @@ const internalCommentSchema = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 
-/** Extract distinct mentioned user IDs from `@[Full Name](userId)` tokens. */
+/** Extract distinct mentioned user IDs from `@Full Name\u2063userId\u2063` tokens. */
 function extractMentionedUserIds(body: string): string[] {
   const ids = new Set<string>();
-  for (const match of body.matchAll(/@\[[^\]]+\]\(([a-zA-Z0-9_-]+)\)/g)) {
+  for (const match of body.matchAll(/@[^\u2063\n]+\u2063([a-zA-Z0-9_-]+)\u2063/g)) {
     ids.add(match[1]);
   }
   return [...ids];

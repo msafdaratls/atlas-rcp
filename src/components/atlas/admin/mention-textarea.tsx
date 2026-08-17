@@ -18,6 +18,10 @@ type Props = {
 
 const MAX_SUGGESTIONS = 6;
 
+// Matches a full mention token, e.g. `@Full Name\u2063userId\u2063` — used to
+// delete the whole token atomically since its id half is invisible.
+const MENTION_SPAN = /@[^\u2063\n]*\u2063[a-zA-Z0-9_-]+\u2063/g;
+
 /** Find the `@query` span (if any) ending at `caret`, scanning left for the triggering `@`. */
 function findMentionTrigger(
   text: string,
@@ -83,7 +87,9 @@ export function MentionTextarea({
     if (!trigger || !textareaRef.current) return;
     const el = textareaRef.current;
     const caret = el.selectionStart ?? value.length;
-    const token = `@[${user.fullNameEn}](${user.id}) `;
+    // Wraps the userId in invisible separators so only "@Full Name" is visible
+    // while composing; the id stays machine-parseable for extraction/rendering.
+    const token = `@${user.fullNameEn}\u2063${user.id}\u2063 `;
     const next = value.slice(0, trigger.start) + token + value.slice(caret);
     onChange(next);
     setTrigger(null);
@@ -95,6 +101,23 @@ export function MentionTextarea({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (!trigger && e.key === "Backspace") {
+      const el = textareaRef.current;
+      const caret = el?.selectionStart ?? 0;
+      if (caret === (el?.selectionEnd ?? caret)) {
+        for (const m of value.matchAll(MENTION_SPAN)) {
+          const start = m.index ?? 0;
+          const end = start + m[0].length;
+          if (caret > start && caret <= end) {
+            e.preventDefault();
+            const next = value.slice(0, start) + value.slice(caret);
+            onChange(next);
+            requestAnimationFrame(() => el?.setSelectionRange(start, start));
+            return;
+          }
+        }
+      }
+    }
     if (!trigger || matches.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();

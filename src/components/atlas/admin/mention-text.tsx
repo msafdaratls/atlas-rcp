@@ -1,10 +1,14 @@
 import { Fragment } from "react";
 
-const MENTION_TOKEN = /@\[([^\]]+)\]\(([a-zA-Z0-9_-]+)\)/g;
+// Matches both the legacy `@[Name](userId)` token (comments saved before the
+// hidden-id encoding) and the current token, where the userId is wrapped in
+// U+2063 INVISIBLE SEPARATOR characters so it never renders while composing.
+const MENTION_TOKEN =
+  /@\[([^\]]+)\]\(([a-zA-Z0-9_-]+)\)|@([^\u2063\n]+)\u2063([a-zA-Z0-9_-]+)\u2063/g;
 
 type MentionRef = { userId: string; nameEn: string; nameAr: string };
 
-/** Render a note body, replacing `@[Name](userId)` tokens with highlighted mention chips. */
+/** Render a note body, replacing mention tokens with highlighted mention chips. */
 export function renderMentionBody(
   body: string,
   mentions: MentionRef[],
@@ -16,7 +20,9 @@ export function renderMentionBody(
   let key = 0;
 
   for (const match of body.matchAll(MENTION_TOKEN)) {
-    const [full, fallbackName, userId] = match;
+    const [full, bracketName, bracketId, hiddenName, hiddenId] = match;
+    const fallbackName = bracketName ?? hiddenName;
+    const userId = bracketId ?? hiddenId;
     const index = match.index ?? 0;
     if (index > lastIndex) {
       nodes.push(
