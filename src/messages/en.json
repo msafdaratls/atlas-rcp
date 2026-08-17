@@ -338,6 +338,7 @@
     "step4": {
       "title": "Review & submit",
       "finalArtwork": "I confirm the artwork submitted is the final version intended for market.",
+      "declaration": "Declaration: all documents and information submitted are correct.",
       "submit": "Submit request"
     },
     "fields": {

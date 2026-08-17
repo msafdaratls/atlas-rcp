@@ -91,6 +91,7 @@ type PersistedWizardState = {
   appliedCoupon: string | null;
   discount: number;
   artworkFinal: boolean;
+  infoCorrect: boolean;
 };
 
 type Props = {
@@ -256,8 +257,6 @@ export function NewRequestWizard({
   const [requestNo, setRequestNo] = useState<string | null>(
     initialDraft?.requestNo ?? null,
   );
-  const [expandedChecks, setExpandedChecks] = useState<Set<string>>(new Set());
-
   const [items, setItems] = useState<ItemState[]>(
     () =>
       initialDraft?.items.map((di) =>
@@ -295,6 +294,7 @@ export function NewRequestWizard({
   );
   const [discount, setDiscount] = useState(initialDraft?.discountApplied ?? 0);
   const [artworkFinal, setArtworkFinal] = useState(false);
+  const [infoCorrect, setInfoCorrect] = useState(false);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   const storageKey = `atlas.newRequestWizard:${redirectBasePath}`;
@@ -336,6 +336,7 @@ export function NewRequestWizard({
       setAppliedCoupon(saved.appliedCoupon);
       setDiscount(saved.discount);
       setArtworkFinal(saved.artworkFinal);
+      setInfoCorrect(saved.infoCorrect);
     } catch {
       // Corrupt/old-shape entry — ignore and start fresh.
     }
@@ -364,6 +365,7 @@ export function NewRequestWizard({
       appliedCoupon,
       discount,
       artworkFinal,
+      infoCorrect,
     };
     window.sessionStorage.setItem(storageKey, JSON.stringify(data));
   }, [
@@ -378,6 +380,7 @@ export function NewRequestWizard({
     appliedCoupon,
     discount,
     artworkFinal,
+    infoCorrect,
   ]);
 
   // On step 1 the server draft (`items`) hasn't been created/updated yet, so
@@ -424,6 +427,7 @@ export function NewRequestWizard({
   );
   const canSubmit =
     artworkFinal &&
+    infoCorrect &&
     items.length > 0 &&
     mandatoryFilled >= mandatoryTotal &&
     items.every((i) => i.productNameEn.trim().length >= 2) &&
@@ -999,33 +1003,6 @@ export function NewRequestWizard({
                           </div>
                         </div>
                       </button>
-                      {inCart ? (
-                        <div className="mt-2 rounded-md border border-line bg-surface-alt p-3">
-                          <button
-                            type="button"
-                            className="text-sm font-semibold text-atlas-green-600"
-                            onClick={() =>
-                              setExpandedChecks((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(item.id)) next.delete(item.id);
-                                else next.add(item.id);
-                                return next;
-                              })
-                            }
-                          >
-                            {t("step1.whatWeCheck")}
-                          </button>
-                          {expandedChecks.has(item.id) ? (
-                            <ul className="mt-2 space-y-1 text-sm text-ink-800">
-                              {item.checkSets.map((set) => (
-                                <li key={set.code}>
-                                  · {locale === "ar" ? set.titleAr : set.titleEn}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
-                      ) : null}
                     </li>
                   );
                 })}
@@ -1477,6 +1454,14 @@ export function NewRequestWizard({
                 onCheckedChange={(v) => setArtworkFinal(Boolean(v))}
               />
               <span>{t("step4.finalArtwork")}</span>
+            </label>
+
+            <label className="flex items-start gap-3 rounded-md border border-line bg-surface p-3 text-sm">
+              <Checkbox
+                checked={infoCorrect}
+                onCheckedChange={(v) => setInfoCorrect(Boolean(v))}
+              />
+              <span>{t("step4.declaration")}</span>
             </label>
 
             <div className="flex gap-2">
