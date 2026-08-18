@@ -156,6 +156,9 @@ const transitionSchema = z.object({
  */
 const COI_GATED_TRANSITIONS: Array<[RequestState, RequestState]> = [
   ["ASSESSMENT_RUNNING", "TECHNICAL_REVIEW"],
+  // SCOC skip: completing Evaluation lands directly on Decision, so the same
+  // COI declaration required for a normal "complete Evaluation" applies here.
+  ["ASSESSMENT_RUNNING", "DECISION"],
   ["TECHNICAL_REVIEW", "DECISION"],
   ["DECISION", "REPORT_ISSUED"],
   ["DECISION", "CLOSED"],
@@ -180,9 +183,8 @@ export async function transitionAdminRequest(
         createdBy: { select: { id: true } },
         organisation: { select: { nameEn: true, nameAr: true } },
         items: {
-          take: 1,
           orderBy: { sortOrder: "asc" },
-          select: { serviceItem: { select: { nameEn: true, nameAr: true } } },
+          select: { serviceItem: { select: { code: true, nameEn: true, nameAr: true } } },
         },
       },
     });
@@ -193,6 +195,7 @@ export async function transitionAdminRequest(
     const allowed = allowedTransitionsFor({
       state: request.state,
       heldFromState: request.heldFromState,
+      serviceCodes: request.items.map((i) => i.serviceItem.code),
     });
     if (!allowed.includes(toState)) {
       return { ok: false, error: "INVALID_TRANSITION" };
@@ -240,7 +243,7 @@ export async function transitionAdminRequest(
 
     if (
       request.state === "ASSESSMENT_RUNNING" &&
-      toState === "TECHNICAL_REVIEW" &&
+      (toState === "TECHNICAL_REVIEW" || toState === "DECISION") &&
       !(await hasEvaluationReportForAllItems(request.id))
     ) {
       return { ok: false, error: "EVALUATION_REPORT_REQUIRED" };

@@ -281,6 +281,14 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
     );
   }, [chatOpen, data.id, router]);
 
+  // SCOC's certificate is externally SABER-issued with no Atlas-authored
+  // technical content, so an all-SCOC request skips TECHNICAL_REVIEW
+  // entirely (see allowedTransitionsFor) — the reviewer meta-checklist below
+  // never applies to it, even at DECISION.
+  const isScocOnly =
+    data.items.length > 0 &&
+    data.items.every((item) => item.serviceItem.code === "SAB-002");
+
   const canReturn = data.allowedTransitions.includes("RETURNED_TO_CLIENT");
   const canCancel = data.allowedTransitions.includes("CANCELLED");
   // At DECISION, REPORT_ISSUED/CLOSED are surfaced as the dedicated
@@ -300,9 +308,17 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
       !(canCompleteApplicationReview && s === "ACCEPTED"),
   );
 
-  /** The three transitions the spec requires a Conflict of Interest declaration before. */
+  /**
+   * The transitions the spec requires a Conflict of Interest declaration
+   * before — including the SCOC skip (ASSESSMENT_RUNNING -> DECISION
+   * directly), which carries the same "completing Evaluation" declaration as
+   * the normal ASSESSMENT_RUNNING -> TECHNICAL_REVIEW handoff.
+   */
   function coiGateFor(target: RequestState): typeof coiNext {
-    if (data.state === "ASSESSMENT_RUNNING" && target === "TECHNICAL_REVIEW") {
+    if (
+      data.state === "ASSESSMENT_RUNNING" &&
+      (target === "TECHNICAL_REVIEW" || target === "DECISION")
+    ) {
       return { kind: "transition", toState: target };
     }
     if (data.state === "TECHNICAL_REVIEW" && target === "DECISION") {
@@ -1264,7 +1280,8 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
         </Dialog>
       ) : null}
 
-      {["TECHNICAL_REVIEW", "DECISION", "REPORT_ISSUED", "CLOSED"].includes(
+      {!isScocOnly &&
+      ["TECHNICAL_REVIEW", "DECISION", "REPORT_ISSUED", "CLOSED"].includes(
         data.state,
       ) && hasCheckItems(data.technicalReviewChecklist.checkSets) ? (
         <TechnicalReviewChecklistPanel

@@ -69,6 +69,21 @@ export const REQUEST_TRANSITIONS: Record<RequestState, RequestState[]> = {
   ON_HOLD: [],
 };
 
+/**
+ * SCOC (Shipment Conformity Certificate) — the deliverable is an externally
+ * SABER-issued certificate the Evaluator uploads (see
+ * ExternalDeliverablePanel), with no Atlas-authored technical content to
+ * review, so a request made up entirely of SCOC items skips TECHNICAL_REVIEW:
+ * the Evaluator's "Complete Evaluation" hands straight to the Decision Maker.
+ * A request bundling SCOC with any other service still goes through the
+ * normal REQUEST_TRANSITIONS graph below.
+ */
+const SCOC_SERVICE_CODE = "SAB-002";
+
+function isScocOnlyRequest(serviceCodes: string[]): boolean {
+  return serviceCodes.length > 0 && serviceCodes.every((c) => c === SCOC_SERVICE_CODE);
+}
+
 /** Safe default when a hold has no recorded prior state (legacy rows). */
 const ON_HOLD_RESUME_FALLBACK: RequestState = "UNDER_INTAKE_REVIEW";
 
@@ -103,10 +118,18 @@ export function canReopenRequest(state: RequestState): boolean {
 export function allowedTransitionsFor(request: {
   state: RequestState;
   heldFromState: RequestState | null;
+  /** ServiceItem.code of every item on the request; drives the SCOC skip above. */
+  serviceCodes?: string[];
 }): RequestState[] {
   if (request.state === "ON_HOLD") {
     const resume = request.heldFromState ?? ON_HOLD_RESUME_FALLBACK;
     return [resume, "CANCELLED"];
+  }
+  if (
+    request.state === "ASSESSMENT_RUNNING" &&
+    isScocOnlyRequest(request.serviceCodes ?? [])
+  ) {
+    return ["DECISION", "ON_HOLD", "CANCELLED"];
   }
   return REQUEST_TRANSITIONS[request.state] ?? [];
 }
@@ -699,6 +722,7 @@ export async function getAdminRequestDetail(
       allowedTransitions: allowedTransitionsFor({
         state: request.state,
         heldFromState: request.heldFromState,
+        serviceCodes: request.items.map((i) => i.serviceItem.code),
       }).filter((toState) =>
         canTransitionRequest(session, toState, {
           fromState: request.state,

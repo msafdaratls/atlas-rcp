@@ -336,6 +336,14 @@ export function canTransitionRequest(
     }
   }
 
+  // SCOC skip: for an all-SCOC request, "Complete Evaluation" hands straight
+  // to the Decision Maker with no Technical Reviewer in between — this is
+  // still the Evaluator's own outgoing transition, same as their normal
+  // ASSESSMENT_RUNNING -> TECHNICAL_REVIEW handoff.
+  if (toState === "DECISION" && ctx.fromState === "ASSESSMENT_RUNNING") {
+    return matchingRoles.some(([role]) => role === "EVALUATOR");
+  }
+
   // Resume from hold: any specialist who can place holds may restore prior state.
   if (
     ctx.fromState === "ON_HOLD" &&
