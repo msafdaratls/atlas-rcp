@@ -95,7 +95,6 @@ type PersistedWizardState = {
   couponCode: string;
   appliedCoupon: string | null;
   discount: number;
-  artworkFinal: boolean;
   infoCorrect: boolean;
 };
 
@@ -302,7 +301,6 @@ export function NewRequestWizard({
     initialDraft?.couponCode ?? null,
   );
   const [discount, setDiscount] = useState(initialDraft?.discountApplied ?? 0);
-  const [artworkFinal, setArtworkFinal] = useState(false);
   const [infoCorrect, setInfoCorrect] = useState(false);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
@@ -344,7 +342,6 @@ export function NewRequestWizard({
       setCouponCode(saved.couponCode);
       setAppliedCoupon(saved.appliedCoupon);
       setDiscount(saved.discount);
-      setArtworkFinal(saved.artworkFinal);
       setInfoCorrect(saved.infoCorrect);
     } catch {
       // Corrupt/old-shape entry — ignore and start fresh.
@@ -373,7 +370,6 @@ export function NewRequestWizard({
       couponCode,
       appliedCoupon,
       discount,
-      artworkFinal,
       infoCorrect,
     };
     window.sessionStorage.setItem(storageKey, JSON.stringify(data));
@@ -388,7 +384,6 @@ export function NewRequestWizard({
     couponCode,
     appliedCoupon,
     discount,
-    artworkFinal,
     infoCorrect,
   ]);
 
@@ -435,7 +430,6 @@ export function NewRequestWizard({
     0,
   );
   const canSubmit =
-    artworkFinal &&
     infoCorrect &&
     items.length > 0 &&
     mandatoryFilled >= mandatoryTotal &&
@@ -1498,14 +1492,6 @@ export function NewRequestWizard({
                 </Button>
               )}
             </div>
-
-            <label className="flex items-start gap-3 rounded-md border border-line bg-surface p-3 text-sm">
-              <Checkbox
-                checked={artworkFinal}
-                onCheckedChange={(v) => setArtworkFinal(Boolean(v))}
-              />
-              <span>{t("step4.finalArtwork")}</span>
-            </label>
 
             <label className="flex items-start gap-3 rounded-md border border-line bg-surface p-3 text-sm">
               <Checkbox
