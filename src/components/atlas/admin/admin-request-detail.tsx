@@ -71,6 +71,19 @@ const ASSESSMENT_EDIT_STATES: RequestState[] = [
   "REPORT_ISSUED",
 ];
 
+// The External submission panel has nothing to do until the request has
+// actually been decided — showing it from ACCEPTED onward (the full
+// ASSESSMENT_SHOW_STATES window) surfaced an empty, unusable submission form
+// for several stages before there was anything to submit. REPORT_ISSUED
+// stays included: that's the "Complete Certificate Issuance" step, and the
+// panel's file-upload control is where the real certificate gets attached
+// before that transition is allowed to succeed.
+const EXTERNAL_DELIVERABLE_SHOW_STATES: RequestState[] = [
+  "DECISION",
+  "REPORT_ISSUED",
+  "CLOSED",
+];
+
 /**
  * The role actually authorized to act at each stage (per rbac.ts's
  * SPECIALIST_TRANSITIONS) — used to narrow the "Assign to" picker so it
@@ -302,13 +315,16 @@ export function AdminRequestDetailPanel({
     );
   }, [chatOpen, data.id, router]);
 
-  // SCOC's certificate is externally SABER-issued with no Atlas-authored
-  // technical content, so an all-SCOC request skips TECHNICAL_REVIEW
-  // entirely (see allowedTransitionsFor) — the reviewer meta-checklist below
-  // never applies to it, even at DECISION.
+  // SCOC's certificate is externally issued (SABER for SAB-002, SFDA for the
+  // cosmetics equivalent SFDA-COS-002) with no Atlas-authored technical
+  // content, so an all-SCOC request skips TECHNICAL_REVIEW entirely (see
+  // allowedTransitionsFor/SCOC_SERVICE_CODES in queries.ts) — the reviewer
+  // meta-checklist below never applies to it, even at DECISION.
   const isScocOnly =
     data.items.length > 0 &&
-    data.items.every((item) => item.serviceItem.code === "SAB-002");
+    data.items.every((item) =>
+      ["SAB-002", "SFDA-COS-002"].includes(item.serviceItem.code),
+    );
 
   // Lab Testing Coordination has no Atlas-authored technical content to
   // review or certify — see completeLabTesting / isLabTestingOnlyRequest —
@@ -1392,6 +1408,7 @@ export function AdminRequestDetailPanel({
             <EvaluationReportPanel
               key={item.id}
               requestItemId={item.id}
+              serviceCode={item.serviceItem.code}
               title={
                 locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
               }
@@ -1421,7 +1438,7 @@ export function AdminRequestDetailPanel({
           ))
         : null}
 
-      {!isLabTestingOnly && ASSESSMENT_SHOW_STATES.includes(data.state)
+      {!isLabTestingOnly && EXTERNAL_DELIVERABLE_SHOW_STATES.includes(data.state)
         ? data.items.map((item) => (
             <ExternalDeliverablePanel
               key={item.id}

@@ -71,17 +71,18 @@ export const REQUEST_TRANSITIONS: Record<RequestState, RequestState[]> = {
 
 /**
  * SCOC (Shipment Conformity Certificate) — the deliverable is an externally
- * SABER-issued certificate the Evaluator uploads (see
- * ExternalDeliverablePanel), with no Atlas-authored technical content to
- * review, so a request made up entirely of SCOC items skips TECHNICAL_REVIEW:
- * the Evaluator's "Complete Evaluation" hands straight to the Decision Maker.
- * A request bundling SCOC with any other service still goes through the
- * normal REQUEST_TRANSITIONS graph below.
+ * issued certificate (SABER for SAB-002, SFDA for the cosmetics equivalent)
+ * the Evaluator uploads (see ExternalDeliverablePanel), with no
+ * Atlas-authored technical content to review, so a request made up entirely
+ * of SCOC items skips TECHNICAL_REVIEW: the Evaluator's "Complete Evaluation"
+ * hands straight to the Decision Maker. A request bundling SCOC with any
+ * other service still goes through the normal REQUEST_TRANSITIONS graph
+ * below.
  */
-const SCOC_SERVICE_CODE = "SAB-002";
+const SCOC_SERVICE_CODES = ["SAB-002", "SFDA-COS-002"];
 
 function isScocOnlyRequest(serviceCodes: string[]): boolean {
-  return serviceCodes.length > 0 && serviceCodes.every((c) => c === SCOC_SERVICE_CODE);
+  return serviceCodes.length > 0 && serviceCodes.every((c) => SCOC_SERVICE_CODES.includes(c));
 }
 
 /**

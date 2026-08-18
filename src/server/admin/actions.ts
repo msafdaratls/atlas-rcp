@@ -2542,23 +2542,42 @@ export async function uploadActivityReport(formData: FormData): Promise<
  * the `${activity.type} report` label convention `uploadActivityReport`
  * already uses to distinguish document purpose without a dedicated column.
  */
-const EVALUATION_REPORT_LABEL = "Evaluation Report";
+const DEFAULT_EVALUATION_REPORT_LABEL = "Evaluation Report";
 const EVALUATION_REPORT_ACCEPTED = ["application/pdf", "image/png", "image/jpeg"];
 const EVALUATION_REPORT_MAX_MB = 50;
 
-/** Every RequestItem on the request has an uploaded, current Evaluation Report. */
+/**
+ * Most services need one generic "Evaluation Report" upload before Complete
+ * Evaluation. Cosmetic SCOC (SFDA-COS-002) needs 3 specifically-named
+ * documents instead (see EvaluationReportPanel) — keyed by ServiceItem.code
+ * so every other service keeps today's single-label behavior unchanged.
+ */
+const EVALUATION_REPORT_LABELS: Record<string, string[]> = {
+  "SFDA-COS-002": ["Evaluation Check List", "Inspection Report", "Test Report"],
+};
+
+function evaluationReportLabelsFor(serviceCode: string): string[] {
+  return EVALUATION_REPORT_LABELS[serviceCode] ?? [DEFAULT_EVALUATION_REPORT_LABEL];
+}
+
+/** Every RequestItem on the request has all of its required Evaluation Report documents uploaded. */
 async function hasEvaluationReportForAllItems(requestId: string): Promise<boolean> {
   const items = await prisma.requestItem.findMany({
     where: { requestId },
     select: {
+      serviceItem: { select: { code: true } },
       documents: {
-        where: { label: EVALUATION_REPORT_LABEL, currentVersionId: { not: null } },
-        select: { id: true },
-        take: 1,
+        where: { currentVersionId: { not: null } },
+        select: { label: true },
       },
     },
   });
-  return items.length > 0 && items.every((item) => item.documents.length > 0);
+  if (items.length === 0) return false;
+  return items.every((item) => {
+    const required = evaluationReportLabelsFor(item.serviceItem.code);
+    const uploadedLabels = new Set(item.documents.map((d) => d.label));
+    return required.every((label) => uploadedLabels.has(label));
+  });
 }
 
 export async function uploadEvaluationReport(formData: FormData): Promise<
@@ -2579,12 +2598,21 @@ export async function uploadEvaluationReport(formData: FormData): Promise<
       select: {
         id: true,
         requestId: true,
+        serviceItem: { select: { code: true } },
         request: { select: { id: true, state: true, organisationId: true } },
       },
     });
     if (!item) return { ok: false, error: "NOT_FOUND" };
     if (item.request.state !== "ASSESSMENT_RUNNING") {
       return { ok: false, error: "INVALID_STATE" };
+    }
+
+    const allowedLabels = evaluationReportLabelsFor(item.serviceItem.code);
+    const requestedLabel = formData.get("label");
+    const label =
+      typeof requestedLabel === "string" && requestedLabel ? requestedLabel : allowedLabels[0];
+    if (!allowedLabels.includes(label)) {
+      return { ok: false, error: "VALIDATION" };
     }
 
     if (!EVALUATION_REPORT_ACCEPTED.includes(file.type)) {
@@ -2622,9 +2650,9 @@ export async function uploadEvaluationReport(formData: FormData): Promise<
     const doc = await prisma.$transaction(async (tx) => {
       // Re-uploading replaces the prior report as a new version, unlike
       // Laboratory Testing's multiple-independent-documents pattern — there
-      // is exactly one current Evaluation Report per request item.
+      // is exactly one current document per (request item, label) pair.
       const existing = await tx.requestDocument.findFirst({
-        where: { requestItemId: item.id, label: EVALUATION_REPORT_LABEL },
+        where: { requestItemId: item.id, label },
       });
       const document =
         existing ??
@@ -2632,7 +2660,7 @@ export async function uploadEvaluationReport(formData: FormData): Promise<
           data: {
             requestId,
             requestItemId: item.id,
-            label: EVALUATION_REPORT_LABEL,
+            label,
           },
         }));
       const priorVersionCount = await tx.documentVersion.count({

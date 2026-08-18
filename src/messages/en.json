@@ -955,7 +955,8 @@
         "missing": "Not uploaded",
         "uploaded": "Uploaded",
         "upload": "Upload report",
-        "replace": "Replace report"
+        "replace": "Replace report",
+        "shouldUpload": "Should upload:"
       },
       "externalDeliverable": {
         "title": "External submission",
@@ -981,6 +982,8 @@
         "scocChecklistItem1": "Check the models of the products within the Product Conformity Certificate",
         "scocChecklistItem2": "Item price in Saber matches the invoice",
         "scocChecklistHint": "Confirm both checks before marking this submitted.",
+        "cosmeticScocChecklistItem1": "Product and batch details match the Evaluation Check List, Inspection Report, and Test Report",
+        "cosmeticScocChecklistItem2": "Shipment price matches the commercial invoice",
         "refValue": "Certificate / reference number",
         "refValuePlaceholder": "The number returned by the portal or lab",
         "markIssued": "Mark issued",

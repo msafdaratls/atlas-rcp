@@ -929,9 +929,15 @@ async function main() {
     // fields, which every service already collects.
     productAttrSchema: {
       type: "object",
-      required: ["client_name"],
+      required: ["client_name", "country_of_origin"],
       properties: {
-        client_name: { type: "string", titleEn: "Client name", titleAr: "اسم العميل" },
+        client_name: { type: "string", sortOrder: 1, titleEn: "Client name", titleAr: "اسم العميل" },
+        country_of_origin: {
+          type: "string",
+          sortOrder: 2,
+          titleEn: "Country of origin",
+          titleAr: "بلد المنشأ",
+        },
       },
     },
     checkSets: [{ code: "GSO_1943", titleEn: "GSO 1943 — Cosmetic labelling", titleAr: "GSO 1943 — بطاقة مستحضرات التجميل" }],
@@ -1030,26 +1036,38 @@ async function main() {
         sortOrder: 2,
       },
       {
-        code: "PRODUCT_IMAGES",
-        nameEn: "Product images",
-        nameAr: "صور المنتج",
-        mandatory: true,
-        acceptedMimeTypes: ["image/png", "image/jpeg"],
-        sortOrder: 3,
-      },
-      {
         code: "AUTHORIZATION_LETTER",
         nameEn: "Authorization letter",
         nameAr: "خطاب تفويض",
         mandatory: true,
         acceptedMimeTypes: ["application/pdf"],
-        sortOrder: 4,
+        sortOrder: 3,
       },
     ],
+    // Reconciled 2026-08-18: dropped Product images (not part of the
+    // workflow doc's document list); added the repeatable `products` field
+    // so one request can register multiple products in the same GHAD batch.
     productAttrSchema: {
       type: "object",
-      required: ["client_name"],
-      properties: { client_name: { type: "string", titleEn: "Client name", titleAr: "اسم العميل" } },
+      required: ["client_name", "products"],
+      properties: {
+        client_name: { type: "string", sortOrder: 1, titleEn: "Client name", titleAr: "اسم العميل" },
+        products: {
+          type: "array",
+          sortOrder: 2,
+          titleEn: "Products",
+          titleAr: "المنتجات",
+          helpEn: "Add one entry per product to register in this batch.",
+          helpAr: "أضف إدخالاً لكل منتج سيتم تسجيله ضمن هذه الدفعة.",
+          items: {
+            type: "object",
+            required: ["product_name"],
+            properties: {
+              product_name: { type: "string", sortOrder: 1, titleEn: "Product name", titleAr: "اسم المنتج" },
+            },
+          },
+        },
+      },
     },
     checkSets: [],
     deliverableEn: "Certificate for Cosmetic Product Notification",

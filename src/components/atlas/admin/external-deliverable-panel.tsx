@@ -32,12 +32,20 @@ type Props = {
   locale: string;
 };
 
-// SCOC (SABER Shipment Certificate of Conformity) already collects the SABER
-// request number and PCOC-certificate/model entries on the product-details
-// form, so the generic ref-type/notes submission fields are redundant here —
-// swap them for a pre-submission checklist instead.
-const SCOC_SERVICE_CODE = "SAB-002";
-const SCOC_EXTERNAL_REF_TYPE = "SABER_SCOC_CHECKLIST";
+// SCOC (SABER Shipment Certificate of Conformity, and its cosmetics
+// equivalent SFDA-COS-002) already collects the shipment/product details it
+// needs on the product-details form, so the generic ref-type/notes
+// submission fields are redundant here — swap them for a pre-submission
+// checklist instead. The two services get different checklist copy (see
+// scocChecklistItems below) since they check different things, but share the
+// same submission mechanics.
+const SABER_SCOC_SERVICE_CODE = "SAB-002";
+const COSMETIC_SCOC_SERVICE_CODE = "SFDA-COS-002";
+const SCOC_SERVICE_CODES = [SABER_SCOC_SERVICE_CODE, COSMETIC_SCOC_SERVICE_CODE];
+const SCOC_EXTERNAL_REF_TYPE: Record<string, string> = {
+  [SABER_SCOC_SERVICE_CODE]: "SABER_SCOC_CHECKLIST",
+  [COSMETIC_SCOC_SERVICE_CODE]: "SFDA_COS_SCOC_CHECKLIST",
+};
 
 const STATUS_TONE: Record<Deliverable["status"], string> = {
   PENDING_SUBMISSION: "bg-surface-alt text-ink-600 border-line",
@@ -60,11 +68,15 @@ export function ExternalDeliverablePanel({
 }: Props) {
   const t = useTranslations("adminOps.requestDetail.externalDeliverable");
 
-  const isScoc = serviceItem.code === SCOC_SERVICE_CODE;
+  const isScoc = SCOC_SERVICE_CODES.includes(serviceItem.code);
+  // The auto-generated certificate PDF/download button only matches SABER's
+  // layout (HS code, technical regulation, etc.) — cosmetics SCOC
+  // certificates are uploaded files from SFDA, not Atlas-generated.
+  const isSaberScoc = serviceItem.code === SABER_SCOC_SERVICE_CODE;
   const status = deliverable?.status ?? "PENDING_SUBMISSION";
 
   const [externalRefType, setExternalRefType] = useState(
-    deliverable?.externalRefType ?? (isScoc ? SCOC_EXTERNAL_REF_TYPE : ""),
+    deliverable?.externalRefType ?? (isScoc ? SCOC_EXTERNAL_REF_TYPE[serviceItem.code] : ""),
   );
   const [externalRefValue, setExternalRefValue] = useState(
     deliverable?.externalRefValue ?? "",
@@ -84,6 +96,13 @@ export function ExternalDeliverablePanel({
 
   const scocChecklistComplete = modelsChecked && priceChecked;
 
+  // SABER SCOC (SAB-002) and Cosmetic SCOC (SFDA-COS-002) check different
+  // things before submission, so each gets its own checklist copy even
+  // though they share the same checklist mechanics.
+  const scocChecklistItems: [string, string] = isSaberScoc
+    ? [t("scocChecklistItem1"), t("scocChecklistItem2")]
+    : [t("cosmeticScocChecklistItem1"), t("cosmeticScocChecklistItem2")];
+
   function doSubmit() {
     if (!externalRefType.trim()) {
       toast.error(t("errors.VALIDATION"));
@@ -98,9 +117,7 @@ export function ExternalDeliverablePanel({
         requestItemId,
         externalRefType: externalRefType.trim(),
         notes: isScoc
-          ? [t("scocChecklistItem1"), t("scocChecklistItem2")]
-              .map((item) => `✓ ${item}`)
-              .join("\n")
+          ? scocChecklistItems.map((item) => `✓ ${item}`).join("\n")
           : notes.trim() || undefined,
       });
       if (!result.ok) {
@@ -196,7 +213,7 @@ export function ExternalDeliverablePanel({
                 htmlFor={`${requestItemId}-scoc-check-1`}
                 className="text-sm font-normal leading-snug"
               >
-                {t("scocChecklistItem1")}
+                {scocChecklistItems[0]}
               </Label>
             </li>
             <li className="flex items-start gap-2">
@@ -209,7 +226,7 @@ export function ExternalDeliverablePanel({
                 htmlFor={`${requestItemId}-scoc-check-2`}
                 className="text-sm font-normal leading-snug"
               >
-                {t("scocChecklistItem2")}
+                {scocChecklistItems[1]}
               </Label>
             </li>
           </ul>
@@ -362,7 +379,7 @@ export function ExternalDeliverablePanel({
         </p>
       ) : null}
 
-      {isScoc && status === "ISSUED" ? (
+      {isSaberScoc && status === "ISSUED" ? (
         <Button asChild size="sm" variant="outline">
           <a
             href={`/api/certificates/${requestItemId}/pdf?locale=${locale}`}

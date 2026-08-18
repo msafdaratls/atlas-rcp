@@ -955,7 +955,8 @@
         "missing": "لم يُرفع بعد",
         "uploaded": "تم الرفع",
         "upload": "رفع التقرير",
-        "replace": "استبدال التقرير"
+        "replace": "استبدال التقرير",
+        "shouldUpload": "يجب رفع:"
       },
       "externalDeliverable": {
         "title": "التقديم الخارجي",
@@ -981,6 +982,8 @@
         "scocChecklistItem1": "تحقق من موديلات المنتجات ضمن شهادة مطابقة المنتج (PCOC)",
         "scocChecklistItem2": "تأكد أن سعر الصنف في سابر يطابق الفاتورة",
         "scocChecklistHint": "أكّد كلا التحققين قبل وضع علامة التقديم.",
+        "cosmeticScocChecklistItem1": "تطابق بيانات المنتج والدفعة مع قائمة التحقق التقييمي وتقرير الفحص وتقرير الاختبار",
+        "cosmeticScocChecklistItem2": "تطابق سعر الإرسالية مع الفاتورة التجارية",
         "refValue": "رقم الشهادة / المرجع",
         "refValuePlaceholder": "الرقم الصادر من المنصة أو المختبر",
         "markIssued": "وضع علامة تم الإصدار",
