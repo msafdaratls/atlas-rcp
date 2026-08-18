@@ -1241,23 +1241,12 @@ async function main() {
         acceptedMimeTypes: ["application/pdf"],
         sortOrder: 1,
       },
-      {
-        code: "PACKING_LIST",
-        nameEn: "Packing list",
-        nameAr: "قائمة التعبئة",
-        mandatory: true,
-        acceptedMimeTypes: ["application/pdf"],
-        sortOrder: 2,
-      },
-      {
-        code: "PRODUCT_CERTIFICATE",
-        nameEn: "Product certificate (PCOC)",
-        nameAr: "شهادة مطابقة المنتج",
-        mandatory: true,
-        acceptedMimeTypes: ["application/pdf"],
-        sortOrder: 3,
-      },
     ],
+    // Reconciled per migration 20260818090000: the client only ever submits
+    // the commercial invoice for a shipment certificate — the PCOC
+    // certificate number is already captured as structured data in
+    // product_certificates below, and packing list isn't part of the
+    // SABER shipment-certificate submission.
     // Reconciled per migration 20260817160000: shipment certificates need the
     // SABER shipment request number plus one PCOC certificate number per
     // product in the shipment, each matched to the model(s) it covers.
