@@ -35,6 +35,7 @@ import {
 import {
   allowedTransitionsFor,
   canReopenRequest,
+  isLabTestingOnlyRequest,
   NEW_REQUEST_STATES,
   onHoldResumeTarget,
   REOPEN_TARGET_STATES,
@@ -719,6 +720,195 @@ export async function completeApplicationReview(
       } catch (error) {
         log.error(
           "admin.requests.completeApplicationReview",
+          "notification delivery failed",
+          {
+            requestId,
+            error: error instanceof Error ? error.message : "unknown",
+          },
+        );
+      }
+    });
+
+    revalidatePath("/[locale]/admin/requests", "page");
+    revalidatePath(`/[locale]/admin/requests/${requestId}`, "page");
+    revalidatePath("/[locale]/admin/queues", "page");
+
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    if (message === "CONFLICT") {
+      return { ok: false, error: "CONFLICT" };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const completeLabTestingSchema = z.object({
+  requestId: z.string().min(1),
+  coiAcknowledged: z.literal(true),
+});
+
+/**
+ * "Complete Testing": Lab Testing Coordination (LAB-001) has no
+ * Atlas-authored technical content to review or certify — the deliverable is
+ * the external lab's own test report, already uploaded against the
+ * LABORATORY_TESTING RequestItemActivity — so this is a one-click completion
+ * mirroring completeApplicationReview's cascade: ASSESSMENT_RUNNING ->
+ * REPORT_ISSUED -> CLOSED in a single transaction, each hop still its own
+ * RequestEvent. Only valid for requests made up entirely of LAB-001 items
+ * (see isLabTestingOnlyRequest) — a bundled request keeps the normal
+ * Technical Review / Decision pipeline.
+ */
+export async function completeLabTesting(
+  input: z.infer<typeof completeLabTestingSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = completeLabTestingSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { requestId, coiAcknowledged } = parsed.data;
+
+    const request = await prisma.request.findUnique({
+      where: { id: requestId },
+      include: {
+        createdBy: { select: { id: true } },
+        organisation: { select: { nameEn: true, nameAr: true } },
+        items: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            serviceItem: { select: { code: true, nameEn: true, nameAr: true } },
+            activities: { where: { type: "LABORATORY_TESTING" } },
+          },
+        },
+      },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+
+    if (request.state !== "ASSESSMENT_RUNNING") {
+      return { ok: false, error: "INVALID_TRANSITION" };
+    }
+
+    const serviceCodes = request.items.map((item) => item.serviceItem.code);
+    if (!isLabTestingOnlyRequest(serviceCodes)) {
+      return { ok: false, error: "INVALID_TRANSITION" };
+    }
+
+    if (
+      !canTransitionRequest(session, "REPORT_ISSUED", {
+        fromState: request.state,
+      })
+    ) {
+      return { ok: false, error: "FORBIDDEN" };
+    }
+
+    // Every item's lab testing activity must be COMPLETED — which itself
+    // already required >=1 uploaded report (see completeEvaluationActivity's
+    // REPORT_REQUIRED gate) — before the request can close as "Completed".
+    const allReported = request.items.every((item) =>
+      item.activities.some((activity) => activity.status === "COMPLETED"),
+    );
+    if (!allReported) {
+      return { ok: false, error: "LAB_REPORT_REQUIRED" };
+    }
+
+    if (!coiAcknowledged) {
+      return { ok: false, error: "COI_ACKNOWLEDGEMENT_REQUIRED" };
+    }
+
+    const serviceNameEn = request.items[0]?.serviceItem.nameEn ?? "";
+    const serviceNameAr = request.items[0]?.serviceItem.nameAr ?? "";
+
+    await prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const updated = await tx.request.updateMany({
+        where: { id: requestId, state: "ASSESSMENT_RUNNING" },
+        data: { state: "CLOSED", closedAt: now },
+      });
+      if (updated.count === 0) {
+        throw new Error("CONFLICT");
+      }
+
+      const chain: Array<[RequestState, RequestState, string]> = [
+        [
+          "ASSESSMENT_RUNNING",
+          "REPORT_ISSUED",
+          "Lab testing completed — test reports uploaded",
+        ],
+        ["REPORT_ISSUED", "CLOSED", "Completed (auto-advanced)"],
+      ];
+      for (const [fromState, toState, note] of chain) {
+        await tx.requestEvent.create({
+          data: {
+            requestId,
+            fromState,
+            toState,
+            actorUserId: session.id,
+            actorRole: session.roles[0] ?? "SYSTEM_ADMIN",
+            note,
+            metadata:
+              toState === "REPORT_ISSUED"
+                ? ({
+                    coiAcknowledged: true,
+                    coiAcknowledgedAt: now.toISOString(),
+                  } as Prisma.InputJsonValue)
+                : ({} as Prisma.InputJsonValue),
+          },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: session.id,
+          actorRole: session.roles[0],
+          organisationId: request.organisationId,
+          action: "request.completeLabTesting",
+          entityType: "Request",
+          entityId: requestId,
+          before: { state: request.state },
+          after: { state: "CLOSED" },
+        },
+      });
+
+      try {
+        const { notify } = await import("@/server/notifications/notify");
+        const { notificationCopy } = await import(
+          "@/server/notifications/copy"
+        );
+
+        if (request.createdBy) {
+          const eventType = notificationEventForState("REPORT_ISSUED", "CLOSED");
+          if (eventType) {
+            const copy = notificationCopy(eventType, {
+              requestNo: request.requestNo,
+              customerNameEn: request.organisation.nameEn,
+              customerNameAr: request.organisation.nameAr,
+              serviceNameEn,
+              serviceNameAr,
+            });
+            await notify(
+              {
+                event: eventType,
+                data: {
+                  requestId,
+                  requestNo: request.requestNo,
+                  state: "CLOSED",
+                  link: `/client/requests/${requestId}`,
+                  organisationId: request.organisationId,
+                  createdByUserId: request.createdBy.id,
+                  ...copy,
+                },
+              },
+              tx,
+            );
+          }
+        }
+      } catch (error) {
+        log.error(
+          "admin.requests.completeLabTesting",
           "notification delivery failed",
           {
             requestId,
@@ -1675,7 +1865,11 @@ const scheduleEvaluationActivitySchema = z.object({
  * evaluation activities. Only offered when the item's service was configured
  * to require it (ACTIVITY_FLAG_FOR_TYPE), and only while assessment is
  * editable. Scheduling moves the activity to IN_PROGRESS — this is what
- * drives the "Under Inspection" / "Under Audit" badge in the UI.
+ * drives the "Under Inspection" / "Under Audit" badge in the UI. For
+ * LABORATORY_TESTING specifically, this does NOT flip to IN_PROGRESS —
+ * "Under testing" instead reflects samples actually having been received by
+ * the lab (see confirmSampleReceived), since scheduling here only assigns
+ * the internal Atlas coordinator.
  */
 export async function scheduleEvaluationActivity(
   input: z.infer<typeof scheduleEvaluationActivitySchema>,
@@ -1739,14 +1933,17 @@ export async function scheduleEvaluationActivity(
             scheduledDate,
             assignedUserId: parsed.data.assignedUserId ?? null,
             qualificationNote: qualificationNote || null,
-            status: existing.status === "COMPLETED" ? existing.status : "IN_PROGRESS",
+            status:
+              existing.status === "COMPLETED" || type === "LABORATORY_TESTING"
+                ? existing.status
+                : "IN_PROGRESS",
           },
         })
       : await prisma.requestItemActivity.create({
           data: {
             requestItemId,
             type,
-            status: "IN_PROGRESS",
+            status: type === "LABORATORY_TESTING" ? "SCHEDULED" : "IN_PROGRESS",
             scheduledDate,
             assignedUserId: parsed.data.assignedUserId ?? null,
             qualificationNote: qualificationNote || null,
@@ -1771,6 +1968,374 @@ export async function scheduleEvaluationActivity(
 
     revalidatePath(`/[locale]/admin/requests/${item.request.id}`, "page");
     return { ok: true, data: { activityId: activity.id } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const addRequiredTestSchema = z.object({
+  requestItemId: z.string().min(1),
+  testTypeId: z.string().min(1).optional(),
+  customLabel: z.string().trim().max(200).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+/**
+ * Adds one row to a Lab Testing request item's admin-curated "required
+ * tests" checklist — the structured counterpart to the client's free-text
+ * productAttrs.required_tests — either a catalogue TestType or a one-off
+ * customLabel for a test not in the catalogue.
+ */
+export async function addRequiredTest(
+  input: z.infer<typeof addRequiredTestSchema>,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = addRequiredTestSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { requestItemId, testTypeId, customLabel, notes } = parsed.data;
+    if (!testTypeId && !customLabel) {
+      return { ok: false, error: "VALIDATION" };
+    }
+
+    const item = await prisma.requestItem.findUnique({
+      where: { id: requestItemId },
+      select: {
+        id: true,
+        request: { select: { id: true, state: true, organisationId: true } },
+      },
+    });
+    if (!item) return { ok: false, error: "NOT_FOUND" };
+    if (!ASSESSMENT_EDIT_STATES.includes(item.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    if (testTypeId) {
+      const testType = await prisma.testType.findFirst({
+        where: { id: testTypeId, active: true },
+        select: { id: true },
+      });
+      if (!testType) return { ok: false, error: "NOT_FOUND" };
+    }
+
+    const row = await prisma.requestItemRequiredTest.create({
+      data: {
+        requestItemId,
+        testTypeId: testTypeId ?? null,
+        customLabel: customLabel || null,
+        notes: notes || null,
+        createdByUserId: session.id,
+      },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: item.request.organisationId,
+      action: "request.requiredTest.add",
+      entityType: "RequestItemRequiredTest",
+      entityId: row.id,
+      after: {
+        requestItemId,
+        testTypeId: testTypeId ?? null,
+        customLabel: customLabel ?? null,
+      },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${item.request.id}`, "page");
+    return { ok: true, data: { id: row.id } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const removeRequiredTestSchema = z.object({ id: z.string().min(1) });
+
+export async function removeRequiredTest(
+  input: z.infer<typeof removeRequiredTestSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = removeRequiredTestSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const row = await prisma.requestItemRequiredTest.findUnique({
+      where: { id: parsed.data.id },
+      include: {
+        requestItem: {
+          select: {
+            request: { select: { id: true, state: true, organisationId: true } },
+          },
+        },
+      },
+    });
+    if (!row) return { ok: false, error: "NOT_FOUND" };
+    if (!ASSESSMENT_EDIT_STATES.includes(row.requestItem.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    await prisma.requestItemRequiredTest.delete({ where: { id: row.id } });
+
+    await writeAuditLog({
+      session,
+      organisationId: row.requestItem.request.organisationId,
+      action: "request.requiredTest.remove",
+      entityType: "RequestItemRequiredTest",
+      entityId: row.id,
+      before: { testTypeId: row.testTypeId, customLabel: row.customLabel },
+    });
+
+    revalidatePath(
+      `/[locale]/admin/requests/${row.requestItem.request.id}`,
+      "page",
+    );
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const selectLaboratorySchema = z.object({
+  requestItemId: z.string().min(1),
+  laboratoryId: z.string().min(1),
+});
+
+/**
+ * Selects the accredited laboratory samples will be sent to for this item's
+ * Laboratory Testing activity. This is the first Lab Testing step that
+ * touches RequestItemActivity, so — unlike selectLaboratory's siblings — it
+ * finds-or-creates the activity row (same upsert shape as
+ * scheduleEvaluationActivity) rather than requiring one to already exist.
+ */
+export async function selectLaboratory(
+  input: z.infer<typeof selectLaboratorySchema>,
+): Promise<ActionResult<{ activityId: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = selectLaboratorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { requestItemId, laboratoryId } = parsed.data;
+
+    const item = await prisma.requestItem.findUnique({
+      where: { id: requestItemId },
+      select: {
+        id: true,
+        serviceItem: { select: { requiresLabTesting: true } },
+        request: { select: { id: true, state: true, organisationId: true } },
+      },
+    });
+    if (!item) return { ok: false, error: "NOT_FOUND" };
+    if (!ASSESSMENT_EDIT_STATES.includes(item.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+    if (!item.serviceItem.requiresLabTesting) {
+      return { ok: false, error: "NOT_APPLICABLE" };
+    }
+
+    const lab = await prisma.laboratory.findFirst({
+      where: { id: laboratoryId, active: true },
+      select: { id: true },
+    });
+    if (!lab) return { ok: false, error: "NOT_FOUND" };
+
+    const existing = await prisma.requestItemActivity.findFirst({
+      where: { requestItemId, type: "LABORATORY_TESTING" },
+    });
+
+    const activity = existing
+      ? await prisma.requestItemActivity.update({
+          where: { id: existing.id },
+          data: { laboratoryId },
+        })
+      : await prisma.requestItemActivity.create({
+          data: {
+            requestItemId,
+            type: "LABORATORY_TESTING",
+            status: "SCHEDULED",
+            laboratoryId,
+            createdByUserId: session.id,
+          },
+        });
+
+    await writeAuditLog({
+      session,
+      organisationId: item.request.organisationId,
+      action: "request.laboratory.select",
+      entityType: "RequestItemActivity",
+      entityId: activity.id,
+      after: { laboratoryId },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${item.request.id}`, "page");
+    return { ok: true, data: { activityId: activity.id } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const recordSampleShipmentSchema = z.object({
+  activityId: z.string().min(1),
+  trackingNumber: z.string().trim().max(120).optional(),
+  carrier: z.string().trim().max(120).optional(),
+  sentAt: z.string().trim().min(1),
+});
+
+/** Records the sample shipment to the selected lab. Requires a laboratory to
+ * already be selected on the activity (order: select lab -> send samples). */
+export async function recordSampleShipment(
+  input: z.infer<typeof recordSampleShipmentSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = recordSampleShipmentSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { activityId, trackingNumber, carrier } = parsed.data;
+
+    const activity = await prisma.requestItemActivity.findUnique({
+      where: { id: activityId },
+      include: {
+        requestItem: {
+          select: {
+            request: { select: { id: true, state: true, organisationId: true } },
+          },
+        },
+      },
+    });
+    if (!activity || activity.type !== "LABORATORY_TESTING") {
+      return { ok: false, error: "NOT_FOUND" };
+    }
+    if (!ASSESSMENT_EDIT_STATES.includes(activity.requestItem.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+    if (!activity.laboratoryId) {
+      return { ok: false, error: "LABORATORY_REQUIRED" };
+    }
+
+    const sentAt = new Date(parsed.data.sentAt);
+    if (Number.isNaN(sentAt.getTime())) return { ok: false, error: "VALIDATION" };
+
+    await prisma.requestItemActivity.update({
+      where: { id: activity.id },
+      data: {
+        sampleTrackingNo: trackingNumber || null,
+        sampleCarrier: carrier || null,
+        sampleSentAt: sentAt,
+      },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: activity.requestItem.request.organisationId,
+      action: "request.sample.shipment.record",
+      entityType: "RequestItemActivity",
+      entityId: activity.id,
+      after: {
+        sentAt: sentAt.toISOString(),
+        trackingNumber: trackingNumber ?? null,
+        carrier: carrier ?? null,
+      },
+    });
+
+    revalidatePath(
+      `/[locale]/admin/requests/${activity.requestItem.request.id}`,
+      "page",
+    );
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const confirmSampleReceivedSchema = z.object({
+  activityId: z.string().min(1),
+  receivedAt: z.string().trim().min(1),
+});
+
+/**
+ * Marks samples as received by the lab — this is what flips a
+ * LABORATORY_TESTING activity to IN_PROGRESS ("Under testing"), not the
+ * schedule step. Requires a shipment to already be recorded.
+ */
+export async function confirmSampleReceived(
+  input: z.infer<typeof confirmSampleReceivedSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = confirmSampleReceivedSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { activityId } = parsed.data;
+
+    const activity = await prisma.requestItemActivity.findUnique({
+      where: { id: activityId },
+      include: {
+        requestItem: {
+          select: {
+            request: { select: { id: true, state: true, organisationId: true } },
+          },
+        },
+      },
+    });
+    if (!activity || activity.type !== "LABORATORY_TESTING") {
+      return { ok: false, error: "NOT_FOUND" };
+    }
+    if (!ASSESSMENT_EDIT_STATES.includes(activity.requestItem.request.state)) {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+    if (!activity.sampleSentAt) {
+      return { ok: false, error: "SHIPMENT_NOT_SENT" };
+    }
+
+    const receivedAt = new Date(parsed.data.receivedAt);
+    if (Number.isNaN(receivedAt.getTime())) {
+      return { ok: false, error: "VALIDATION" };
+    }
+
+    await prisma.requestItemActivity.update({
+      where: { id: activity.id },
+      data: {
+        sampleReceivedAt: receivedAt,
+        status: activity.status === "COMPLETED" ? activity.status : "IN_PROGRESS",
+      },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: activity.requestItem.request.organisationId,
+      action: "request.sample.received.confirm",
+      entityType: "RequestItemActivity",
+      entityId: activity.id,
+      after: { receivedAt: receivedAt.toISOString() },
+    });
+
+    revalidatePath(
+      `/[locale]/admin/requests/${activity.requestItem.request.id}`,
+      "page",
+    );
+    return { ok: true, data: undefined };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
@@ -4124,6 +4689,471 @@ export async function createClientAction(
 
     revalidatePath("/[locale]/admin/clients", "page");
     return { ok: true, data: { organisationId, email } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+// ─── Laboratories & Test Catalogue ─────────────────────────────────────────
+// Reference-data CRUD for Lab Testing Coordination (LAB-001): the accredited
+// laboratories samples can be sent to, and the catalogue of test types used
+// to build a request item's structured "required tests" checklist. Mirrors
+// createMainCategory/updateMainCategory/deleteMainCategory's flat-record
+// pattern — neither entity has nested child records like ServiceItem does.
+
+const createLaboratorySchema = z.object({
+  code: z.string().trim().min(1).max(40),
+  nameEn: z.string().trim().min(2).max(200),
+  nameAr: z.string().trim().min(2).max(200),
+  accreditationScopeEn: z.string().trim().max(2000).optional(),
+  accreditationScopeAr: z.string().trim().max(2000).optional(),
+  contactName: z.string().trim().max(200).optional(),
+  contactEmail: z.string().trim().email().max(200).optional(),
+  contactPhone: z.string().trim().max(60).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+/** Creates an accredited-laboratory reference-data row. Code is globally unique. */
+export async function createLaboratory(
+  input: z.infer<typeof createLaboratorySchema>,
+): Promise<ActionResult<{ laboratoryId: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+    const parsed = createLaboratorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const data = parsed.data;
+
+    let laboratoryId: string;
+    try {
+      laboratoryId = await prisma.$transaction(async (tx) => {
+        const lab = await tx.laboratory.create({
+          data: {
+            code: data.code,
+            nameEn: data.nameEn,
+            nameAr: data.nameAr,
+            accreditationScopeEn: data.accreditationScopeEn || null,
+            accreditationScopeAr: data.accreditationScopeAr || null,
+            contactName: data.contactName || null,
+            contactEmail: data.contactEmail || null,
+            contactPhone: data.contactPhone || null,
+            sortOrder: data.sortOrder ?? 0,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorUserId: session.id,
+            actorRole: session.roles[0],
+            action: "laboratories.laboratory.create",
+            entityType: "Laboratory",
+            entityId: lab.id,
+            after: { code: lab.code, nameEn: lab.nameEn },
+          },
+        });
+        return lab.id;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { ok: false, error: "CODE_TAKEN" };
+      }
+      throw error;
+    }
+
+    revalidatePath("/[locale]/admin/laboratories", "page");
+    return { ok: true, data: { laboratoryId } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const updateLaboratorySchema = z.object({
+  id: z.string().min(1),
+  code: z.string().trim().min(1).max(40),
+  nameEn: z.string().trim().min(2).max(200),
+  nameAr: z.string().trim().min(2).max(200),
+  accreditationScopeEn: z.string().trim().max(2000).optional(),
+  accreditationScopeAr: z.string().trim().max(2000).optional(),
+  contactName: z.string().trim().max(200).optional(),
+  contactEmail: z.string().trim().email().max(200).optional(),
+  contactPhone: z.string().trim().max(60).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+/** Renames/updates an accredited-laboratory row. Code is globally unique. */
+export async function updateLaboratory(
+  input: z.infer<typeof updateLaboratorySchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+    const parsed = updateLaboratorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const data = parsed.data;
+
+    const existing = await prisma.laboratory.findUnique({
+      where: { id: data.id },
+      select: { id: true },
+    });
+    if (!existing) return { ok: false, error: "NOT_FOUND" };
+
+    try {
+      await prisma.laboratory.update({
+        where: { id: data.id },
+        data: {
+          code: data.code,
+          nameEn: data.nameEn,
+          nameAr: data.nameAr,
+          accreditationScopeEn: data.accreditationScopeEn || null,
+          accreditationScopeAr: data.accreditationScopeAr || null,
+          contactName: data.contactName || null,
+          contactEmail: data.contactEmail || null,
+          contactPhone: data.contactPhone || null,
+          sortOrder: data.sortOrder ?? 0,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { ok: false, error: "CODE_TAKEN" };
+      }
+      throw error;
+    }
+
+    await writeAuditLog({
+      session,
+      action: "laboratories.laboratory.update",
+      entityType: "Laboratory",
+      entityId: data.id,
+      after: { code: data.code, nameEn: data.nameEn },
+    });
+
+    revalidatePath("/[locale]/admin/laboratories", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const toggleLaboratoryActiveSchema = z.object({
+  id: z.string().min(1),
+  active: z.boolean(),
+});
+
+export async function toggleLaboratoryActive(
+  input: z.infer<typeof toggleLaboratoryActiveSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+    const parsed = toggleLaboratoryActiveSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const lab = await prisma.laboratory.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, active: true },
+    });
+    if (!lab) return { ok: false, error: "NOT_FOUND" };
+
+    await prisma.laboratory.update({
+      where: { id: lab.id },
+      data: { active: parsed.data.active },
+    });
+
+    await writeAuditLog({
+      session,
+      action: "laboratories.laboratory.toggleActive",
+      entityType: "Laboratory",
+      entityId: lab.id,
+      before: { active: lab.active },
+      after: { active: parsed.data.active },
+    });
+
+    revalidatePath("/[locale]/admin/laboratories", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const deleteLaboratorySchema = z.object({ id: z.string().min(1) });
+
+/** Hard-deletes a laboratory. Blocked while any request activity references it. */
+export async function deleteLaboratory(
+  input: z.infer<typeof deleteLaboratorySchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+    const parsed = deleteLaboratorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const lab = await prisma.laboratory.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+    });
+    if (!lab) return { ok: false, error: "NOT_FOUND" };
+
+    const usageCount = await prisma.requestItemActivity.count({
+      where: { laboratoryId: lab.id },
+    });
+    if (usageCount > 0) return { ok: false, error: "HAS_REQUESTS" };
+
+    await prisma.laboratory.delete({ where: { id: lab.id } });
+
+    await writeAuditLog({
+      session,
+      action: "laboratories.laboratory.delete",
+      entityType: "Laboratory",
+      entityId: lab.id,
+      before: { code: lab.code, nameEn: lab.nameEn, nameAr: lab.nameAr },
+    });
+
+    revalidatePath("/[locale]/admin/laboratories", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const createTestTypeSchema = z.object({
+  code: z.string().trim().min(1).max(40),
+  nameEn: z.string().trim().min(2).max(200),
+  nameAr: z.string().trim().min(2).max(200),
+  descEn: z.string().trim().max(2000).optional(),
+  descAr: z.string().trim().max(2000).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+/** Creates a lab test-type catalogue row. Code is globally unique. */
+export async function createTestType(
+  input: z.infer<typeof createTestTypeSchema>,
+): Promise<ActionResult<{ testTypeId: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+    const parsed = createTestTypeSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const data = parsed.data;
+
+    let testTypeId: string;
+    try {
+      testTypeId = await prisma.$transaction(async (tx) => {
+        const testType = await tx.testType.create({
+          data: {
+            code: data.code,
+            nameEn: data.nameEn,
+            nameAr: data.nameAr,
+            descEn: data.descEn || null,
+            descAr: data.descAr || null,
+            sortOrder: data.sortOrder ?? 0,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorUserId: session.id,
+            actorRole: session.roles[0],
+            action: "laboratories.testType.create",
+            entityType: "TestType",
+            entityId: testType.id,
+            after: { code: testType.code, nameEn: testType.nameEn },
+          },
+        });
+        return testType.id;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { ok: false, error: "CODE_TAKEN" };
+      }
+      throw error;
+    }
+
+    revalidatePath("/[locale]/admin/laboratories", "page");
+    return { ok: true, data: { testTypeId } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const updateTestTypeSchema = z.object({
+  id: z.string().min(1),
+  code: z.string().trim().min(1).max(40),
+  nameEn: z.string().trim().min(2).max(200),
+  nameAr: z.string().trim().min(2).max(200),
+  descEn: z.string().trim().max(2000).optional(),
+  descAr: z.string().trim().max(2000).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+/** Renames/updates a lab test-type catalogue row. Code is globally unique. */
+export async function updateTestType(
+  input: z.infer<typeof updateTestTypeSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+    const parsed = updateTestTypeSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const data = parsed.data;
+
+    const existing = await prisma.testType.findUnique({
+      where: { id: data.id },
+      select: { id: true },
+    });
+    if (!existing) return { ok: false, error: "NOT_FOUND" };
+
+    try {
+      await prisma.testType.update({
+        where: { id: data.id },
+        data: {
+          code: data.code,
+          nameEn: data.nameEn,
+          nameAr: data.nameAr,
+          descEn: data.descEn || null,
+          descAr: data.descAr || null,
+          sortOrder: data.sortOrder ?? 0,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { ok: false, error: "CODE_TAKEN" };
+      }
+      throw error;
+    }
+
+    await writeAuditLog({
+      session,
+      action: "laboratories.testType.update",
+      entityType: "TestType",
+      entityId: data.id,
+      after: { code: data.code, nameEn: data.nameEn },
+    });
+
+    revalidatePath("/[locale]/admin/laboratories", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const toggleTestTypeActiveSchema = z.object({
+  id: z.string().min(1),
+  active: z.boolean(),
+});
+
+export async function toggleTestTypeActive(
+  input: z.infer<typeof toggleTestTypeActiveSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+    const parsed = toggleTestTypeActiveSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const testType = await prisma.testType.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, active: true },
+    });
+    if (!testType) return { ok: false, error: "NOT_FOUND" };
+
+    await prisma.testType.update({
+      where: { id: testType.id },
+      data: { active: parsed.data.active },
+    });
+
+    await writeAuditLog({
+      session,
+      action: "laboratories.testType.toggleActive",
+      entityType: "TestType",
+      entityId: testType.id,
+      before: { active: testType.active },
+      after: { active: parsed.data.active },
+    });
+
+    revalidatePath("/[locale]/admin/laboratories", "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const deleteTestTypeSchema = z.object({ id: z.string().min(1) });
+
+/** Hard-deletes a test type. Blocked while any required-tests checklist row references it. */
+export async function deleteTestType(
+  input: z.infer<typeof deleteTestTypeSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+    const parsed = deleteTestTypeSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const testType = await prisma.testType.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, code: true, nameEn: true, nameAr: true },
+    });
+    if (!testType) return { ok: false, error: "NOT_FOUND" };
+
+    const usageCount = await prisma.requestItemRequiredTest.count({
+      where: { testTypeId: testType.id },
+    });
+    if (usageCount > 0) return { ok: false, error: "HAS_REQUESTS" };
+
+    await prisma.testType.delete({ where: { id: testType.id } });
+
+    await writeAuditLog({
+      session,
+      action: "laboratories.testType.delete",
+      entityType: "TestType",
+      entityId: testType.id,
+      before: { code: testType.code, nameEn: testType.nameEn, nameAr: testType.nameAr },
+    });
+
+    revalidatePath("/[locale]/admin/laboratories", "page");
+    return { ok: true, data: undefined };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {

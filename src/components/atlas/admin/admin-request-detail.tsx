@@ -35,13 +35,17 @@ import {
   addAtlasClientComment,
   assignRequest,
   completeApplicationReview,
+  completeLabTesting,
   decideReopenRequest,
   markAdminRequestCommentsRead,
   reopenRequestByAdmin,
   transitionAdminRequest,
 } from "@/server/admin/actions";
 import { hasCheckItems } from "@/lib/assessment";
-import type { AdminRequestDetail, AssignableStaffUser } from "@/server/admin/queries";
+import type {
+  AdminRequestDetail,
+  AssignableStaffUser,
+} from "@/server/admin/queries";
 import type { FaultAttribution, RequestState, ReturnReasonCode, Role } from "@prisma/client";
 import { format } from "date-fns";
 import { arSA, enGB } from "date-fns/locale";
@@ -159,9 +163,21 @@ function transitionIcon(target: RequestState): LucideIcon {
   }
 }
 
-type Props = { data: AdminRequestDetail; assignableStaff: AssignableStaffUser[] };
+type PickerOption = { id: string; nameEn: string; nameAr: string };
 
-export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
+type Props = {
+  data: AdminRequestDetail;
+  assignableStaff: AssignableStaffUser[];
+  laboratories: PickerOption[];
+  testTypes: PickerOption[];
+};
+
+export function AdminRequestDetailPanel({
+  data,
+  assignableStaff,
+  laboratories,
+  testTypes,
+}: Props) {
   const t = useTranslations("adminOps.requestDetail");
   const tStates = useTranslations("states");
   const tReasons = useTranslations("returnReasons");
@@ -225,7 +241,10 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const [coiDialogOpen, setCoiDialogOpen] = useState(false);
   const [coiChecked, setCoiChecked] = useState(false);
   const [coiNext, setCoiNext] = useState<
-    { kind: "transition"; toState: RequestState } | { kind: "refuse" } | null
+    | { kind: "transition"; toState: RequestState }
+    | { kind: "refuse" }
+    | { kind: "completeLabTesting" }
+    | null
   >(null);
 
   function openCoiGate(next: typeof coiNext) {
@@ -239,6 +258,8 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
     setCoiDialogOpen(false);
     if (coiNext.kind === "transition") {
       runTransition(coiNext.toState, { coiAcknowledged: true });
+    } else if (coiNext.kind === "completeLabTesting") {
+      handleCompleteLabTesting();
     } else {
       setRefuseDialogOpen(true);
     }
@@ -288,6 +309,24 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   const isScocOnly =
     data.items.length > 0 &&
     data.items.every((item) => item.serviceItem.code === "SAB-002");
+
+  // Lab Testing Coordination has no Atlas-authored technical content to
+  // review or certify — see completeLabTesting / isLabTestingOnlyRequest —
+  // so an all-LAB-001 request completes via a dedicated one-click action
+  // instead of the generic Evaluation Report / Certificate / Technical
+  // Review machinery, which never applies to it.
+  const isLabTestingOnly =
+    data.items.length > 0 &&
+    data.items.every((item) => item.serviceItem.code === "LAB-001");
+  const labTestingAllReported =
+    isLabTestingOnly &&
+    data.items.every((item) =>
+      item.activities.some(
+        (a) => a.type === "LABORATORY_TESTING" && a.status === "COMPLETED",
+      ),
+    );
+  const canCompleteLabTesting =
+    isLabTestingOnly && data.state === "ASSESSMENT_RUNNING";
 
   const canReturn = data.allowedTransitions.includes("RETURNED_TO_CLIENT");
   const canCancel = data.allowedTransitions.includes("CANCELLED");
@@ -388,6 +427,21 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
   function handleCompleteApplicationReview() {
     startTransition(async () => {
       const result = await completeApplicationReview({ requestId: data.id });
+      if (!result.ok) {
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("success"));
+      router.refresh();
+    });
+  }
+
+  function handleCompleteLabTesting() {
+    startTransition(async () => {
+      const result = await completeLabTesting({
+        requestId: data.id,
+        coiAcknowledged: true,
+      });
       if (!result.ok) {
         toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
         return;
@@ -719,6 +773,29 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
                 )}
                 {t("completeApplicationReview")}
               </Button>
+            </div>
+          ) : null}
+
+          {canCompleteLabTesting ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={pending || !labTestingAllReported}
+                onClick={() => openCoiGate({ kind: "completeLabTesting" })}
+              >
+                {pending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="size-4" />
+                )}
+                {t("completeTesting")}
+              </Button>
+              {!labTestingAllReported ? (
+                <span className="text-xs text-ink-500">
+                  {t("completeTestingHint")}
+                </span>
+              ) : null}
             </div>
           ) : null}
 
@@ -1281,6 +1358,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
       ) : null}
 
       {!isScocOnly &&
+      !isLabTestingOnly &&
       ["TECHNICAL_REVIEW", "DECISION", "REPORT_ISSUED", "CLOSED"].includes(
         data.state,
       ) && hasCheckItems(data.technicalReviewChecklist.checkSets) ? (
@@ -1309,7 +1387,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
             ))
         : null}
 
-      {ASSESSMENT_SHOW_STATES.includes(data.state)
+      {!isLabTestingOnly && ASSESSMENT_SHOW_STATES.includes(data.state)
         ? data.items.map((item) => (
             <EvaluationReportPanel
               key={item.id}
@@ -1333,6 +1411,9 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
               }
               serviceItem={item.serviceItem}
               activities={item.activities}
+              requiredTests={item.requiredTests}
+              laboratories={laboratories}
+              testTypes={testTypes}
               assignableStaff={assignableStaff}
               editable={ASSESSMENT_EDIT_STATES.includes(data.state)}
               locale={locale}
@@ -1340,7 +1421,7 @@ export function AdminRequestDetailPanel({ data, assignableStaff }: Props) {
           ))
         : null}
 
-      {ASSESSMENT_SHOW_STATES.includes(data.state)
+      {!isLabTestingOnly && ASSESSMENT_SHOW_STATES.includes(data.state)
         ? data.items.map((item) => (
             <ExternalDeliverablePanel
               key={item.id}

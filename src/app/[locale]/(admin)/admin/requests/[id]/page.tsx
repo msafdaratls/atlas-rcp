@@ -5,7 +5,12 @@ import { StateBadge } from "@/components/atlas/state-badge";
 import { requireSession } from "@/lib/auth/session";
 import { isLocale, type Locale } from "@/lib/i18n/config";
 import { requirePagePermission } from "@/lib/page-auth";
-import { getAdminRequestDetail, listAssignableStaff } from "@/server/admin/queries";
+import {
+  getAdminRequestDetail,
+  listActiveLaboratories,
+  listActiveTestTypes,
+  listAssignableStaff,
+} from "@/server/admin/queries";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 
@@ -24,9 +29,11 @@ export default async function AdminRequestDetailPage({ params }: Props) {
 
   const t = await getTranslations("adminOps.requestDetail");
   const tNav = await getTranslations("nav.admin");
-  const [data, staff] = await Promise.all([
+  const [data, staff, laboratories, testTypes] = await Promise.all([
     getAdminRequestDetail(id),
     listAssignableStaff(),
+    listActiveLaboratories(),
+    listActiveTestTypes(),
   ]);
   if (!data) notFound();
 
@@ -48,7 +55,12 @@ export default async function AdminRequestDetailPage({ params }: Props) {
           </div>
         }
       />
-      <AdminRequestDetailPanel data={data} assignableStaff={staff ?? []} />
+      <AdminRequestDetailPanel
+        data={data}
+        assignableStaff={staff ?? []}
+        laboratories={laboratories ?? []}
+        testTypes={testTypes ?? []}
+      />
     </div>
   );
 }

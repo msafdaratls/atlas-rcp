@@ -255,6 +255,7 @@ model User {
   externalDeliverablesMade ExternalDeliverable[]
   createdEngagements       Engagement[]
   defaultEvaluatorFor      ServiceItem[]            @relation("ServiceItemDefaultEvaluator")
+  requiredTestsAdded       RequestItemRequiredTest[]
 
   @@index([organisationId])
   @@index([status])
@@ -510,6 +511,8 @@ model RequestItem {
   /// on the LabelAssessment side with onDelete: SetNull — this back-relation
   /// adds no column here, so draft-cart item deletion is unaffected.
   labelAssessments     LabelAssessment[]
+  /// Admin-curated Lab Testing "required tests" checklist (LAB-001 only).
+  requiredTests        RequestItemRequiredTest[]
 
   @@index([requestId])
   @@index([platformCredentialId])
@@ -562,7 +565,9 @@ enum EvaluationActivityStatus {
 /// per-service evaluation activities scheduled during ASSESSMENT_RUNNING.
 /// "Under Inspection" / "Under Audit" sub-status badges are derived from
 /// `status === IN_PROGRESS` for the matching type; there is no dedicated
-/// RequestState for them.
+/// RequestState for them. For LABORATORY_TESTING, IN_PROGRESS ("Under
+/// testing") is set by confirmSampleReceived rather than on schedule-save —
+/// see scheduleEvaluationActivity's type check.
 model RequestItemActivity {
   id                String                   @id @default(cuid())
   requestItemId     String
@@ -572,6 +577,13 @@ model RequestItemActivity {
   assignedUserId    String?
   qualificationNote String?
   notes             String?
+  /// LABORATORY_TESTING only: the accredited lab samples were sent to.
+  laboratoryId      String?
+  /// LABORATORY_TESTING only: sample shipment tracking.
+  sampleTrackingNo  String?
+  sampleCarrier     String?
+  sampleSentAt      DateTime?
+  sampleReceivedAt  DateTime?
   createdByUserId   String
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
@@ -579,9 +591,75 @@ model RequestItemActivity {
   requestItem  RequestItem       @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
   assignedUser User?             @relation("ActivityAssignedTo", fields: [assignedUserId], references: [id])
   createdBy    User              @relation("ActivityCreatedBy", fields: [createdByUserId], references: [id])
+  laboratory   Laboratory?       @relation(fields: [laboratoryId], references: [id])
   documents    RequestDocument[]
 
   @@index([requestItemId, type])
+  @@index([laboratoryId])
+}
+
+/// Accredited external laboratory a Lab Testing (LAB-001) sample can be sent
+/// to. Managed via its own admin CRUD screen (laboratories:manage).
+model Laboratory {
+  id                   String   @id @default(cuid())
+  code                 String   @unique
+  nameEn               String
+  nameAr               String
+  accreditationScopeEn String?
+  accreditationScopeAr String?
+  contactName          String?
+  contactEmail         String?
+  contactPhone         String?
+  active               Boolean  @default(true)
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  activities RequestItemActivity[]
+
+  @@index([active, sortOrder])
+}
+
+/// Reference catalogue of lab test types, used to build a request item's
+/// structured "required tests" checklist (RequestItemRequiredTest). Managed
+/// via its own admin CRUD screen (laboratories:manage).
+model TestType {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  nameEn    String
+  nameAr    String
+  descEn    String?
+  descAr    String?
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requiredTests RequestItemRequiredTest[]
+
+  @@index([active, sortOrder])
+}
+
+/// Admin-curated "required tests" checklist for a Lab Testing request item —
+/// the structured counterpart to the client's free-text
+/// productAttrs.required_tests, reviewed/identified during Application
+/// Review before a laboratory is selected.
+model RequestItemRequiredTest {
+  id              String   @id @default(cuid())
+  requestItemId   String
+  testTypeId      String?
+  /// Set when the admin needs a test not in the TestType catalogue.
+  customLabel     String?
+  notes           String?
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  requestItem RequestItem @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
+  testType    TestType?   @relation(fields: [testTypeId], references: [id])
+  createdBy   User        @relation(fields: [createdByUserId], references: [id])
+
+  @@index([requestItemId])
+  @@index([testTypeId])
 }
 
 enum ExternalDeliverableStatus {

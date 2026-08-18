@@ -31,6 +31,9 @@ const CLIENTS_CREATE_ROLES: Role[] = ["INTAKE_OFFICER", "SYSTEM_ADMIN"];
 
 const CATALOGUE_MANAGE_ROLES: Role[] = ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"];
 
+/** Accredited-lab / test-catalogue reference data — same owners as the service catalogue. */
+const LABORATORIES_MANAGE_ROLES: Role[] = ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"];
+
 const COUPONS_MANAGE_ROLES: Role[] = [
   "CATALOGUE_MANAGER",
   "FINANCE",
@@ -66,6 +69,7 @@ export function requirePermission(
     | "clients:finance"
     | "analytics:finance"
     | "catalogue:manage"
+    | "laboratories:manage"
     | "coupons:manage"
     | "quality:read"
     | "audit:read"
@@ -157,6 +161,11 @@ export function requirePermission(
       return;
     case "catalogue:manage":
       if (!isAtlas || !hasAnyRole(session, CATALOGUE_MANAGE_ROLES)) {
+        throw new Error("FORBIDDEN");
+      }
+      return;
+    case "laboratories:manage":
+      if (!isAtlas || !hasAnyRole(session, LABORATORIES_MANAGE_ROLES)) {
         throw new Error("FORBIDDEN");
       }
       return;

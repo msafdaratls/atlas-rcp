@@ -9,6 +9,7 @@ import {
   FilePlus2,
   FileSearch,
   FileText,
+  FlaskConical,
   FolderKanban,
   Headphones,
   LayoutDashboard,
@@ -108,6 +109,12 @@ const ADMIN_NAV: NavItem[] = [
     key: "catalogue",
     href: "/catalogue",
     icon: Package,
+    roles: ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"],
+  },
+  {
+    key: "laboratories",
+    href: "/laboratories",
+    icon: FlaskConical,
     roles: ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"],
   },
   {

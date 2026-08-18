@@ -101,6 +101,12 @@ async function main() {
   await prisma.invoiceLine.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.request.deleteMany();
+  // Laboratory/TestType are standalone reference data (like ServiceItem) —
+  // RequestItemActivity.laboratoryId is onDelete:SetNull, and the Request
+  // cascade above already removed any RequestItemRequiredTest rows, so these
+  // are safe to wipe now with no dangling references.
+  await prisma.laboratory.deleteMany();
+  await prisma.testType.deleteMany();
   await prisma.engagement.deleteMany();
   await prisma.platformCredential.deleteMany();
   await prisma.coupon.deleteMany();
@@ -1395,6 +1401,59 @@ async function main() {
     // reports/complete) must be available on every request for it.
     requiresLabTesting: true,
   });
+
+  // ── Accredited laboratories (LAB-001) ────────────────────────────────────
+  await Promise.all(
+    [
+      {
+        code: "LAB-SASO-01",
+        nameEn: "SASO National Testing Laboratory",
+        nameAr: "المختبر الوطني للاختبارات - سعودي",
+        accreditationScopeEn: "Chemical & microbiological testing — food, cosmetics, consumer products.",
+        accreditationScopeAr: "اختبارات كيميائية وميكروبيولوجية - أغذية، مستحضرات تجميل، منتجات استهلاكية.",
+        contactName: "Eng. Nawaf Al-Zahrani",
+        contactEmail: "labs@saso-lab.example.sa",
+        contactPhone: "+966114440001",
+        sortOrder: 1,
+      },
+      {
+        code: "LAB-INTERTEK-01",
+        nameEn: "Intertek Saudi Arabia",
+        nameAr: "إنترتك السعودية",
+        accreditationScopeEn: "GSO/SASO conformity testing, electricals, textiles, toys.",
+        accreditationScopeAr: "اختبارات مطابقة GSO/SASO، الأجهزة الكهربائية، المنسوجات، الألعاب.",
+        contactName: "Lina Haddad",
+        contactEmail: "riyadh.lab@intertek.example.com",
+        contactPhone: "+966114440002",
+        sortOrder: 2,
+      },
+      {
+        code: "LAB-SGS-01",
+        nameEn: "SGS Gulf Testing Center",
+        nameAr: "مركز SGS الخليجي للاختبارات",
+        accreditationScopeEn: "Heavy metals, packaging, cosmetics microbiology.",
+        accreditationScopeAr: "المعادن الثقيلة، التغليف، ميكروبيولوجيا مستحضرات التجميل.",
+        contactName: "Omar Fakhoury",
+        contactEmail: "gulf.lab@sgs.example.com",
+        contactPhone: "+966114440003",
+        sortOrder: 3,
+      },
+    ].map((lab) => prisma.laboratory.create({ data: lab })),
+  );
+
+  // ── Test catalogue (LAB-001 required-tests checklist) ────────────────────
+  await Promise.all(
+    [
+      { code: "TEST-MICRO-LIMITS", nameEn: "Microbial limits", nameAr: "الحدود الميكروبية", sortOrder: 1 },
+      { code: "TEST-HEAVY-METALS", nameEn: "Heavy metals screen", nameAr: "فحص المعادن الثقيلة", sortOrder: 2 },
+      { code: "TEST-GSO-1943", nameEn: "GSO 1943 compliance", nameAr: "مطابقة المواصفة الخليجية GSO 1943", sortOrder: 3 },
+      { code: "TEST-PH-STABILITY", nameEn: "pH & stability", nameAr: "درجة الحموضة والثبات", sortOrder: 4 },
+      { code: "TEST-PRESERVATIVE", nameEn: "Preservative efficacy", nameAr: "فعالية المواد الحافظة", sortOrder: 5 },
+      { code: "TEST-FLAMMABILITY", nameEn: "Flammability", nameAr: "قابلية الاشتعال", sortOrder: 6 },
+      { code: "TEST-ELECTRICAL-SAFETY", nameEn: "Electrical safety", nameAr: "السلامة الكهربائية", sortOrder: 7 },
+      { code: "TEST-MECHANICAL-SAFETY", nameEn: "Mechanical/physical safety", nameAr: "السلامة الميكانيكية/الفيزيائية", sortOrder: 8 },
+    ].map((t) => prisma.testType.create({ data: t })),
+  );
 
   // ── Coupons ──────────────────────────────────────────────────────────────
   const now = new Date();

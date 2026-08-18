@@ -84,6 +84,21 @@ function isScocOnlyRequest(serviceCodes: string[]): boolean {
   return serviceCodes.length > 0 && serviceCodes.every((c) => c === SCOC_SERVICE_CODE);
 }
 
+/**
+ * Lab Testing Coordination has no Atlas-authored technical content to review
+ * or certify — the deliverable is the external lab's own test report — so an
+ * all-LAB-001 request skips TECHNICAL_REVIEW *and* DECISION entirely: the
+ * Evaluator's one-click "Complete Testing" (completeLabTesting) hands
+ * ASSESSMENT_RUNNING straight to REPORT_ISSUED (then CLOSED in the same
+ * transaction). A request bundling LAB-001 with any other service still goes
+ * through the normal REQUEST_TRANSITIONS graph below.
+ */
+export const LAB_TESTING_SERVICE_CODE = "LAB-001";
+
+export function isLabTestingOnlyRequest(serviceCodes: string[]): boolean {
+  return serviceCodes.length > 0 && serviceCodes.every((c) => c === LAB_TESTING_SERVICE_CODE);
+}
+
 /** Safe default when a hold has no recorded prior state (legacy rows). */
 const ON_HOLD_RESUME_FALLBACK: RequestState = "UNDER_INTAKE_REVIEW";
 
@@ -130,6 +145,15 @@ export function allowedTransitionsFor(request: {
     isScocOnlyRequest(request.serviceCodes ?? [])
   ) {
     return ["DECISION", "ON_HOLD", "CANCELLED"];
+  }
+  if (
+    request.state === "ASSESSMENT_RUNNING" &&
+    isLabTestingOnlyRequest(request.serviceCodes ?? [])
+  ) {
+    // No forward entry here — completion only happens through the dedicated
+    // completeLabTesting composite action (which enforces LAB_REPORT_REQUIRED
+    // and cascades straight to CLOSED), never the generic transition button.
+    return ["ON_HOLD", "CANCELLED"];
   }
   return REQUEST_TRANSITIONS[request.state] ?? [];
 }
@@ -488,12 +512,29 @@ export type AdminRequestDetailItem = {
     assignedUserNameAr: string | null;
     qualificationNote: string | null;
     notes: string | null;
+    /** LABORATORY_TESTING only. */
+    laboratoryId: string | null;
+    laboratoryNameEn: string | null;
+    laboratoryNameAr: string | null;
+    sampleTrackingNo: string | null;
+    sampleCarrier: string | null;
+    sampleSentAt: string | null;
+    sampleReceivedAt: string | null;
     reports: Array<{
       id: string;
       fileName: string;
       storageKey: string;
       uploadedAt: string;
     }>;
+  }>;
+  /** Admin-curated "required tests" checklist (LAB-001 only). */
+  requiredTests: Array<{
+    id: string;
+    testTypeId: string | null;
+    testTypeNameEn: string | null;
+    testTypeNameAr: string | null;
+    customLabel: string | null;
+    notes: string | null;
   }>;
 };
 
@@ -656,11 +697,18 @@ export async function getAdminRequestDetail(
             activities: {
               include: {
                 assignedUser: { select: { fullNameEn: true, fullNameAr: true } },
+                laboratory: { select: { id: true, nameEn: true, nameAr: true } },
                 documents: {
                   where: { currentVersionId: { not: null } },
                   include: { currentVersion: true },
                   orderBy: { createdAt: "asc" },
                 },
+              },
+              orderBy: { createdAt: "asc" },
+            },
+            requiredTests: {
+              include: {
+                testType: { select: { nameEn: true, nameAr: true } },
               },
               orderBy: { createdAt: "asc" },
             },
@@ -824,6 +872,13 @@ export async function getAdminRequestDetail(
           assignedUserNameAr: a.assignedUser?.fullNameAr ?? null,
           qualificationNote: a.qualificationNote,
           notes: a.notes,
+          laboratoryId: a.laboratoryId,
+          laboratoryNameEn: a.laboratory?.nameEn ?? null,
+          laboratoryNameAr: a.laboratory?.nameAr ?? null,
+          sampleTrackingNo: a.sampleTrackingNo,
+          sampleCarrier: a.sampleCarrier,
+          sampleSentAt: a.sampleSentAt?.toISOString() ?? null,
+          sampleReceivedAt: a.sampleReceivedAt?.toISOString() ?? null,
           reports: a.documents
             .filter((d) => d.currentVersion)
             .map((d) => ({
@@ -832,6 +887,14 @@ export async function getAdminRequestDetail(
               storageKey: d.currentVersion!.storageKey,
               uploadedAt: d.currentVersion!.uploadedAt.toISOString(),
             })),
+        })),
+        requiredTests: item.requiredTests.map((rt) => ({
+          id: rt.id,
+          testTypeId: rt.testTypeId,
+          testTypeNameEn: rt.testType?.nameEn ?? null,
+          testTypeNameAr: rt.testType?.nameAr ?? null,
+          customLabel: rt.customLabel,
+          notes: rt.notes,
         })),
       })),
       technicalReviewChecklist: {
@@ -1246,6 +1309,118 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
         templateFileName: d.templateFileName,
       })),
     }));
+  } catch {
+    return null;
+  }
+}
+
+export type AdminLaboratoryItem = {
+  id: string;
+  code: string;
+  nameEn: string;
+  nameAr: string;
+  accreditationScopeEn: string;
+  accreditationScopeAr: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  active: boolean;
+  sortOrder: number;
+};
+
+export async function listLaboratories(): Promise<AdminLaboratoryItem[] | null> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+
+    const labs = await prisma.laboratory.findMany({
+      orderBy: [{ sortOrder: "asc" }, { nameEn: "asc" }],
+    });
+
+    return labs.map((lab) => ({
+      id: lab.id,
+      code: lab.code,
+      nameEn: lab.nameEn,
+      nameAr: lab.nameAr,
+      accreditationScopeEn: lab.accreditationScopeEn ?? "",
+      accreditationScopeAr: lab.accreditationScopeAr ?? "",
+      contactName: lab.contactName ?? "",
+      contactEmail: lab.contactEmail ?? "",
+      contactPhone: lab.contactPhone ?? "",
+      active: lab.active,
+      sortOrder: lab.sortOrder,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+/** Active laboratories only, for the request-detail lab picker. */
+export async function listActiveLaboratories(): Promise<
+  Array<{ id: string; nameEn: string; nameAr: string }> | null
+> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+
+    return await prisma.laboratory.findMany({
+      where: { active: true },
+      select: { id: true, nameEn: true, nameAr: true },
+      orderBy: [{ sortOrder: "asc" }, { nameEn: "asc" }],
+    });
+  } catch {
+    return null;
+  }
+}
+
+export type AdminTestTypeItem = {
+  id: string;
+  code: string;
+  nameEn: string;
+  nameAr: string;
+  descEn: string;
+  descAr: string;
+  active: boolean;
+  sortOrder: number;
+};
+
+export async function listTestTypes(): Promise<AdminTestTypeItem[] | null> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "laboratories:manage");
+
+    const testTypes = await prisma.testType.findMany({
+      orderBy: [{ sortOrder: "asc" }, { nameEn: "asc" }],
+    });
+
+    return testTypes.map((t) => ({
+      id: t.id,
+      code: t.code,
+      nameEn: t.nameEn,
+      nameAr: t.nameAr,
+      descEn: t.descEn ?? "",
+      descAr: t.descAr ?? "",
+      active: t.active,
+      sortOrder: t.sortOrder,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+/** Active test types only, for the request-detail required-tests picker. */
+export async function listActiveTestTypes(): Promise<
+  Array<{ id: string; nameEn: string; nameAr: string }> | null
+> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+
+    return await prisma.testType.findMany({
+      where: { active: true },
+      select: { id: true, nameEn: true, nameAr: true },
+      orderBy: [{ sortOrder: "asc" }, { nameEn: "asc" }],
+    });
   } catch {
     return null;
   }
