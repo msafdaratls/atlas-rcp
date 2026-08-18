@@ -1365,15 +1365,23 @@ async function main() {
       },
     ],
     // Reconciled per migration 20260806053000: product_name dropped.
+    // Reconciled per migration 20260818110000: required_standard dropped,
+    // purpose_of_testing added as required.
     productAttrSchema: {
       type: "object",
-      required: [],
+      required: ["purpose_of_testing"],
       properties: {
-        required_standard: { type: "string", titleEn: "Required standard (if known)", titleAr: "المواصفة المطلوبة (إن وجدت)" },
         required_tests: {
           type: "string",
+          sortOrder: 1,
           titleEn: "Required tests (if specific tests are needed)",
           titleAr: "الاختبارات المطلوبة (إن وجدت اختبارات محددة)",
+        },
+        purpose_of_testing: {
+          type: "string",
+          sortOrder: 2,
+          titleEn: "Purpose of testing",
+          titleAr: "الغرض من الاختبار",
         },
       },
     },
@@ -2567,7 +2575,10 @@ async function main() {
         productNameEn: "Charcoal Face Wash 150 ml",
         productNameAr: "غسول وجه بالفحم 150 مل",
         brand: "Gulf Glow",
-        productAttrs: { required_standard: "GSO 1943", required_tests: "Microbial limits, heavy metals screen" },
+        productAttrs: {
+          required_tests: "Microbial limits, heavy metals screen",
+          purpose_of_testing: "Confirm compliance with GSO 1943 before SABER submission",
+        },
       },
     ],
     submissionNo: 1,
