@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,11 +23,21 @@ type Deliverable = NonNullable<AdminRequestDetailItem["externalDeliverable"]>;
 type Props = {
   requestItemId: string;
   title?: string;
-  serviceItem: { deliverableType: "INTERNAL_REPORT" | "EXTERNAL_CERTIFICATE" };
+  serviceItem: {
+    code: string;
+    deliverableType: "INTERNAL_REPORT" | "EXTERNAL_CERTIFICATE";
+  };
   deliverable: Deliverable | null;
   editable: boolean;
   locale: string;
 };
+
+// SCOC (SABER Shipment Certificate of Conformity) already collects the SABER
+// request number and PCOC-certificate/model entries on the product-details
+// form, so the generic ref-type/notes submission fields are redundant here —
+// swap them for a pre-submission checklist instead.
+const SCOC_SERVICE_CODE = "SAB-002";
+const SCOC_EXTERNAL_REF_TYPE = "SABER_SCOC_CHECKLIST";
 
 const STATUS_TONE: Record<Deliverable["status"], string> = {
   PENDING_SUBMISSION: "bg-surface-alt text-ink-600 border-line",
@@ -48,15 +59,18 @@ export function ExternalDeliverablePanel({
 }: Props) {
   const t = useTranslations("adminOps.requestDetail.externalDeliverable");
 
+  const isScoc = serviceItem.code === SCOC_SERVICE_CODE;
   const status = deliverable?.status ?? "PENDING_SUBMISSION";
 
   const [externalRefType, setExternalRefType] = useState(
-    deliverable?.externalRefType ?? "",
+    deliverable?.externalRefType ?? (isScoc ? SCOC_EXTERNAL_REF_TYPE : ""),
   );
   const [externalRefValue, setExternalRefValue] = useState(
     deliverable?.externalRefValue ?? "",
   );
   const [notes, setNotes] = useState(deliverable?.notes ?? "");
+  const [modelsChecked, setModelsChecked] = useState(false);
+  const [priceChecked, setPriceChecked] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [submitPending, startSubmitTransition] = useTransition();
   const [uploadPending, startUploadTransition] = useTransition();
@@ -67,8 +81,14 @@ export function ExternalDeliverablePanel({
     return null;
   }
 
+  const scocChecklistComplete = modelsChecked && priceChecked;
+
   function doSubmit() {
     if (!externalRefType.trim()) {
+      toast.error(t("errors.VALIDATION"));
+      return;
+    }
+    if (isScoc && !scocChecklistComplete) {
       toast.error(t("errors.VALIDATION"));
       return;
     }
@@ -76,7 +96,11 @@ export function ExternalDeliverablePanel({
       const result = await submitExternalDeliverable({
         requestItemId,
         externalRefType: externalRefType.trim(),
-        notes: notes.trim() || undefined,
+        notes: isScoc
+          ? [t("scocChecklistItem1"), t("scocChecklistItem2")]
+              .map((item) => `✓ ${item}`)
+              .join("\n")
+          : notes.trim() || undefined,
       });
       if (!result.ok) {
         toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
@@ -154,7 +178,58 @@ export function ExternalDeliverablePanel({
         </span>
       </div>
 
-      {editable && status !== "ISSUED" ? (
+      {editable && status !== "ISSUED" && isScoc && !deliverable ? (
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">{t("scocChecklistTitle")}</Label>
+            <p className="text-xs text-ink-500">{t("scocChecklistHint")}</p>
+          </div>
+          <ul className="space-y-2 rounded-md border border-line p-3">
+            <li className="flex items-start gap-2">
+              <Checkbox
+                id={`${requestItemId}-scoc-check-1`}
+                checked={modelsChecked}
+                onCheckedChange={(v) => setModelsChecked(v === true)}
+              />
+              <Label
+                htmlFor={`${requestItemId}-scoc-check-1`}
+                className="text-sm font-normal leading-snug"
+              >
+                {t("scocChecklistItem1")}
+              </Label>
+            </li>
+            <li className="flex items-start gap-2">
+              <Checkbox
+                id={`${requestItemId}-scoc-check-2`}
+                checked={priceChecked}
+                onCheckedChange={(v) => setPriceChecked(v === true)}
+              />
+              <Label
+                htmlFor={`${requestItemId}-scoc-check-2`}
+                className="text-sm font-normal leading-snug"
+              >
+                {t("scocChecklistItem2")}
+              </Label>
+            </li>
+          </ul>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={submitPending || !scocChecklistComplete}
+            onClick={doSubmit}
+          >
+            {submitPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
+            {t("submit")}
+          </Button>
+        </div>
+      ) : null}
+
+      {editable && status !== "ISSUED" && !isScoc ? (
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="space-y-1">
             <Label className="text-xs">{t("refType")}</Label>
