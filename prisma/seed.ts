@@ -506,11 +506,23 @@ async function main() {
     data: {
       mainCategoryId: cosmetics.id,
       code: "COSMETIC_LABELLING",
-      nameEn: "Cosmetic Labelling",
-      nameAr: "بطاقة مستحضرات التجميل",
+      nameEn: "Technical Label Assessment",
+      nameAr: "التقييم الفني لملصق المنتج",
       descEn: "Arabic/English cosmetic label assessment against GSO 1943 labelling articles.",
       descAr: "تقييم بطاقة مستحضر التجميل بالعربية والإنجليزية وفق مواد GSO 1943.",
       sortOrder: 1,
+    },
+  });
+
+  const subCosmeticProductRegistration = await prisma.subCategory.create({
+    data: {
+      mainCategoryId: cosmetics.id,
+      code: "PRODUCT_REGISTRATION",
+      nameEn: "Product Registration",
+      nameAr: "تسجيل المنتج",
+      descEn: "GHAD registration for cosmetic products.",
+      descAr: "تسجيل المنتجات التجميلية في نظام غد.",
+      sortOrder: 2,
     },
   });
 
@@ -518,12 +530,11 @@ async function main() {
     data: {
       mainCategoryId: cosmetics.id,
       code: "SFDA_CERTIFICATION",
-      nameEn: "SFDA Certification",
-      nameAr: "شهادات الهيئة",
-      descEn:
-        "SCOC issuance, GHAD product registration, and FASAH shipment certificate applications for cosmetics.",
-      descAr: "إصدار شهادات المطابقة وتسجيل المنتجات في غد وطلبات شهادات فسح لمستحضرات التجميل.",
-      sortOrder: 6,
+      nameEn: "Certificate of Conformity (SCOC)",
+      nameAr: "شهادة مطابقة الإرسالية (SCOC)",
+      descEn: "SCOC issuance after completing the conformity assessment process for cosmetics.",
+      descAr: "إصدار شهادة مطابقة إرسالية لمستحضرات التجميل بعد استكمال إجراءات تقييم المطابقة.",
+      sortOrder: 3,
     },
   });
 
@@ -625,6 +636,7 @@ async function main() {
     requiresInspection?: boolean;
     requiresLabTesting?: boolean;
     requiresFactoryAudit?: boolean;
+    active?: boolean;
   }) {
     return prisma.serviceItem.create({
       data: {
@@ -651,7 +663,7 @@ async function main() {
         requiresLabTesting: input.requiresLabTesting ?? false,
         requiresFactoryAudit: input.requiresFactoryAudit ?? false,
         sortOrder: input.sortOrder,
-        active: true,
+        active: input.active ?? true,
         requiredDocuments: {
           create: input.docs.map((d) => ({
             code: d.code,
@@ -991,7 +1003,7 @@ async function main() {
   });
 
   const svcCosGhadRegistration = await createServiceItem({
-    subCategoryId: subCosmeticCertification.id,
+    subCategoryId: subCosmeticProductRegistration.id,
     code: "SFDA-COS-003",
     nameEn: "GHAD Product Registration",
     nameAr: "تسجيل المنتجات في نظام غد",
@@ -1096,6 +1108,9 @@ async function main() {
     deliverableAr: "رقم طلب فسح",
     deliverableType: DeliverableType.EXTERNAL_CERTIFICATE,
     requiredCredentialPlatform: PlatformType.GHAD,
+    // Not one of the 3 Cosmetics offerings currently shown in the wizard —
+    // kept in the catalogue (inactive) rather than deleted.
+    active: false,
   });
 
   // ── SABER services (SAB-001..003) ────────────────────────────────────────
