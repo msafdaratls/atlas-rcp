@@ -963,6 +963,7 @@
         "rejected": "تم وضع علامة الرفض",
         "rejectedDefaultNote": "مرفوض من المنصة أو المختبر الخارجي.",
         "issuedRef": "تم الإصدار — المرجع: {value}",
+        "downloadCertificate": "تحميل الشهادة PDF",
         "errors": {
           "VALIDATION": "راجع النموذج وحاول مجدداً.",
           "NOT_FOUND": "غير موجود.",
@@ -1551,6 +1552,7 @@
     "messagePlaceholder": "اكتب رسالة إلى أطلس...",
     "messageSent": "تم إرسال الرسالة",
     "downloadReport": "تحميل تقرير PDF",
+    "downloadCertificate": "تحميل الشهادة PDF",
     "verify": "تحقق علناً",
     "draft": {
       "title": "هذا الطلب لا يزال مسودة",

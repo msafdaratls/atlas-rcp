@@ -181,6 +181,224 @@ th,td{border-bottom:1px solid #DDDDDD;padding:6px 4px;text-align:${dir === "rtl"
   return htmlToPdf(html);
 }
 
+/**
+ * Shipment Conformity Certificate for Imported Products (SCOC, SAB-002) —
+ * mirrors the layout of the SABER-issued certificate Atlas obtains as the
+ * accredited CB, so the platform can generate/preview a matching document
+ * from request data rather than only accepting an uploaded scan (see
+ * ExternalDeliverablePanel). Fields with no source yet on the SCOC intake
+ * form (trade mark, product description, production date, exporter address)
+ * render as "—" until the form captures them.
+ */
+export type ScocCertificatePdfInput = {
+  locale: "ar" | "en";
+  certificateNumber: string;
+  issueDate: string;
+  expirationDate: string;
+  establishmentAddress: string;
+  shipmentCountry: string;
+  brandName: string;
+  tradeMark: string;
+  productName: string;
+  productDescription: string;
+  countryOfOrigin: string;
+  productionDate: string;
+  hsCode: string;
+  technicalRegulation: string;
+  manufacturerName: string;
+  exporterAddress: string;
+  generatedAt: string;
+};
+
+export async function renderScocCertificatePdf(
+  input: ScocCertificatePdfInput,
+): Promise<Buffer> {
+  const dir = input.locale === "ar" ? "rtl" : "ltr";
+  const fontStack =
+    input.locale === "ar"
+      ? "'Atlas Arabic', Montserrat, Arial, sans-serif"
+      : "Montserrat, Arial, sans-serif";
+  const fonts = await embeddedFontCss();
+  const dash = "—";
+  const v = (s: string) => esc(s.trim() || dash);
+
+  const L =
+    input.locale === "ar"
+      ? {
+          titleAr: "شهادة مطابقة إرسالية للمنتجات المستوردة",
+          titleEn: "Shipment Conformity Certificate for Imported Products",
+          certNo: "رقم الشهادة",
+          issueDate: "تاريخ الإصدار",
+          expiryDate: "تاريخ الانتهاء",
+          establishmentAddress: "عنوان المنشأة",
+          shipmentCountry: "بلد الشحن",
+          sectionTitle: "بيانات المنتج والمصنّع",
+          brandName: "الاسم التجاري",
+          tradeMark: "العلامة التجارية",
+          productName: "اسم المنتج",
+          productDescription: "وصف المنتج",
+          countryOfOrigin: "بلد المنشأ",
+          productionDate: "تاريخ الإنتاج",
+          hsCode: "الرمز الجمركي",
+          technicalRegulation: "اللائحة الفنية",
+          manufacturerName: "اسم الشركة المصنعة",
+          exporterAddress: "عنوان المصدّر",
+          signatureBox: "توقيع مسؤول جهة التقييم",
+          stampBox: "ختم جهة التقييم",
+        }
+      : {
+          titleAr: "شهادة مطابقة إرسالية للمنتجات المستوردة",
+          titleEn: "Shipment Conformity Certificate for Imported Products",
+          certNo: "Certificate Number",
+          issueDate: "Issue Date",
+          expiryDate: "Expiration Date",
+          establishmentAddress: "Establishment Address",
+          shipmentCountry: "Shipment Country",
+          sectionTitle: "Product and Manufacturer Data",
+          brandName: "Brand Name",
+          tradeMark: "Trade Mark",
+          productName: "Product Name",
+          productDescription: "Product Description",
+          countryOfOrigin: "Country of origin",
+          productionDate: "Production Date",
+          hsCode: "HS Code",
+          technicalRegulation: "Technical Regulation",
+          manufacturerName: "Manufacturer Name",
+          exporterAddress: "Exporter Address",
+          signatureBox: "CB Organisation Office Responsible Signature",
+          stampBox: "CB Organisation Office Stamp",
+        };
+
+  const html = `<!DOCTYPE html>
+<html lang="${input.locale}" dir="${dir}">
+<head>
+<meta charset="utf-8" />
+<style>
+${fonts}
+*{box-sizing:border-box}
+body{font-family:${fontStack};color:#1C2229;margin:0;font-size:11px;background:#fff}
+.sheet{position:relative;border:1.5px solid #519E53;border-radius:10px;padding:18px 22px;overflow:hidden}
+.watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:rotate(-28deg);font-size:64px;font-weight:700;color:#519E53;opacity:0.06;letter-spacing:4px;pointer-events:none;white-space:nowrap}
+.header{position:relative;display:flex;align-items:flex-start;justify-content:space-between;border-bottom:2px solid #519E53;padding-bottom:10px;margin-bottom:12px}
+.brand{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;color:#519E53}
+.brand-ar{font-family:'Atlas Arabic',sans-serif;font-size:11px;color:#4D4D4D}
+.title{text-align:center;flex:1}
+.title-ar{font-family:'Atlas Arabic',sans-serif;font-size:15px;font-weight:700;margin:0 0 2px}
+.title-en{font-size:11px;color:#4D4D4D;margin:0}
+.spacer{width:70px}
+.grid{position:relative;display:grid;grid-template-columns:repeat(3,1fr);border:1px solid #DDDDDD;border-radius:6px;margin-bottom:10px}
+.grid.cols-2{grid-template-columns:repeat(2,1fr)}
+.cell{padding:7px 10px;border-${dir === "rtl" ? "left" : "right"}:1px solid #DDDDDD}
+.cell:last-child{border-${dir === "rtl" ? "left" : "right"}:none}
+.label{font-size:9px;color:#4D4D4D;margin-bottom:3px}
+.value{font-size:12px;font-weight:600}
+.value.mono{font-family:'IBM Plex Mono',monospace;direction:ltr;unicode-bidi:embed;text-align:${dir === "rtl" ? "right" : "left"}}
+.section-bar{position:relative;background:#519E53;color:#fff;border-radius:6px;padding:7px 12px;font-size:12px;font-weight:700;margin-bottom:10px}
+.footer{position:relative;display:flex;gap:16px;margin-top:18px}
+.box{flex:1;border:1px dashed #B9B9B9;border-radius:6px;min-height:70px;padding:8px 10px;display:flex;flex-direction:column;justify-content:flex-end}
+.box .label{margin-bottom:0}
+.timestamp{position:relative;margin-top:12px;text-align:${dir === "rtl" ? "left" : "right"};font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8A8A8A}
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="watermark">ATLAS &nbsp; أطلس</div>
+    <div class="header">
+      <div class="spacer"></div>
+      <div class="title">
+        <p class="title-ar">${esc(L.titleAr)}</p>
+        <p class="title-en">${esc(L.titleEn)}</p>
+      </div>
+      <div class="spacer" style="text-align:${dir === "rtl" ? "left" : "right"}">
+        <div class="brand">ATLAS</div>
+        <div class="brand-ar">أطلس لمراقبة الجودة</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="cell">
+        <div class="label">${esc(L.certNo)}</div>
+        <div class="value mono">${v(input.certificateNumber)}</div>
+      </div>
+      <div class="cell">
+        <div class="label">${esc(L.issueDate)}</div>
+        <div class="value mono">${v(input.issueDate)}</div>
+      </div>
+      <div class="cell">
+        <div class="label">${esc(L.expiryDate)}</div>
+        <div class="value mono">${v(input.expirationDate)}</div>
+      </div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="cell">
+        <div class="label">${esc(L.establishmentAddress)}</div>
+        <div class="value">${v(input.establishmentAddress)}</div>
+      </div>
+      <div class="cell">
+        <div class="label">${esc(L.shipmentCountry)}</div>
+        <div class="value">${v(input.shipmentCountry)}</div>
+      </div>
+    </div>
+
+    <div class="section-bar">${esc(L.sectionTitle)}</div>
+
+    <div class="grid cols-2">
+      <div class="cell">
+        <div class="label">${esc(L.brandName)}</div>
+        <div class="value">${v(input.brandName)}</div>
+      </div>
+      <div class="cell">
+        <div class="label">${esc(L.tradeMark)}</div>
+        <div class="value">${v(input.tradeMark)}</div>
+      </div>
+      <div class="cell" style="grid-column:1/-1">
+        <div class="label">${esc(L.productName)}</div>
+        <div class="value">${v(input.productName)}</div>
+      </div>
+      <div class="cell" style="grid-column:1/-1">
+        <div class="label">${esc(L.productDescription)}</div>
+        <div class="value">${v(input.productDescription)}</div>
+      </div>
+      <div class="cell">
+        <div class="label">${esc(L.countryOfOrigin)}</div>
+        <div class="value">${v(input.countryOfOrigin)}</div>
+      </div>
+      <div class="cell">
+        <div class="label">${esc(L.productionDate)}</div>
+        <div class="value mono">${v(input.productionDate)}</div>
+      </div>
+      <div class="cell" style="grid-column:1/-1">
+        <div class="label">${esc(L.hsCode)}</div>
+        <div class="value mono">${v(input.hsCode)}</div>
+      </div>
+      <div class="cell" style="grid-column:1/-1">
+        <div class="label">${esc(L.technicalRegulation)}</div>
+        <div class="value">${v(input.technicalRegulation)}</div>
+      </div>
+      <div class="cell">
+        <div class="label">${esc(L.manufacturerName)}</div>
+        <div class="value">${v(input.manufacturerName)}</div>
+      </div>
+      <div class="cell">
+        <div class="label">${esc(L.exporterAddress)}</div>
+        <div class="value">${v(input.exporterAddress)}</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="box"><div class="label">${esc(L.signatureBox)}</div></div>
+      <div class="box"><div class="label">${esc(L.stampBox)}</div></div>
+    </div>
+
+    <div class="timestamp">${esc(input.generatedAt)}</div>
+  </div>
+</body>
+</html>`;
+
+  return htmlToPdf(html);
+}
+
 export type ReportPdfInput = {
   locale: "ar" | "en";
   requestNo: string;

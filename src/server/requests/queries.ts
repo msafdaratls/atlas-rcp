@@ -508,6 +508,7 @@ export async function getClientShellRequests(
 export type ClientRequestDetailItem = {
   id: string;
   serviceItemId: string;
+  serviceItemCode: string;
   serviceNameEn: string;
   serviceNameAr: string;
   productNameEn: string;
@@ -701,6 +702,7 @@ export async function getClientRequestDetail(
       items: request.items.map((item) => ({
         id: item.id,
         serviceItemId: item.serviceItemId,
+        serviceItemCode: item.serviceItem.code,
         serviceNameEn: item.serviceItem.nameEn,
         serviceNameAr: item.serviceItem.nameAr,
         productNameEn: item.productNameEn,

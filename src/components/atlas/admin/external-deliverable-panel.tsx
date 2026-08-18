@@ -56,6 +56,7 @@ export function ExternalDeliverablePanel({
   serviceItem,
   deliverable,
   editable,
+  locale,
 }: Props) {
   const t = useTranslations("adminOps.requestDetail.externalDeliverable");
 
@@ -359,6 +360,19 @@ export function ExternalDeliverablePanel({
         <p className="text-xs font-medium text-state-ok">
           {t("issuedRef", { value: deliverable.externalRefValue })}
         </p>
+      ) : null}
+
+      {isScoc && status === "ISSUED" ? (
+        <Button asChild size="sm" variant="outline">
+          <a
+            href={`/api/certificates/${requestItemId}/pdf?locale=${locale}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <FileText className="size-4" />
+            {t("downloadCertificate")}
+          </a>
+        </Button>
       ) : null}
     </section>
   );

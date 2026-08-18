@@ -963,6 +963,7 @@
         "rejected": "Marked rejected",
         "rejectedDefaultNote": "Rejected by the external portal or lab.",
         "issuedRef": "Issued — reference: {value}",
+        "downloadCertificate": "Download certificate PDF",
         "errors": {
           "VALIDATION": "Check the form and try again.",
           "NOT_FOUND": "Not found.",
@@ -1551,6 +1552,7 @@
     "messagePlaceholder": "Write a message to Atlas...",
     "messageSent": "Message sent",
     "downloadReport": "Download report PDF",
+    "downloadCertificate": "Download certificate PDF",
     "verify": "Verify publicly",
     "draft": {
       "title": "This request is still a draft",

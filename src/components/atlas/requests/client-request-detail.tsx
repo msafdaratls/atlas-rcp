@@ -884,6 +884,19 @@ export function ClientRequestDetailPanel({ data }: Props) {
               {t("downloadReport")}
             </a>
           </Button>
+          {data.items
+            .filter((item) => item.serviceItemCode === "SAB-002")
+            .map((item) => (
+              <Button key={item.id} asChild variant="outline">
+                <a
+                  href={`/api/certificates/${item.id}/pdf?locale=${locale}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t("downloadCertificate")}
+                </a>
+              </Button>
+            ))}
           <Button asChild variant="outline">
             <a href={`/${locale}/verify/${data.requestNo}`} target="_blank" rel="noreferrer">
               {t("verify")}
