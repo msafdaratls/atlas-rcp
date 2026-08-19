@@ -16,18 +16,69 @@ function anyValue(field: { en?: string; ar?: string } | undefined): string | und
   return v || undefined;
 }
 
+/**
+ * `fieldKey` is a single string for most rules, but several real GSO 1943
+ * items check a compound condition across two fields (e.g. "product name
+ * AND trademark", "expiry date OR PAO") — `matchMode` ("all", the default,
+ * or "any") disambiguates AND vs OR. Single-key rules behave exactly as
+ * before (an array of length 1 with the default "all" mode is trivially the
+ * same check).
+ */
 const labelPresence: EvaluatorFn = (ctx) => {
+  const rawKey = ctx.payload.fieldKey as string | string[] | undefined;
+  if (!rawKey) {
+    return { verdict: "NEEDS_REVIEW", rationale: "This rule has no fieldKey mapping in the active dataset — needs manual review." };
+  }
+  const keys = Array.isArray(rawKey) ? rawKey : [rawKey];
+  const matchMode = (ctx.payload.matchMode as "all" | "any" | undefined) ?? "all";
+  const values = keys.map((key) => ({ key, value: anyValue(ctx.fields[key]) }));
+  const satisfied = matchMode === "any" ? values.some((v) => v.value) : values.every((v) => v.value);
+
+  if (satisfied) {
+    const evidence = values.filter((v) => v.value).map((v) => v.value).join("; ");
+    return { verdict: "COMPLIANT", evidenceText: evidence, rationale: "Confirmed field(s) present." };
+  }
+  const missing = values.filter((v) => !v.value).map((v) => v.key).join(", ");
+  return { verdict: "NON_COMPLIANT", rationale: `Required field(s) "${missing}" not confirmed.` };
+};
+
+/**
+ * Presence plus a literal substring check (`payload.formatPattern`,
+ * case-insensitive) against the confirmed field text — e.g. the "Ingredients"
+ * header word must literally appear before the INCI list. Falls back to a
+ * plain presence check when no rule in the active dataset defines a pattern
+ * yet, so this stays backward-compatible as more patterns are added.
+ */
+const labelFormat: EvaluatorFn = (ctx) => {
+  const pattern = ctx.payload.formatPattern as string | undefined;
+  if (!pattern) return labelPresence(ctx);
+
   const fieldKey = ctx.payload.fieldKey as string | undefined;
   if (!fieldKey) {
     return { verdict: "NEEDS_REVIEW", rationale: "This rule has no fieldKey mapping in the active dataset — needs manual review." };
   }
   const value = anyValue(ctx.fields[fieldKey]);
-  if (value) return { verdict: "COMPLIANT", evidenceText: value, rationale: "Confirmed field is present." };
-  return { verdict: "NON_COMPLIANT", rationale: `Required field "${fieldKey}" is not confirmed.` };
+  if (!value) {
+    return { verdict: "NON_COMPLIANT", rationale: `Required field "${fieldKey}" is not confirmed.` };
+  }
+  if (value.toLowerCase().includes(pattern.toLowerCase())) {
+    return { verdict: "COMPLIANT", evidenceText: value, rationale: `Found required text "${pattern}".` };
+  }
+  return { verdict: "NON_COMPLIANT", evidenceText: value, rationale: `Required text "${pattern}" not found in the confirmed field.` };
 };
 
-/** No cosmetics item currently defines a format regex in the payload — alias to presence until one does. */
-const labelFormat: EvaluatorFn = (ctx) => labelPresence(ctx);
+/**
+ * Fail-safe default for label rules that check something the label artwork
+ * alone can't answer — formulation composition, lab data, or a
+ * packaging-format-conditional exemption (design doc §7.2 audit). Mirrors
+ * SFDA's evaluator of the same name (evaluators/sfda.ts) exactly.
+ */
+const requiresAdditionalData: EvaluatorFn = (ctx) => ({
+  verdict: "REQUIRES_ADDITIONAL_DATA",
+  rationale:
+    (ctx.payload.explanation as string | undefined) ??
+    "Requires formulation, lab, or dossier data not available from the label artwork alone.",
+});
 
 /**
  * LLM-proposed claim judgment (design doc §1 Principle 2 / §6). No LLM is
@@ -50,6 +101,26 @@ function lookupIngredientName(payload: Record<string, unknown>): string | undefi
   return (payload.ingredient ?? payload.name ?? payload.substance) as string | undefined;
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Whole-word substring match, not a plain `.includes()`. Confirmed live: a
+ * real, distinct ingredient "Toluene-2,5-Diamine" plain-substring-matched
+ * the unrelated Annex II entry "4-Methoxytoluene-2,5-diamine and its HCl
+ * salt..." — the entry name merely happens to contain the shorter term as
+ * a run of characters mid-word ("methoxyTOLUENE..."), not as a distinct
+ * substance reference. `\b` requires a real word boundary on both sides, so
+ * a term fused onto a preceding word prefix (no space/hyphen break) no
+ * longer counts as a match, while an exact or genuinely space/punctuation-
+ * delimited match still does.
+ */
+function containsWholeTerm(haystack: string, term: string): boolean {
+  if (!term) return false;
+  return new RegExp(`\\b${escapeRegex(term.toLowerCase())}\\b`, "i").test(haystack.toLowerCase());
+}
+
 /**
  * COSING ingredient screen. Unlike SFDA's permitted-list `lookup` evaluator
  * (a miss is ambiguous, so it fails safe to REQUIRES_ADDITIONAL_DATA), this
@@ -64,11 +135,18 @@ const ingredientLookup: EvaluatorFn = (ctx) => {
   if (!ingredientsText) {
     return { verdict: "NEEDS_REVIEW", rationale: "No confirmed ingredient list to screen." };
   }
-  const terms = ingredientsText.split(/[,;\n]/).map((t) => t.trim()).filter(Boolean);
+  // Split on comma/semicolon/newline, EXCEPT a comma immediately followed by
+  // a digit — INCI/IUPAC names routinely carry locant numbering with an
+  // internal comma ("Toluene-2,5-Diamine", "1,4-Dioxane"). Confirmed live:
+  // the naive split fragmented "Toluene-2,5-Diamine" into "Toluene-2" and
+  // "5-Diamine", and the truncated "Toluene-2" fragment coincidentally
+  // substring-matched an unrelated real Annex II entry name — a spurious
+  // NON_COMPLIANT on a plausible correctly-spelled ingredient.
+  const terms = ingredientsText.split(/[;\n]|,(?!\d)/).map((t) => t.trim()).filter(Boolean);
 
   for (const term of terms) {
     const prohibited = ctx.lookups.find(
-      (l) => l.tableKey === COSING_PROHIBITED_TABLE && lookupIngredientName(l.payload)?.toLowerCase().includes(term.toLowerCase()),
+      (l) => l.tableKey === COSING_PROHIBITED_TABLE && containsWholeTerm(lookupIngredientName(l.payload) ?? "", term),
     );
     if (prohibited) {
       return { verdict: "NON_COMPLIANT", evidenceText: term, rationale: `"${term}" matches a COSING Annex II (prohibited) entry.` };
@@ -76,7 +154,7 @@ const ingredientLookup: EvaluatorFn = (ctx) => {
   }
   for (const term of terms) {
     const restricted = ctx.lookups.find(
-      (l) => l.tableKey === COSING_RESTRICTED_TABLE && lookupIngredientName(l.payload)?.toLowerCase().includes(term.toLowerCase()),
+      (l) => l.tableKey === COSING_RESTRICTED_TABLE && containsWholeTerm(lookupIngredientName(l.payload) ?? "", term),
     );
     if (restricted) {
       return { verdict: "NEEDS_REVIEW", evidenceText: term, rationale: `"${term}" matches a COSING Annex III (restricted) entry — verify usage conditions are met.` };
@@ -93,4 +171,5 @@ export function registerCosmeticsEvaluators(): void {
   registerEvaluator("label_format", labelFormat);
   registerEvaluator("claim_phase_judgment", claimPhaseJudgment);
   registerEvaluator("ingredient_lookup", ingredientLookup);
+  registerEvaluator("requires_additional_data", requiresAdditionalData);
 }

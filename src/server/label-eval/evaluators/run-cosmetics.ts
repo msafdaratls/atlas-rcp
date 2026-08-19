@@ -3,15 +3,53 @@ import { classify } from "@/server/label-eval/classification/classify";
 import { registerCosmeticsEvaluators } from "@/server/label-eval/evaluators/cosmetics";
 import { runEvaluator, type ConfirmedFields } from "@/server/label-eval/evaluators/registry";
 
+/**
+ * Workflow doc §13 final-status vocabulary — NOT SFDA's (accepted /
+ * accepted_with_remarks / rejected / incomplete). "conditionally_compliant"
+ * is deliberately never assigned here: the doc's §12 frames it as something
+ * the Technical Reviewer decides, not something derivable from verdict
+ * counts alone (unlike "requires_review", which just means something is
+ * still unresolved). Setting it is a separate, not-yet-built manual action —
+ * scoped out of this pass because it needs its own field so a later item
+ * override doesn't silently recompute over a reviewer's manual call.
+ */
+export type CosmeticsFinalVerdict = "compliant" | "non_compliant" | "requires_review" | "conditionally_compliant";
+
 export type RunCosmeticsResult =
   | { blocked: true }
   | {
       blocked: false;
-      finalVerdict: "compliant" | "non_compliant";
+      finalVerdict: CosmeticsFinalVerdict;
       compliant: number;
       nonCompliant: number;
       needsReview: number;
     };
+
+/**
+ * Any real NON_COMPLIANT is a hard fail (matches the doc's "Non-Compliant").
+ * Otherwise, anything still unresolved (NEEDS_REVIEW or
+ * REQUIRES_ADDITIONAL_DATA) means the assessment isn't actually done yet —
+ * "Requires Review", not a false-confident pass. Only once everything is
+ * resolved clean does it become "Compliant".
+ */
+function scoreCosmeticsVerdicts(verdicts: { verdict: string }[]): {
+  finalVerdict: CosmeticsFinalVerdict;
+  compliant: number;
+  nonCompliant: number;
+  needsReview: number;
+} {
+  let compliant = 0;
+  let nonCompliant = 0;
+  let needsReview = 0;
+  for (const { verdict } of verdicts) {
+    if (verdict === "COMPLIANT") compliant++;
+    else if (verdict === "NON_COMPLIANT") nonCompliant++;
+    else if (verdict === "NEEDS_REVIEW" || verdict === "REQUIRES_ADDITIONAL_DATA") needsReview++;
+  }
+  const finalVerdict: CosmeticsFinalVerdict =
+    nonCompliant > 0 ? "non_compliant" : needsReview > 0 ? "requires_review" : "compliant";
+  return { finalVerdict, compliant, nonCompliant, needsReview };
+}
 
 /**
  * Runs the cosmetics classification + rule engine (design doc §2 step 4-6).
@@ -91,33 +129,28 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
   ]);
   const lookups = lookupRows.map((l) => ({ tableKey: l.tableKey, payload: l.payload as Record<string, unknown> }));
 
-  let compliant = 0;
-  let nonCompliant = 0;
-  let needsReview = 0;
+  const results = rules.map((rule) => ({
+    rule,
+    result: runEvaluator(rule.evaluatorKey, {
+      code: rule.code,
+      section: rule.section,
+      titleEn: rule.titleEn,
+      titleAr: rule.titleAr,
+      payload: rule.payload as Record<string, unknown>,
+      fields: confirmedFields,
+      classification,
+      lookups,
+    }),
+  }));
 
   await prisma.$transaction(
-    rules.map((rule) => {
-      const result = runEvaluator(rule.evaluatorKey, {
-        code: rule.code,
-        section: rule.section,
-        titleEn: rule.titleEn,
-        titleAr: rule.titleAr,
-        payload: rule.payload as Record<string, unknown>,
-        fields: confirmedFields,
-        classification,
-        lookups,
-      });
-
-      if (result.verdict === "COMPLIANT") compliant++;
-      else if (result.verdict === "NON_COMPLIANT") nonCompliant++;
-      else needsReview++;
-
-      return prisma.labelItemVerdict.upsert({
+    results.map(({ rule, result }) =>
+      prisma.labelItemVerdict.upsert({
         where: { assessmentId_kbRuleId: { assessmentId, kbRuleId: rule.id } },
         create: { assessmentId, kbRuleId: rule.id, verdict: result.verdict, autoOrManual: "auto", evidenceText: result.evidenceText, rationale: result.rationale },
         update: { verdict: result.verdict, autoOrManual: "auto", evidenceText: result.evidenceText, rationale: result.rationale },
-      });
-    }),
+      }),
+    ),
   );
 
   // Required tests (design doc §6/§9) — deterministic, category+properties
@@ -149,19 +182,13 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
     });
   }
 
-  // Scoring — DECISION PENDING (design doc §8.2): any NON_COMPLIANT label
-  // item fails the whole assessment. This is the stricter of the two
-  // options the design doc lists, matching what was observed live (2
-  // non-compliant items -> non-compliant overall). Kept as a single,
-  // swappable check so the product-owner decision can change this without a
-  // schema change.
-  const finalVerdict = nonCompliant > 0 ? "non_compliant" : "compliant";
+  const score = scoreCosmeticsVerdicts(results.map((r) => r.result));
   await prisma.labelAssessment.update({
     where: { id: assessmentId },
-    data: { status: "ASSESSED", finalVerdict },
+    data: { status: "ASSESSED", finalVerdict: score.finalVerdict },
   });
 
-  return { blocked: false, finalVerdict, compliant, nonCompliant, needsReview };
+  return { blocked: false, ...score };
 }
 
 /**
@@ -176,7 +203,6 @@ export async function recomputeCosmeticsScore(assessmentId: string): Promise<voi
     where: { assessmentId },
     select: { verdict: true },
   });
-  const nonCompliant = verdicts.filter((v) => v.verdict === "NON_COMPLIANT").length;
-  const finalVerdict = nonCompliant > 0 ? "non_compliant" : "compliant";
+  const { finalVerdict } = scoreCosmeticsVerdicts(verdicts);
   await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { finalVerdict } });
 }

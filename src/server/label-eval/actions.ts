@@ -1,5 +1,6 @@
 "use server";
 
+import type { LabelEvalDomain } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
@@ -377,6 +378,13 @@ export async function overrideItemVerdict(
     });
     if (!assessment) return { ok: false, error: "NOT_FOUND" };
 
+    // Workflow doc §12: "Any modification requires: ...Reason." SFDA has no
+    // equivalent documented requirement, so this stays cosmetics-only rather
+    // than tightening a working SFDA flow with no directive to change it.
+    if (assessment.domain === "COSMETICS" && !parsed.data.rationale?.trim()) {
+      return { ok: false, error: "RATIONALE_REQUIRED" };
+    }
+
     await applyVerdictOverride(session, parsed.data);
 
     // The summary/final-verdict bar reads LabelAssessment.overallRate/
@@ -410,6 +418,7 @@ async function planPromotion(assessmentId: string): Promise<
   | { ok: false; error: string }
   | {
       ok: true;
+      domain: LabelEvalDomain;
       requestItemId: string;
       verdicts: Record<string, "COMPLIANT" | "NON_COMPLIANT" | "NA">;
       withheld: number;
@@ -422,6 +431,7 @@ async function planPromotion(assessmentId: string): Promise<
     select: {
       id: true,
       status: true,
+      domain: true,
       requestItemId: true,
       verdicts: { include: { kbRule: { select: { code: true } } } },
     },
@@ -459,7 +469,7 @@ async function planPromotion(assessmentId: string): Promise<
   const priorState = parseAssessment(item.assessment);
   const priorDataExists = Object.keys(priorState.verdicts ?? {}).length > 0;
 
-  return { ok: true, requestItemId: assessment.requestItemId, verdicts, withheld, droppedCodes, priorDataExists };
+  return { ok: true, domain: assessment.domain, requestItemId: assessment.requestItemId, verdicts, withheld, droppedCodes, priorDataExists };
 }
 
 /**
@@ -515,7 +525,7 @@ export async function promoteToOfficialChecklist(
     // Refuse rather than silently under-write (§13.3 constraint #2).
     if (plan.droppedCodes.length > 0) return { ok: false, error: `CODE_MISMATCH:${plan.droppedCodes.join(",")}` };
 
-    const { requestItemId, verdicts, withheld } = plan;
+    const { domain, requestItemId, verdicts, withheld } = plan;
     const result = await saveAssessment({ requestItemId, verdicts });
     if (!result.ok) return result;
 
@@ -533,7 +543,8 @@ export async function promoteToOfficialChecklist(
       after: { written: Object.keys(verdicts).length, withheld },
     });
 
-    revalidatePath(`/[locale]/admin/label-evaluator/sfda/${assessmentId}`, "page");
+    const basePath = domain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics";
+    revalidatePath(`/[locale]/admin/label-evaluator/${basePath}/${assessmentId}`, "page");
     revalidatePath(`/[locale]/admin/requests/${requestItemId}`, "page");
 
     return {

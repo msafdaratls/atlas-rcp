@@ -47,9 +47,13 @@ const FINAL_VERDICT_TONE: Record<string, string> = {
   accepted_with_remarks: "bg-state-warn/12 text-state-warn border-state-warn/30",
   rejected: "bg-state-bad/12 text-state-bad border-state-bad/30",
   incomplete: "bg-surface-alt text-ink-500 border-line",
-  // Cosmetics uses a different finalVerdict vocabulary (design doc §8.2 — DECISION PENDING).
+  // Cosmetics uses the workflow doc's own vocabulary (§13 Final Decision),
+  // not SFDA's — Compliant / Conditionally Compliant / Non-Compliant /
+  // Requires Review, not Accepted / Accepted with remarks / Rejected / Incomplete.
   compliant: "bg-state-ok/12 text-state-ok border-state-ok/30",
+  conditionally_compliant: "bg-state-warn/12 text-state-warn border-state-warn/30",
   non_compliant: "bg-state-bad/12 text-state-bad border-state-bad/30",
+  requires_review: "bg-surface-alt text-ink-500 border-line",
 };
 
 function pct(rate: number | null): string {
@@ -573,7 +577,7 @@ function AssessedView({
       </div>
 
       {sections.map(([section, verdicts]) => (
-        <SectionCard key={section} section={section} verdicts={verdicts} isAr={isAr} assessmentId={detail.id} t={t} router={router} />
+        <SectionCard key={section} section={section} verdicts={verdicts} isAr={isAr} assessmentId={detail.id} domain={domain} t={t} router={router} />
       ))}
 
       {domain === "COSMETICS" ? <RequiredTestsTable detail={detail} t={t} isAr={isAr} /> : null}
@@ -588,16 +592,14 @@ function AssessedView({
           {t(`decision.${detail.finalVerdict ?? "incomplete"}` as "decision.accepted")}
         </span>
         <div className="flex items-center gap-2">
-          {domain === "SFDA_SUPPLEMENTS" ? (
-            detail.promotedAt ? (
-              <span className="text-xs text-ink-500">{t("alreadyPromoted")}</span>
-            ) : (
-              <Button disabled={previewPending} onClick={openPromoteDialog}>
-                {previewPending ? <Loader2 className="size-4 animate-spin" /> : null}
-                {t("promoteButton")}
-              </Button>
-            )
-          ) : null}
+          {detail.promotedAt ? (
+            <span className="text-xs text-ink-500">{t("alreadyPromoted")}</span>
+          ) : (
+            <Button disabled={previewPending} onClick={openPromoteDialog}>
+              {previewPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {t("promoteButton")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -710,6 +712,7 @@ function SectionCard({
   verdicts,
   isAr,
   assessmentId,
+  domain,
   t,
   router,
 }: {
@@ -717,6 +720,7 @@ function SectionCard({
   verdicts: AssessmentDetailVerdict[];
   isAr: boolean;
   assessmentId: string;
+  domain: LabelEvalDomain;
   t: ReturnType<typeof useTranslations<"labelEval.workspace">>;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -742,7 +746,7 @@ function SectionCard({
       {open ? (
         <div className="divide-y divide-line">
           {verdicts.map((v) => (
-            <VerdictCard key={v.kbRuleId} verdict={v} isAr={isAr} assessmentId={assessmentId} t={t} router={router} />
+            <VerdictCard key={v.kbRuleId} verdict={v} isAr={isAr} assessmentId={assessmentId} domain={domain} t={t} router={router} />
           ))}
         </div>
       ) : null}
@@ -754,36 +758,46 @@ function VerdictCard({
   verdict,
   isAr,
   assessmentId,
+  domain,
   t,
   router,
 }: {
   verdict: AssessmentDetailVerdict;
   isAr: boolean;
   assessmentId: string;
+  domain: LabelEvalDomain;
   t: ReturnType<typeof useTranslations<"labelEval.workspace">>;
   router: ReturnType<typeof useRouter>;
 }) {
   const meta = VERDICT_META[verdict.verdict] ?? VERDICT_META.NEEDS_REVIEW!;
   const Icon = meta.icon;
   const [overriding, setOverriding] = useState(false);
+  const [rationale, setRationale] = useState("");
   const [pending, startTransition] = useTransition();
   const tErrors = useTranslations("labelEval.errors");
+
+  // Workflow doc §12: cosmetics overrides must carry a reason. No equivalent
+  // documented requirement for SFDA, so it stays optional there.
+  const rationaleRequired = domain === "COSMETICS";
 
   const OPTIONS: string[] = ["COMPLIANT", "NON_COMPLIANT", "NA", "NEEDS_REVIEW", "REQUIRES_ADDITIONAL_DATA"];
 
   function change(newVerdict: string) {
+    if (rationaleRequired && !rationale.trim()) return;
     startTransition(async () => {
       const result = await overrideItemVerdict({
         assessmentId,
         kbRuleId: verdict.kbRuleId,
         expectedPreviousVerdict: verdict.verdict as never,
         newVerdict: newVerdict as never,
+        rationale: rationale.trim() || undefined,
       });
       if (!result.ok) {
         toast.error(tErrors(result.error as "OVERRIDE_FAILED"));
         return;
       }
       setOverriding(false);
+      setRationale("");
       router.refresh();
     });
   }
@@ -811,23 +825,33 @@ function VerdictCard({
       ) : null}
 
       {overriding ? (
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              disabled={pending}
-              onClick={() => change(opt)}
-              className={cn(
-                "rounded-full border px-2 py-1 text-xs font-medium transition-colors",
-                opt === verdict.verdict
-                  ? VERDICT_META[opt]!.tone
-                  : "border-line text-ink-600 hover:bg-surface-alt",
-              )}
-            >
-              {t(VERDICT_META[opt]!.labelKey as "verdict.COMPLIANT")}
-            </button>
-          ))}
+        <div className="space-y-2 pt-1">
+          {rationaleRequired ? (
+            <Textarea
+              value={rationale}
+              onChange={(e) => setRationale(e.target.value)}
+              placeholder={t("overrideRationalePlaceholder")}
+              className="min-h-16 text-xs"
+            />
+          ) : null}
+          <div className="flex flex-wrap gap-1.5">
+            {OPTIONS.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                disabled={pending || (rationaleRequired && !rationale.trim())}
+                onClick={() => change(opt)}
+                className={cn(
+                  "rounded-full border px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                  opt === verdict.verdict
+                    ? VERDICT_META[opt]!.tone
+                    : "border-line text-ink-600 hover:bg-surface-alt",
+                )}
+              >
+                {t(VERDICT_META[opt]!.labelKey as "verdict.COMPLIANT")}
+              </button>
+            ))}
+          </div>
         </div>
       ) : (
         <Button size="sm" variant="outline" onClick={() => setOverriding(true)}>

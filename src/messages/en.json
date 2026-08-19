@@ -1908,7 +1908,9 @@
         "rejected": "Rejected",
         "incomplete": "Incomplete — pending review",
         "compliant": "Compliant",
-        "non_compliant": "Non-compliant"
+        "conditionally_compliant": "Conditionally compliant",
+        "non_compliant": "Non-compliant",
+        "requires_review": "Requires review"
       },
       "alreadyPromoted": "Already promoted to the official checklist.",
       "promoteButton": "Promote to official checklist",
@@ -1931,6 +1933,7 @@
       "evidenceLabel": "On the label",
       "manuallyOverridden": "Manually overridden by a reviewer.",
       "changeAssessment": "Change assessment",
+      "overrideRationalePlaceholder": "Reason for this change (required)",
       "classifying": {
         "title": "Classifying product…",
         "description": "Determining the applicable category from confirmed data."
@@ -1964,6 +1967,7 @@
       "RUN_FAILED": "Could not run the assessment. Try again.",
       "MISSING_FIELDS": "Confirm all required fields first.",
       "OVERRIDE_FAILED": "Could not change the assessment. Try again.",
+      "RATIONALE_REQUIRED": "A reason is required for this change.",
       "CONFLICT": "Another reviewer changed this verdict — refresh and try again.",
       "PROMOTE_FAILED": "Could not promote to the official checklist.",
       "CODE_MISMATCH": "Cannot promote — one or more verdict codes don't match the official checklist. Contact an administrator.",
@@ -1972,7 +1976,6 @@
       "CLAIM_FAILED": "Could not check evaluator claim status.",
       "INVALID_STATE": "This action isn't available in the current state.",
       "REQUEST_ITEM_UNLINKED": "This assessment is no longer linked to a request item.",
-      "COSMETICS_SCHEMA_NOT_YET_CONFIRMED": "The cosmetics dataset schema hasn't been confirmed against a real workbook yet.",
       "DUPLICATE_UPLOAD": "This exact workbook was already imported as version {label}.",
       "SCHEMA_CONTRACT_VIOLATION": "The workbook doesn't match the expected structure.",
       "PARSE_FAILED": "Could not parse the workbook.",
@@ -1991,6 +1994,8 @@
       "none": "No active dataset yet.",
       "uploadTitle": "Upload a new workbook",
       "chooseFile": "Choose file",
+      "regulatoryFileLabel": "Regulatory KB (label rules, ingredients, lab tests)",
+      "claimsFileLabel": "Claims KB (GSO 2528)",
       "upload": "Upload",
       "uploading": "Uploading…",
       "diffTitle": "Changes vs. the current active version",

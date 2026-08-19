@@ -1,3 +1,4 @@
+import type { LabelRuleType } from "@prisma/client";
 import ExcelJS from "exceljs";
 
 /**
@@ -10,9 +11,16 @@ import ExcelJS from "exceljs";
  * exact file; that is why every sheet gets its own explicit row range.
  */
 
+/**
+ * `ruleType` takes the full Prisma enum, not just "CHECKLIST_ITEM", even
+ * though this parser only ever produces that one value — versioning.ts's
+ * `ParsedKbBundle` (which embeds this type) is explicitly domain-generic
+ * ("a cosmetics parser will produce the same bundle shape"), and
+ * cosmetics-parser.ts's rules genuinely span 3 other rule types.
+ */
 export type ParsedKbRule = {
   code: string;
-  ruleType: "CHECKLIST_ITEM";
+  ruleType: LabelRuleType;
   section: string;
   titleEn: string | null;
   titleAr: string;

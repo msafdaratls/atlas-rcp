@@ -42,6 +42,9 @@ const SFDA_FIELDS: LabelFieldDef[] = [
 const COSMETICS_FIELDS: LabelFieldDef[] = [
   ...SHARED_FIELDS,
   { key: "pao", labelEn: "Period after opening (PAO)", labelAr: "الفترة بعد الفتح", bilingual: false, mandatory: false },
+  // GSO 1943 clause 5.8 requires directions for use alongside product
+  // function (design doc §7.2 audit) — was missing entirely for this domain.
+  { key: "directions", labelEn: "Directions for use", labelAr: "طريقة الاستخدام", bilingual: true, mandatory: false },
 ];
 
 export const LABEL_FIELD_DEFS: Record<LabelEvalDomain, LabelFieldDef[]> = {

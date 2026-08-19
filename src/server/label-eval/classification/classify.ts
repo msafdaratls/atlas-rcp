@@ -29,12 +29,25 @@ export type ClassificationResult = {
 
 const CONFIDENCE_THRESHOLD = 0.15;
 
+/**
+ * A stopword coincidentally unique to one category's name (e.g. "Henna
+ * AND Seder" is the only category whose English name contains "and") reads
+ * as maximally distinctive under the inverse-category-frequency weighting
+ * below — confirmed live, "Moisturizing Shampoo" matched Henna and Seder on
+ * "and" alone. Filtered at tokenize() so it never enters either side of the
+ * match.
+ */
+const STOPWORDS = new Set([
+  "and", "the", "for", "with", "are", "was", "were", "this", "that", "these",
+  "those", "from", "has", "have", "its", "not", "but", "all", "can", "any",
+]);
+
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
-    .filter((t) => t.length > 2);
+    .filter((t) => t.length > 2 && !STOPWORDS.has(t));
 }
 
 export function classify(input: ClassificationInput, categories: LabelKbCategory[]): ClassificationResult {
@@ -61,12 +74,41 @@ export function classify(input: ClassificationInput, categories: LabelKbCategory
     };
   }
 
+  // Dedupe each category's own tokens first — a synonym list that happens to
+  // repeat a word (e.g. "hair oil", "hair cream", "hair spray" all sharing
+  // "hair") must not inflate that category's hit count for a single term.
+  const categoryTokenSets = categories.map((category) => ({
+    category,
+    tokens: [
+      ...new Set(tokenize(`${category.nameEn} ${category.nameAr} ${(category.properties as string[] | null)?.join(" ") ?? ""}`)),
+    ],
+  }));
+
+  // Inverse-category-frequency weighting: a token shared across many
+  // categories ("hair", "products", "care") is weak evidence for any one of
+  // them and must count for less than a token that's genuinely distinctive
+  // of a single category ("shampoo", "toothpaste", "oud"). Confirmed live —
+  // without this, "Moisturizing Shampoo" matched Hair Dyes over Hair Care
+  // (Hair Dyes' smaller vocabulary gave the shared word "hair" a larger
+  // share of its total), and "Diesel Engine Oil" cleared the confidence
+  // threshold against Oud & Fragrance Oils purely on the generic word "oil".
+  const categoryDocFreq = new Map<string, number>();
+  for (const { tokens } of categoryTokenSets) {
+    for (const t of tokens) categoryDocFreq.set(t, (categoryDocFreq.get(t) ?? 0) + 1);
+  }
+  const tokenWeight = (t: string) => 1 / (categoryDocFreq.get(t) ?? 1);
+
   let best: { category: LabelKbCategory; score: number } | null = null;
-  for (const category of categories) {
-    const categoryTokens = tokenize(`${category.nameEn} ${category.nameAr} ${(category.properties as string[] | null)?.join(" ") ?? ""}`);
-    if (categoryTokens.length === 0) continue;
-    const hits = categoryTokens.filter((t) => haystackTokens.has(t)).length;
-    const score = hits / categoryTokens.length;
+  for (const { category, tokens } of categoryTokenSets) {
+    if (tokens.length === 0) continue;
+    let hitWeight = 0;
+    let totalWeight = 0;
+    for (const t of tokens) {
+      const w = tokenWeight(t);
+      totalWeight += w;
+      if (haystackTokens.has(t)) hitWeight += w;
+    }
+    const score = totalWeight > 0 ? hitWeight / totalWeight : 0;
     if (!best || score > best.score) best = { category, score };
   }
 

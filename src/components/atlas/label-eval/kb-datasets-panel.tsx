@@ -26,20 +26,27 @@ export function KbDatasetsPanel({ domain, versions }: Props) {
   const tErrors = useTranslations("labelEval.errors");
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const claimsFileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  // Cosmetics needs both source workbooks together to form one usable
+  // dataset — label rules alone can't assess ingredients or claims.
+  const [claimsFile, setClaimsFile] = useState<File | null>(null);
+  const isCosmetics = domain === "COSMETICS";
   const [uploadPending, startUpload] = useTransition();
   const [activatePending, startActivate] = useTransition();
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [result, setResult] = useState<{ versionId: string; diff: KbDiffResult; warnings: string[] } | null>(null);
 
   const active = versions.find((v) => v.status === "ACTIVE") ?? null;
+  const canUpload = isCosmetics ? !!file && !!claimsFile : !!file;
 
   function upload() {
-    if (!file) return;
+    if (!canUpload) return;
     startUpload(async () => {
       const formData = new FormData();
       formData.set("domain", domain);
-      formData.set("file", file);
+      formData.set("file", file!);
+      if (isCosmetics && claimsFile) formData.set("claimsFile", claimsFile);
       const res = await uploadKbWorkbook(formData);
       if (!res.ok) {
         const [code, ...rest] = res.error.split(":");
@@ -49,7 +56,9 @@ export function KbDatasetsPanel({ domain, versions }: Props) {
       }
       setResult(res.data);
       setFile(null);
+      setClaimsFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (claimsFileInputRef.current) claimsFileInputRef.current.value = "";
       toast.success(t("uploaded"));
       router.refresh();
     });
@@ -89,14 +98,29 @@ export function KbDatasetsPanel({ domain, versions }: Props) {
         <h2 className="text-sm font-semibold text-ink-900">{t("uploadTitle")}</h2>
         <p className="mt-1 text-xs text-ink-500">{t("description")}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="max-w-xs"
-          />
-          <Button disabled={!file || uploadPending} onClick={upload}>
+          <div className="flex flex-col gap-1">
+            {isCosmetics ? <span className="text-xs text-ink-500">{t("regulatoryFileLabel")}</span> : null}
+            <Input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="max-w-xs"
+            />
+          </div>
+          {isCosmetics ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-ink-500">{t("claimsFileLabel")}</span>
+              <Input
+                ref={claimsFileInputRef}
+                type="file"
+                accept=".xlsx"
+                onChange={(e) => setClaimsFile(e.target.files?.[0] ?? null)}
+                className="max-w-xs"
+              />
+            </div>
+          ) : null}
+          <Button disabled={!canUpload || uploadPending} onClick={upload}>
             {uploadPending ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
             {uploadPending ? t("uploading") : t("upload")}
           </Button>
