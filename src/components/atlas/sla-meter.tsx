@@ -7,6 +7,7 @@ import type { RequestState } from "@prisma/client";
 import { differenceInHours, differenceInMinutes } from "date-fns";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { APP_TIME_ZONE } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type SlaMeterProps = {
@@ -111,6 +112,7 @@ export function SlaMeter({ dueAt, state, startedAt, className }: SlaMeterProps) 
           {new Intl.DateTimeFormat(locale === "ar" ? "ar-SA" : "en-GB", {
             dateStyle: "medium",
             timeStyle: "short",
+            timeZone: APP_TIME_ZONE,
           }).format(due)}
         </span>
       </div>

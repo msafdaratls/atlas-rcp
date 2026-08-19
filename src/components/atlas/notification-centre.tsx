@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { APP_TIME_ZONE } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   markAllNotificationsRead,
@@ -22,6 +23,7 @@ function dayKey(date: Date, locale: string) {
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: APP_TIME_ZONE,
   }).format(date);
 }
 
@@ -29,6 +31,7 @@ function timeLabel(date: Date, locale: string) {
   return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA" : "en-GB", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: APP_TIME_ZONE,
   }).format(date);
 }
 

@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { APP_TIME_ZONE } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   getUnreadNotificationCount,
@@ -36,6 +37,7 @@ function dayKey(date: Date, locale: string) {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: APP_TIME_ZONE,
   }).format(date);
 }
 

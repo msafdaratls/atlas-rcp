@@ -8,6 +8,7 @@ import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { APP_TIME_ZONE } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { activateKbWorkbook, uploadKbWorkbook } from "@/server/label-eval/kb/actions";
 import type { KbDiffResult } from "@/server/label-eval/kb/versioning";
@@ -198,10 +199,16 @@ export function KbDatasetsPanel({ domain, versions }: Props) {
                   </span>
                 </td>
                 <td className="px-3 py-2 text-ink-600" dir="ltr">
-                  {new Date(v.uploadedAt).toLocaleString()}
+                  {new Date(v.uploadedAt).toLocaleString(undefined, {
+                    timeZone: APP_TIME_ZONE,
+                  })}
                 </td>
                 <td className="px-3 py-2 text-ink-600" dir="ltr">
-                  {v.activatedAt ? new Date(v.activatedAt).toLocaleString() : "—"}
+                  {v.activatedAt
+                    ? new Date(v.activatedAt).toLocaleString(undefined, {
+                        timeZone: APP_TIME_ZONE,
+                      })
+                    : "—"}
                 </td>
                 <td className="px-3 py-2 text-end">
                   {v.status === "ARCHIVED" ? (

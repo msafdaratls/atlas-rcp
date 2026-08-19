@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { APP_TIME_ZONE } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { EngagementListItem } from "@/server/admin/engagements";
 
@@ -62,7 +63,9 @@ export function AdminEngagementsTable({
               </td>
               <td className="px-3 py-2 text-ink-700">{r.requestCount}</td>
               <td className="px-3 py-2 text-ink-500" dir="ltr">
-                {new Date(r.startedAt).toLocaleDateString(locale)}
+                {new Date(r.startedAt).toLocaleDateString(locale, {
+                  timeZone: APP_TIME_ZONE,
+                })}
               </td>
             </tr>
           ))}
