@@ -311,7 +311,7 @@ body{font-family:${fontStack};color:#1C2229;margin:0;font-size:11px;background:#
       </div>
       <div class="spacer" style="text-align:${dir === "rtl" ? "left" : "right"}">
         <div class="brand">ATLAS</div>
-        <div class="brand-ar">أطلس لمراقبة الجودة</div>
+        <div class="brand-ar">أطلس للمساندة والخدمات</div>
       </div>
     </div>
 
