@@ -121,6 +121,21 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
   const category = categories.find((c) => c.code === resolvedCategoryCode) ?? null;
   const classification = { categoryCode: resolvedCategoryCode, properties: (category?.properties as string[] | null) ?? [] };
 
+  // CLAIM_PHASE_ITEM rules are intentionally NOT filtered by
+  // classification.categoryCode here, even though every claim row carries a
+  // `productCategory` in its payload (cosmetics-parser.ts CLAIMS_COL) and it
+  // looks like an obvious filter to add. Checked the real imported KB
+  // (2026-08 audit): the Claims sheet's `productCategory` uses its OWN
+  // 5-value taxonomy (سكن/شعر/فم/نظافة نسائية/General) — a different axis
+  // from the 16-code product classification taxonomy this file's `classify()`
+  // assigns (see cosmetics-parser.ts's own comment on that split). Crucially,
+  // "النظافة النسائية" (Feminine Hygiene) has NO corresponding classification
+  // category at all, so filtering on categoryCode would make every Feminine
+  // Hygiene claim permanently unmatched — hiding it from every product,
+  // forever, not just narrowing noise. That's a worse defect than the noise
+  // it would fix (a missed compliance claim vs. a few extra rows to skim), so
+  // this stays unfiltered until a real crosswalk between the two taxonomies
+  // is defined (product/compliance decision, not one to guess at in code).
   const [rules, lookupRows] = await Promise.all([
     prisma.labelKbRule.findMany({
       where: { kbVersionId: assessment.kbVersionId, ruleType: { in: ["LABEL_REQUIREMENT_ITEM", "CLAIM_PHASE_ITEM"] } },
@@ -162,6 +177,16 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
   const triggered = testRules.filter((r) => {
     const p = r.payload as { triggerCategoryCode?: string; triggerProperty?: string };
     if (p.triggerCategoryCode && p.triggerCategoryCode === classification.categoryCode) return true;
+    // triggerProperty never fires today: cosmetics-parser.ts's
+    // parseRequiredTests deliberately never sets it. Only "Mandatory" rows
+    // (keyed on Product Category alone) get a working trigger key —
+    // "Conditional" rows (the ones a property-based trigger would cover)
+    // need a reviewer to judge applicability, since there's no
+    // per-assessment sub-type detector yet to safely auto-fire them. Kept
+    // here as forward-compatible plumbing for when that detector exists,
+    // not dead code to delete — see the parser's own comment for the full
+    // reasoning (same "don't guess at the wrong dimension" rule this
+    // codebase applies consistently to conditional KB rows).
     if (p.triggerProperty && classification.properties.includes(p.triggerProperty)) return true;
     return false;
   });

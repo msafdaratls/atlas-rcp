@@ -158,6 +158,8 @@ export type AdminFinanceView = {
     creditLimit: number;
     autoHoldWhenOverLimit: boolean;
     daysOverdue: number;
+    /** Open (ISSUED/PARTIALLY_PAID) invoices — lets the adjustment form settle a credit note/write-off against a specific one instead of only the org-level ledger. */
+    openInvoices: Array<{ id: string; invoiceNo: string; openAmount: number }>;
   }>;
 };
 
@@ -206,9 +208,15 @@ export async function getAdminFinanceView(): Promise<AdminFinanceView | null> {
       clientBalances: clients.map((c) => {
         const balance = toNumber(sumBalance(c.ledgerEntries));
         let maxDays = 0;
+        const openInvoices: Array<{ id: string; invoiceNo: string; openAmount: number }> = [];
         for (const inv of c.invoices) {
           const open = invoiceOpenBalance(inv.total, inv.allocations);
           if (open.isZero()) continue;
+          openInvoices.push({
+            id: inv.id,
+            invoiceNo: inv.invoiceNo,
+            openAmount: toNumber(open),
+          });
           const due =
             inv.dueAt ??
             new Date(
@@ -228,6 +236,7 @@ export async function getAdminFinanceView(): Promise<AdminFinanceView | null> {
           creditLimit: toNumber(c.creditLimit),
           autoHoldWhenOverLimit: c.autoHoldWhenOverLimit,
           daysOverdue: Math.max(0, maxDays),
+          openInvoices,
         };
       }),
     };

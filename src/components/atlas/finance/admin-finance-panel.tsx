@@ -262,6 +262,8 @@ function CreditLimitEditor({
   );
 }
 
+const NO_INVOICE = "__none__";
+
 function ManualAdjustmentForm({
   clients,
 }: {
@@ -274,7 +276,12 @@ function ManualAdjustmentForm({
     "ADJUSTMENT" | "CREDIT_NOTE" | "REFUND" | "WRITE_OFF"
   >("CREDIT_NOTE");
   const [side, setSide] = useState<"debit" | "credit">("credit");
+  const [invoiceId, setInvoiceId] = useState(NO_INVOICE);
   const [pending, startTransition] = useTransition();
+
+  const settlesInvoice = type === "CREDIT_NOTE" || type === "WRITE_OFF";
+  const openInvoices =
+    clients.find((c) => c.organisationId === orgId)?.openInvoices ?? [];
 
   return (
     <form
@@ -293,6 +300,10 @@ function ManualAdjustmentForm({
             side,
             reasonEn: String(fd.get("reasonEn") ?? ""),
             reasonAr: String(fd.get("reasonAr") ?? ""),
+            invoiceId:
+              settlesInvoice && invoiceId !== NO_INVOICE
+                ? invoiceId
+                : undefined,
           });
           if (!result.ok) {
             toast.error(t(`errors.${result.error}` as never));
@@ -300,12 +311,19 @@ function ManualAdjustmentForm({
           }
           toast.success(t("admin.adjustmentPosted"));
           formEl.reset();
+          setInvoiceId(NO_INVOICE);
         });
       }}
     >
       <div>
         <Label>{t("admin.client")}</Label>
-        <Select value={orgId} onValueChange={setOrgId}>
+        <Select
+          value={orgId}
+          onValueChange={(v) => {
+            setOrgId(v);
+            setInvoiceId(NO_INVOICE);
+          }}
+        >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -322,7 +340,10 @@ function ManualAdjustmentForm({
         <Label>{t("admin.entryType")}</Label>
         <Select
           value={type}
-          onValueChange={(v) => setType(v as typeof type)}
+          onValueChange={(v) => {
+            setType(v as typeof type);
+            setInvoiceId(NO_INVOICE);
+          }}
         >
           <SelectTrigger>
             <SelectValue />
@@ -343,6 +364,26 @@ function ManualAdjustmentForm({
           </SelectContent>
         </Select>
       </div>
+      {settlesInvoice && openInvoices.length > 0 ? (
+        <div>
+          <Label>{t("admin.invoiceOptional")}</Label>
+          <Select value={invoiceId} onValueChange={setInvoiceId}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_INVOICE}>
+                {t("admin.invoiceNone")}
+              </SelectItem>
+              {openInvoices.map((inv) => (
+                <SelectItem key={inv.id} value={inv.id}>
+                  {inv.invoiceNo} — {inv.openAmount.toFixed(2)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       {type === "ADJUSTMENT" ? (
         <div>
           <Label>{t("admin.side")}</Label>

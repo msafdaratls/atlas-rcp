@@ -4,6 +4,7 @@ import {
   isLegalFinancialEvent,
   type NotificationEventType,
 } from "@/lib/notification-events";
+import { requestStateLabel } from "@/server/notifications/copy";
 import {
   resolveRecipients,
   type NotifyContext,
@@ -142,10 +143,16 @@ export async function notify(
         if (existing) continue;
       }
 
+      const stateLabel = input.data.state
+        ? requestStateLabel(input.data.state)
+        : null;
       const payload: Prisma.InputJsonValue = {
         requestId: input.data.requestId ?? null,
         requestNo: input.data.requestNo ?? null,
         state: input.data.state ?? null,
+        ...(stateLabel
+          ? { stateLabelEn: stateLabel.en, stateLabelAr: stateLabel.ar }
+          : {}),
         link: input.data.link,
         titleEn: input.data.titleEn,
         titleAr: input.data.titleAr,

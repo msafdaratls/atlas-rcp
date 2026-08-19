@@ -6,7 +6,9 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { log } from "@/lib/logger";
 import { mimeAllowed, sniffMime } from "@/lib/mime-sniff";
+import { planFifoAllocation } from "@/lib/payment-allocation";
 import { toNumber, parseMoneyInput } from "@/lib/pricing";
 import { requirePermission, scopedOrganisationId } from "@/lib/rbac";
 import { storage } from "@/lib/storage";
@@ -147,20 +149,27 @@ export async function rejectPayment(
         },
       });
 
-      await notify(
-        {
-          event: "PAYMENT_REJECTED",
-          data: {
-            organisationId: updated.organisationId,
-            link: `/client/statement?payment=${updated.id}`,
-            ...notificationCopy("PAYMENT_REJECTED", {
-              amount: toNumber(updated.amount).toFixed(2),
-              reason: parsed.data.reason,
-            }),
+      try {
+        await notify(
+          {
+            event: "PAYMENT_REJECTED",
+            data: {
+              organisationId: updated.organisationId,
+              link: `/client/statement?payment=${updated.id}`,
+              ...notificationCopy("PAYMENT_REJECTED", {
+                amount: toNumber(updated.amount).toFixed(2),
+                reason: parsed.data.reason,
+              }),
+            },
           },
-        },
-        tx,
-      );
+          tx,
+        );
+      } catch (error) {
+        log.error("finance.payment.reject", "notification delivery failed", {
+          paymentId: updated.id,
+          error: error instanceof Error ? error.message : "unknown",
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -253,24 +262,7 @@ export async function confirmPayment(
           include: { allocations: true },
           orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
         });
-        let remaining = payment.amount;
-        plan = [];
-        for (const inv of openInvoices) {
-          if (remaining.lessThanOrEqualTo(0)) break;
-          const paid = inv.allocations.reduce(
-            (a, x) => a.plus(x.amount),
-            new Prisma.Decimal(0),
-          );
-          const open = Prisma.Decimal.max(
-            inv.total.minus(paid),
-            new Prisma.Decimal(0),
-          );
-          const take = Prisma.Decimal.min(open, remaining).toDecimalPlaces(2);
-          if (take.greaterThan(0)) {
-            plan.push({ invoiceId: inv.id, amount: take });
-            remaining = remaining.minus(take).toDecimalPlaces(2);
-          }
-        }
+        plan = planFifoAllocation(payment.amount, openInvoices);
       }
 
       const allocSum = plan.reduce(
@@ -294,6 +286,17 @@ export async function confirmPayment(
       });
 
       for (const line of plan) {
+        // Row-lock the invoice before recomputing its paid-so-far total —
+        // without this, two payments confirmed concurrently against the same
+        // invoice can both read it as unpaid before either commits, both
+        // pass the ALLOCATION_EXCEEDS_PAYMENT guard below, and both insert
+        // an allocation, over-allocating the invoice. Mirrors the
+        // lockRequestForUpdate / Coupon FOR UPDATE pattern used elsewhere.
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "Invoice" WHERE id = ${line.invoiceId} FOR UPDATE
+        `;
+        if (!locked[0]) throw new Error("NOT_FOUND");
+
         const inv = await tx.invoice.findUnique({
           where: { id: line.invoiceId },
           include: { allocations: true },
@@ -336,22 +339,29 @@ export async function confirmPayment(
         },
       });
 
-      await notify(
-        {
-          event: "PAYMENT_RECEIVED",
-          data: {
-            organisationId: payment.organisationId,
-            link:
-              plan[0] != null
-                ? `/client/statement?invoice=${plan[0].invoiceId}`
-                : `/client/statement?payment=${payment.id}`,
-            ...notificationCopy("PAYMENT_RECEIVED", {
-              amount: toNumber(payment.amount).toFixed(2),
-            }),
+      try {
+        await notify(
+          {
+            event: "PAYMENT_RECEIVED",
+            data: {
+              organisationId: payment.organisationId,
+              link:
+                plan[0] != null
+                  ? `/client/statement?invoice=${plan[0].invoiceId}`
+                  : `/client/statement?payment=${payment.id}`,
+              ...notificationCopy("PAYMENT_RECEIVED", {
+                amount: toNumber(payment.amount).toFixed(2),
+              }),
+            },
           },
-        },
-        tx,
-      );
+          tx,
+        );
+      } catch (error) {
+        log.error("finance.payment.confirm", "notification delivery failed", {
+          paymentId: payment.id,
+          error: error instanceof Error ? error.message : "unknown",
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -458,6 +468,15 @@ const adjustmentSchema = z.object({
   side: z.enum(["debit", "credit"]).default("credit"),
   reasonEn: z.string().trim().min(5).max(500),
   reasonAr: z.string().trim().min(5).max(500),
+  /**
+   * Optional — only meaningful for CREDIT_NOTE/WRITE_OFF. Without this, a
+   * write-off only reduces the org's ledger balance; the specific invoice it
+   * was meant to settle keeps showing as open/overdue in aging forever,
+   * since aging is computed from Invoice.status + PaymentAllocation, not the
+   * ledger. When set, this settles the invoice the same way a real payment
+   * does — see the allocation logic below.
+   */
+  invoiceId: z.string().min(1).optional(),
 });
 
 export async function postManualLedgerEntry(
@@ -474,23 +493,98 @@ export async function postManualLedgerEntry(
     });
     if (!amount) return { ok: false, error: "VALIDATION" };
 
-    const org = await prisma.organisation.findFirst({
-      where: { id: parsed.data.organisationId, type: "CLIENT" },
-    });
-    if (!org) return { ok: false, error: "NOT_FOUND" };
-
     const forceCredit =
       parsed.data.type === "CREDIT_NOTE" ||
       parsed.data.type === "REFUND" ||
       parsed.data.type === "WRITE_OFF";
     const side = forceCredit ? "credit" : parsed.data.side;
 
+    const settlesInvoice =
+      parsed.data.type === "CREDIT_NOTE" || parsed.data.type === "WRITE_OFF";
+    if (parsed.data.invoiceId && !settlesInvoice) {
+      return { ok: false, error: "VALIDATION" };
+    }
+
+    const org = await prisma.organisation.findFirst({
+      where: { id: parsed.data.organisationId, type: "CLIENT" },
+    });
+    if (!org) return { ok: false, error: "NOT_FOUND" };
+
     const entry = await prisma.$transaction(async (tx) => {
+      let referenceType = "Manual";
+      let referenceId = `manual-${Date.now()}`;
+
+      if (parsed.data.invoiceId) {
+        // Same lock as confirmPayment's allocation loop — a write-off and a
+        // real payment confirmation racing against the same invoice must not
+        // both compute "open" from a pre-lock read.
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "Invoice" WHERE id = ${parsed.data.invoiceId} FOR UPDATE
+        `;
+        if (!locked[0]) throw new Error("NOT_FOUND");
+
+        const invoice = await tx.invoice.findUnique({
+          where: { id: parsed.data.invoiceId },
+          include: { allocations: true },
+        });
+        if (!invoice || invoice.organisationId !== org.id) {
+          throw new Error("NOT_FOUND");
+        }
+        if (invoice.status !== "ISSUED" && invoice.status !== "PARTIALLY_PAID") {
+          throw new Error("INVALID_INVOICE_STATUS");
+        }
+
+        const alreadyPaid = invoice.allocations.reduce(
+          (a, x) => a.plus(x.amount),
+          new Prisma.Decimal(0),
+        );
+        const open = invoice.total.minus(alreadyPaid);
+        if (amount.greaterThan(open.plus(new Prisma.Decimal("0.001")))) {
+          throw new Error("ALLOCATION_EXCEEDS_INVOICE");
+        }
+
+        // Settling a write-off/credit-note against a specific invoice reuses
+        // the same Payment + PaymentAllocation mechanism a real payment
+        // uses — PaymentMethod already has a CREDIT_NOTE value for exactly
+        // this. This is what makes invoiceOpenBalance (and therefore aging)
+        // correctly treat the invoice as settled, with no schema change and
+        // no new "who's paid what" bookkeeping to keep in sync.
+        const payment = await tx.payment.create({
+          data: {
+            organisationId: org.id,
+            amount: amount.toDecimalPlaces(2),
+            method: "CREDIT_NOTE",
+            status: "CONFIRMED",
+            confirmedByUserId: session.id,
+            confirmedAt: new Date(),
+          },
+        });
+        await tx.paymentAllocation.create({
+          data: {
+            paymentId: payment.id,
+            invoiceId: invoice.id,
+            amount: amount.toDecimalPlaces(2),
+          },
+        });
+        const paidAfter = alreadyPaid.plus(amount);
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: paidAfter.greaterThanOrEqualTo(invoice.total)
+              ? "PAID"
+              : "PARTIALLY_PAID",
+          },
+        });
+
+        referenceType = "Invoice";
+        referenceId = invoice.id;
+      }
+
       const created = await appendLedgerEntry(tx, {
         organisationId: org.id,
         type: parsed.data.type,
-        referenceType: "Manual",
-        referenceId: `manual-${Date.now()}`,
+        referenceType,
+        referenceId,
         debit: side === "debit" ? amount : 0,
         credit: side === "credit" ? amount : 0,
         descriptionEn: parsed.data.reasonEn,
@@ -512,6 +606,7 @@ export async function postManualLedgerEntry(
             side,
             reasonEn: parsed.data.reasonEn,
             reasonAr: parsed.data.reasonAr,
+            invoiceId: parsed.data.invoiceId ?? null,
           },
         },
       });
@@ -524,7 +619,14 @@ export async function postManualLedgerEntry(
     return { ok: true, data: { entryId: entry.id } };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
-    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+    if (
+      message === "UNAUTHORIZED" ||
+      message === "FORBIDDEN" ||
+      message === "NOT_FOUND" ||
+      message === "VALIDATION" ||
+      message === "INVALID_INVOICE_STATUS" ||
+      message === "ALLOCATION_EXCEEDS_INVOICE"
+    ) {
       return { ok: false, error: message };
     }
     return { ok: false, error: "SAVE_FAILED" };

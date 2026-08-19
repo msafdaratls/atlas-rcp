@@ -293,6 +293,38 @@ function interpolate(
   });
 }
 
+/**
+ * Bilingual `RequestState` labels — mirrors `messages/{en,ar}.json`'s
+ * `states.*` namespace. Duplicated by necessity, same as the rest of this
+ * file: `notify()` runs inside a DB transaction with no per-recipient locale
+ * yet (that's resolved later, per-user, in the outbox worker), so it can't
+ * go through next-intl's request-scoped `useTranslations`. Used by `notify()`
+ * to populate `stateLabelEn`/`stateLabelAr` on the outbox payload so emails
+ * show a real label instead of the raw state enum.
+ */
+const REQUEST_STATE_LABELS: Record<string, { en: string; ar: string }> = {
+  DRAFT: { en: "Draft", ar: "مسودة" },
+  SUBMITTED: { en: "Submitted", ar: "مُقدَّم" },
+  UNDER_INTAKE_REVIEW: { en: "Under intake review", ar: "مراجعة الاستلام" },
+  RETURNED_TO_CLIENT: { en: "Returned to client", ar: "مُعاد للعميل" },
+  ACCEPTED: { en: "Accepted", ar: "مقبول" },
+  ASSESSMENT_QUEUED: { en: "Assessment queued", ar: "بانتظار التقييم" },
+  ASSESSMENT_RUNNING: { en: "Assessment running", ar: "التقييم جارٍ" },
+  TECHNICAL_REVIEW: { en: "Technical review", ar: "المراجعة الفنية" },
+  DECISION: { en: "Decision", ar: "القرار" },
+  REPORT_ISSUED: { en: "Report issued", ar: "صدر التقرير" },
+  CLOSED: { en: "Done", ar: "تم" },
+  CANCELLED: { en: "Cancelled", ar: "ملغى" },
+  ON_HOLD: { en: "On hold", ar: "معلّق" },
+};
+
+/** Bilingual label for a `RequestState`, or null for an unrecognized value. */
+export function requestStateLabel(
+  state: string,
+): { en: string; ar: string } | null {
+  return REQUEST_STATE_LABELS[state] ?? null;
+}
+
 /** Resolve bilingual title/body/CTA for a notification event. */
 export function notificationCopy(
   key: NotificationCopyKey,

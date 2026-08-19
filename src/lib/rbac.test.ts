@@ -121,6 +121,198 @@ describe("requirePermission Atlas role map", () => {
   });
 });
 
+describe("requirePermission — remaining role-gated permissions", () => {
+  // Each of these previously had zero test coverage (2026-08-19 audit) — a
+  // future copy-paste mistake in any of these role lists, or an accidental
+  // `||` in place of `&&`, would have shipped undetected.
+
+  it("laboratories:manage — CATALOGUE_MANAGER and SYSTEM_ADMIN only", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["CATALOGUE_MANAGER"]), "laboratories:manage"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["SYSTEM_ADMIN"]), "laboratories:manage"),
+    );
+    assert.throws(
+      () => requirePermission(atlasSession(["FINANCE"]), "laboratories:manage"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("coupons:manage — CATALOGUE_MANAGER, FINANCE, and SYSTEM_ADMIN", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["CATALOGUE_MANAGER"]), "coupons:manage"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["FINANCE"]), "coupons:manage"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["SYSTEM_ADMIN"]), "coupons:manage"),
+    );
+    assert.throws(
+      () => requirePermission(atlasSession(["INTAKE_OFFICER"]), "coupons:manage"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("quality:read — QUALITY_MANAGER, SYSTEM_ADMIN, and DECISION_MAKER", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["QUALITY_MANAGER"]), "quality:read"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["SYSTEM_ADMIN"]), "quality:read"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["DECISION_MAKER"]), "quality:read"),
+    );
+    assert.throws(
+      () => requirePermission(atlasSession(["FINANCE"]), "quality:read"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("audit:read — SYSTEM_ADMIN and QUALITY_MANAGER only, NOT DECISION_MAKER", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["SYSTEM_ADMIN"]), "audit:read"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["QUALITY_MANAGER"]), "audit:read"),
+    );
+    // DECISION_MAKER holds quality:read but must NOT also get audit:read —
+    // the two role lists are similar but deliberately not identical.
+    assert.throws(
+      () => requirePermission(atlasSession(["DECISION_MAKER"]), "audit:read"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("settings:admin and staff:manage — SYSTEM_ADMIN only, not even QUALITY_MANAGER", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["SYSTEM_ADMIN"]), "settings:admin"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["SYSTEM_ADMIN"]), "staff:manage"),
+    );
+    assert.throws(
+      () => requirePermission(atlasSession(["QUALITY_MANAGER"]), "settings:admin"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+    assert.throws(
+      () => requirePermission(atlasSession(["QUALITY_MANAGER"]), "staff:manage"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("credentials:manage — client CLIENT_OWNER/CLIENT_ADMIN manage their own org's credentials, CLIENT_USER cannot", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(clientSession(["CLIENT_OWNER"]), "credentials:manage"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(clientSession(["CLIENT_ADMIN"]), "credentials:manage"),
+    );
+    assert.throws(
+      () => requirePermission(clientSession(["CLIENT_USER"]), "credentials:manage"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("credentials:manage — Atlas staff need on-behalf authority (same roles as requests:create-behalf)", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["INTAKE_OFFICER"]), "credentials:manage"),
+    );
+    assert.throws(
+      () => requirePermission(atlasSession(["EVALUATOR"]), "credentials:manage"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("credentials:reveal — any requests:admin role, never a client", () => {
+    for (const role of [
+      "INTAKE_OFFICER",
+      "EVALUATOR",
+      "TECHNICAL_REVIEWER",
+      "DECISION_MAKER",
+      "SYSTEM_ADMIN",
+      "QUALITY_MANAGER",
+    ] as const) {
+      assert.doesNotThrow(
+        () => requirePermission(atlasSession([role]), "credentials:reveal"),
+        `expected ${role} to be granted credentials:reveal`,
+      );
+    }
+    assert.throws(
+      () => requirePermission(atlasSession(["FINANCE"]), "credentials:reveal"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+    assert.throws(
+      () => requirePermission(clientSession(["CLIENT_OWNER"]), "credentials:reveal"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("clients:read — INTAKE_OFFICER, DECISION_MAKER, FINANCE, SYSTEM_ADMIN, QUALITY_MANAGER, NOT EVALUATOR", () => {
+    for (const role of [
+      "INTAKE_OFFICER",
+      "DECISION_MAKER",
+      "FINANCE",
+      "SYSTEM_ADMIN",
+      "QUALITY_MANAGER",
+    ] as const) {
+      assert.doesNotThrow(
+        () => requirePermission(atlasSession([role]), "clients:read"),
+        `expected ${role} to be granted clients:read`,
+      );
+    }
+    // EVALUATOR works requests day-to-day (requests:admin) but is
+    // deliberately not on the client-roster read list.
+    assert.throws(
+      () => requirePermission(atlasSession(["EVALUATOR"]), "clients:read"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("clients:create and requests:create-behalf — INTAKE_OFFICER and SYSTEM_ADMIN only", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["INTAKE_OFFICER"]), "clients:create"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["SYSTEM_ADMIN"]), "requests:create-behalf"),
+    );
+    assert.throws(
+      () => requirePermission(atlasSession(["DECISION_MAKER"]), "clients:create"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+    assert.throws(
+      () =>
+        requirePermission(atlasSession(["DECISION_MAKER"]), "requests:create-behalf"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("finance:client — client CLIENT_OWNER/CLIENT_ADMIN/CLIENT_FINANCE only, never Atlas staff", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(clientSession(["CLIENT_FINANCE"]), "finance:client"),
+    );
+    assert.throws(
+      () => requirePermission(clientSession(["CLIENT_USER"]), "finance:client"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+    assert.throws(
+      () => requirePermission(atlasSession(["FINANCE"]), "finance:client"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
+  it("catalogue:manage — positive allow for CATALOGUE_MANAGER and SYSTEM_ADMIN", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["CATALOGUE_MANAGER"]), "catalogue:manage"),
+    );
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["SYSTEM_ADMIN"]), "catalogue:manage"),
+    );
+  });
+});
+
 describe("canTransitionRequest fail closed", () => {
   it("returns false for FINANCE-only transitioning to REPORT_ISSUED", () => {
     const session = atlasSession(["FINANCE"]);

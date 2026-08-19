@@ -81,7 +81,7 @@ export const REQUEST_TRANSITIONS: Record<RequestState, RequestState[]> = {
  */
 const SCOC_SERVICE_CODES = ["SAB-002", "SFDA-COS-002"];
 
-function isScocOnlyRequest(serviceCodes: string[]): boolean {
+export function isScocOnlyRequest(serviceCodes: string[]): boolean {
   return serviceCodes.length > 0 && serviceCodes.every((c) => SCOC_SERVICE_CODES.includes(c));
 }
 

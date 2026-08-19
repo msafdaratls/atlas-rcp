@@ -18,6 +18,7 @@ import {
 import { writeAuditLog, requestMeta } from "@/lib/audit";
 import { parsePercentCouponValue } from "@/lib/billing-helpers";
 import { prisma } from "@/lib/db";
+import { evaluationReportLabelsFor } from "@/lib/evaluation-report-labels";
 import { log } from "@/lib/logger";
 import { canTransitionRequest, requirePermission } from "@/lib/rbac";
 import { parseMoneyInput } from "@/lib/pricing";
@@ -36,6 +37,7 @@ import {
   allowedTransitionsFor,
   canReopenRequest,
   isLabTestingOnlyRequest,
+  isScocOnlyRequest,
   NEW_REQUEST_STATES,
   onHoldResumeTarget,
   REOPEN_TARGET_STATES,
@@ -999,6 +1001,50 @@ const decideReopenRequestSchema = z.object({
 });
 
 /**
+ * Reopen bypasses the forward-only REQUEST_TRANSITIONS graph entirely (a
+ * CLOSED/CANCELLED request can resume straight into TECHNICAL_REVIEW or
+ * DECISION — see REOPEN_TARGET_STATES), so it must re-check the same
+ * certification-integrity gates transitionAdminRequest enforces on that
+ * graph, or a request cancelled before evaluation ever started (e.g. while
+ * still ACCEPTED/ASSESSMENT_QUEUED — CANCELLED is reachable from most active
+ * states) could be reopened straight to DECISION and certified with no
+ * evaluation evidence on file at all.
+ */
+async function assertReopenTargetSatisfiesGates(
+  requestId: string,
+  serviceCodes: string[],
+  targetState: RequestState,
+): Promise<"EVALUATION_REPORT_REQUIRED" | "TECHNICAL_REVIEW_CHECKLIST_INCOMPLETE" | null> {
+  if (targetState !== "TECHNICAL_REVIEW" && targetState !== "DECISION") {
+    return null;
+  }
+  if (!(await hasEvaluationReportForAllItems(requestId))) {
+    return "EVALUATION_REPORT_REQUIRED";
+  }
+  if (
+    targetState === "DECISION" &&
+    !isScocOnlyRequest(serviceCodes) &&
+    !isLabTestingOnlyRequest(serviceCodes)
+  ) {
+    const [definition, requestChecklist] = await Promise.all([
+      prisma.technicalReviewChecklist.findUnique({ where: { id: "singleton" } }),
+      prisma.request.findUnique({
+        where: { id: requestId },
+        select: { technicalReviewChecklist: true },
+      }),
+    ]);
+    const checkSets = parseCheckSets(definition?.checkSets);
+    if (hasCheckItems(checkSets)) {
+      const state = parseAssessment(requestChecklist?.technicalReviewChecklist);
+      if (!computeAssessment(checkSets, state).complete) {
+        return "TECHNICAL_REVIEW_CHECKLIST_INCOMPLETE";
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Approves or rejects a client's pending request to reopen a CLOSED/CANCELLED
  * request. Approval requires an active destination stage and moves the
  * request there with a fresh SLA clock; rejection requires an explanation and
@@ -1029,7 +1075,9 @@ export async function decideReopenRequest(
     }
     const request = await prisma.request.findUnique({
       where: { id: reopenRequest.requestId },
-      include: { items: { include: { serviceItem: { select: { slaHours: true } } } } },
+      include: {
+        items: { include: { serviceItem: { select: { slaHours: true, code: true } } } },
+      },
     });
     if (!request) {
       return { ok: false, error: "NOT_FOUND" };
@@ -1042,6 +1090,16 @@ export async function decideReopenRequest(
     }
     if (decision === "APPROVE" && !REOPEN_TARGET_STATES.includes(targetState!)) {
       return { ok: false, error: "INVALID_TARGET_STATE" };
+    }
+    if (decision === "APPROVE") {
+      const gateError = await assertReopenTargetSatisfiesGates(
+        request.id,
+        request.items.map((i) => i.serviceItem.code),
+        targetState!,
+      );
+      if (gateError) {
+        return { ok: false, error: gateError };
+      }
     }
 
     const now = new Date();
@@ -1169,7 +1227,9 @@ export async function reopenRequestByAdmin(
 
     const request = await prisma.request.findUnique({
       where: { id: requestId },
-      include: { items: { include: { serviceItem: { select: { slaHours: true } } } } },
+      include: {
+        items: { include: { serviceItem: { select: { slaHours: true, code: true } } } },
+      },
     });
     if (!request) return { ok: false, error: "NOT_FOUND" };
     if (!canReopenRequest(request.state)) {
@@ -1178,6 +1238,15 @@ export async function reopenRequestByAdmin(
     const requestSlaHours = Math.max(
       ...request.items.map((i) => i.serviceItem.slaHours),
     );
+
+    const gateError = await assertReopenTargetSatisfiesGates(
+      request.id,
+      request.items.map((i) => i.serviceItem.code),
+      targetState,
+    );
+    if (gateError) {
+      return { ok: false, error: gateError };
+    }
 
     const pending = await prisma.requestReopenRequest.findFirst({
       where: { requestId, status: "PENDING" },
@@ -2535,30 +2604,8 @@ export async function uploadActivityReport(formData: FormData): Promise<
   }
 }
 
-/**
- * Marker label identifying an Evaluation Report `RequestDocument` (no
- * `activityId`/`requiredDocumentId` — a request-item-level document distinct
- * from activity reports and client-submitted required documents). Mirrors
- * the `${activity.type} report` label convention `uploadActivityReport`
- * already uses to distinguish document purpose without a dedicated column.
- */
-const DEFAULT_EVALUATION_REPORT_LABEL = "Evaluation Report";
 const EVALUATION_REPORT_ACCEPTED = ["application/pdf", "image/png", "image/jpeg"];
 const EVALUATION_REPORT_MAX_MB = 50;
-
-/**
- * Most services need one generic "Evaluation Report" upload before Complete
- * Evaluation. Cosmetic SCOC (SFDA-COS-002) needs 3 specifically-named
- * documents instead (see EvaluationReportPanel) — keyed by ServiceItem.code
- * so every other service keeps today's single-label behavior unchanged.
- */
-const EVALUATION_REPORT_LABELS: Record<string, string[]> = {
-  "SFDA-COS-002": ["Evaluation Check List", "Inspection Report", "Test Report"],
-};
-
-function evaluationReportLabelsFor(serviceCode: string): string[] {
-  return EVALUATION_REPORT_LABELS[serviceCode] ?? [DEFAULT_EVALUATION_REPORT_LABEL];
-}
 
 /** Every RequestItem on the request has all of its required Evaluation Report documents uploaded. */
 async function hasEvaluationReportForAllItems(requestId: string): Promise<boolean> {

@@ -550,6 +550,8 @@
       "side": "الجانب",
       "sideCredit": "دائن (يخفض المستحق)",
       "sideDebit": "مدين (يزيد المستحق)",
+      "invoiceOptional": "تسوية فاتورة محددة (اختياري)",
+      "invoiceNone": "بدون فاتورة محددة — تسوية في السجل العام فقط",
       "reasonEn": "السبب (إنجليزي) — مطلوب",
       "reasonAr": "السبب (عربي) — مطلوب",
       "postEntry": "ترحيل قيد",
@@ -564,6 +566,8 @@
       "INVALID_PROOF": "الإثبات يجب أن يكون PDF أو PNG أو JPG.",
       "FILE_TOO_LARGE": "الملف يتجاوز الحد الأقصى للحجم.",
       "ALLOCATION_EXCEEDS_PAYMENT": "التوزيع يتجاوز مبلغ الدفعة.",
+      "ALLOCATION_EXCEEDS_INVOICE": "هذا المبلغ يتجاوز الرصيد المتبقي على الفاتورة.",
+      "INVALID_INVOICE_STATUS": "هذه الفاتورة لم تعد مفتوحة — حدّث الصفحة وحاول مجدداً.",
       "UNEXPECTED": "حدث خطأ. المرجع {reference}. حاول مرة أخرى أو تواصل مع الدعم.",
       "INFECTED_FILE": "فشل الملف في الفحص الأمني. ارفع ملفًا آخر.",
       "AV_UNAVAILABLE": "خدمة الفحص الأمني غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل."
@@ -991,6 +995,7 @@
         "markRejected": "وضع علامة مرفوض",
         "rejected": "تم وضع علامة الرفض",
         "rejectedDefaultNote": "مرفوض من المنصة أو المختبر الخارجي.",
+        "rejectedReason": "مرفوض — السبب: {value}",
         "issuedRef": "تم الإصدار — المرجع: {value}",
         "downloadCertificate": "تحميل الشهادة PDF",
         "errors": {

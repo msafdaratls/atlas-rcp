@@ -424,6 +424,25 @@ async function planPromotion(assessmentId: string): Promise<
       withheld: number;
       droppedCodes: string[];
       priorDataExists: boolean;
+      /** Frozen-at-promotion-time record for LabelReport.snapshot — see promoteToOfficialChecklist. */
+      snapshot: {
+        kbVersionId: string;
+        finalVerdict: string | null;
+        overallRate: number | null;
+        classification: {
+          detectedCategoryCode: string | null;
+          overrideCategoryCode: string | null;
+          rationale: string | null;
+        } | null;
+        fields: Array<{ fieldKey: string; valueEn: string | null; valueAr: string | null }>;
+        verdicts: Array<{
+          ruleCode: string;
+          verdict: string;
+          autoOrManual: string;
+          evidenceText: string | null;
+          rationale: string | null;
+        }>;
+      };
     }
 > {
   const assessment = await prisma.labelAssessment.findUnique({
@@ -433,6 +452,16 @@ async function planPromotion(assessmentId: string): Promise<
       status: true,
       domain: true,
       requestItemId: true,
+      kbVersionId: true,
+      finalVerdict: true,
+      overallRate: true,
+      classification: {
+        select: { detectedCategoryCode: true, overrideCategoryCode: true, rationale: true },
+      },
+      fields: {
+        where: { confirmedAt: { not: null } },
+        select: { fieldKey: true, valueEn: true, valueAr: true },
+      },
       verdicts: { include: { kbRule: { select: { code: true } } } },
     },
   });
@@ -469,7 +498,31 @@ async function planPromotion(assessmentId: string): Promise<
   const priorState = parseAssessment(item.assessment);
   const priorDataExists = Object.keys(priorState.verdicts ?? {}).length > 0;
 
-  return { ok: true, domain: assessment.domain, requestItemId: assessment.requestItemId, verdicts, withheld, droppedCodes, priorDataExists };
+  const snapshot = {
+    kbVersionId: assessment.kbVersionId,
+    finalVerdict: assessment.finalVerdict,
+    overallRate: assessment.overallRate,
+    classification: assessment.classification,
+    fields: assessment.fields,
+    verdicts: assessment.verdicts.map((v) => ({
+      ruleCode: v.kbRule.code,
+      verdict: v.verdict,
+      autoOrManual: v.autoOrManual,
+      evidenceText: v.evidenceText,
+      rationale: v.rationale,
+    })),
+  };
+
+  return {
+    ok: true,
+    domain: assessment.domain,
+    requestItemId: assessment.requestItemId,
+    verdicts,
+    withheld,
+    droppedCodes,
+    priorDataExists,
+    snapshot,
+  };
 }
 
 /**
@@ -525,14 +578,25 @@ export async function promoteToOfficialChecklist(
     // Refuse rather than silently under-write (§13.3 constraint #2).
     if (plan.droppedCodes.length > 0) return { ok: false, error: `CODE_MISMATCH:${plan.droppedCodes.join(",")}` };
 
-    const { domain, requestItemId, verdicts, withheld } = plan;
+    const { domain, requestItemId, verdicts, withheld, snapshot } = plan;
     const result = await saveAssessment({ requestItemId, verdicts });
     if (!result.ok) return result;
 
+    // snapshot freezes fields + verdicts + classification + kbVersion as of
+    // the moment promotion happened (schema's own documented contract for
+    // this column) — built by planPromotion from the exact same read that
+    // determined what got promoted, so it can never disagree with the
+    // checklist it's a record of. Re-written on every promotion (including a
+    // re-promotion after a resubmission) so it always reflects the latest.
     await prisma.labelReport.upsert({
       where: { assessmentId },
-      create: { assessmentId, snapshot: {}, promotedAt: new Date(), promotedByUserId: session.id },
-      update: { promotedAt: new Date(), promotedByUserId: session.id },
+      create: {
+        assessmentId,
+        snapshot,
+        promotedAt: new Date(),
+        promotedByUserId: session.id,
+      },
+      update: { snapshot, promotedAt: new Date(), promotedByUserId: session.id },
     });
 
     await writeAuditLog({

@@ -52,7 +52,17 @@ export function isInAppOnlyEvent(type: string): boolean {
   return IN_APP_ONLY_EVENTS.includes(type as NotificationEventType);
 }
 
-/** Events shown on the company notification preferences grid. */
+/**
+ * Events shown on the company notification preferences grid.
+ *
+ * SLA_AT_RISK/SLA_BREACHED are deliberately excluded even though they're
+ * real notification events: per the design doc, their recipients are always
+ * "assignee + queue managers" — Atlas staff only, never a client user (see
+ * resolveRecipients in server/notifications/recipients.ts). A client toggling
+ * this preference has no effect since no client ever receives the
+ * notification either way — this was a leftover from an old `SLA_WARNING`
+ * key rename, not an intentionally client-facing preference.
+ */
 export const PREFERENCE_EVENTS = NOTIFICATION_EVENTS.filter((e) =>
   [
     "REQUEST_RECEIVED",
@@ -60,7 +70,6 @@ export const PREFERENCE_EVENTS = NOTIFICATION_EVENTS.filter((e) =>
     "REPORT_ISSUED",
     "CERTIFICATE_REFUSED",
     "REQUEST_CLOSED",
-    "SLA_AT_RISK",
     "INVOICE_ISSUED",
     "PAYMENT_RECEIVED",
     "PAYMENT_REJECTED",

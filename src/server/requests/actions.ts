@@ -79,6 +79,18 @@ async function assertWithinCreditLimit(
   orgId: string,
   upcomingTotal: Prisma.Decimal,
 ): Promise<void> {
+  // Row-lock the organisation before reading its ledger balance — without
+  // this, two submissions for the same org racing within the same
+  // transaction window (two tabs, or a fast double-submit) can each read the
+  // balance before either commits its invoice/ledger debit, so both pass the
+  // check even though their combined total pushes the org over its limit.
+  // The lock serializes concurrent callers on this org so the second one
+  // sees the first's committed debit before evaluating its own.
+  const lockedOrg = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "Organisation" WHERE id = ${orgId} FOR UPDATE
+  `;
+  if (!lockedOrg[0]) return;
+
   const org = await tx.organisation.findUnique({ where: { id: orgId } });
   if (!org) return;
 
@@ -657,16 +669,24 @@ export async function applyCouponToDraft(
 
     const coupon = await prisma.coupon.findUnique({
       where: { code },
-      select: { stackable: true },
+      select: { id: true },
     });
     if (!coupon) return { ok: false, error: "NOT_FOUND" };
 
-    if (
-      draft.couponCode &&
-      draft.couponCode !== code &&
-      coupon.stackable === false
-    ) {
-      return { ok: false, error: "NON_STACKABLE" };
+    // Only one coupon can ever be applied to a request at a time
+    // (Request.couponCode is a single field), so `stackable` here means
+    // "may this coupon be swapped for a different one," not "may multiple
+    // coupons combine." That's a property of the coupon CURRENTLY applied,
+    // not the incoming one — a non-stackable coupon must be explicitly
+    // removed (removeCouponFromDraft) before another can replace it.
+    if (draft.couponCode && draft.couponCode !== code) {
+      const current = await prisma.coupon.findUnique({
+        where: { code: draft.couponCode },
+        select: { stackable: true },
+      });
+      if (current?.stackable === false) {
+        return { ok: false, error: "NON_STACKABLE" };
+      }
     }
 
     const updated = await prisma.request.updateMany({
@@ -1290,67 +1310,74 @@ export async function submitRequest(
         });
       }
 
-      const { notify } = await import("@/server/notifications/notify");
-      const { notificationCopy } = await import("@/server/notifications/copy");
-      await notify(
-        {
-          event: "REQUEST_SUBMITTED",
-          data: {
-            requestId: updated.id,
-            requestNo: updated.requestNo,
-            state: "SUBMITTED",
-            link: `/admin/requests/${updated.id}`,
-            organisationId: orgId,
-            createdByUserId: session.id,
-            ...notificationCopy("REQUEST_SUBMITTED", {
-              requestNo: updated.requestNo,
-              customerNameEn: org.nameEn,
-              customerNameAr: org.nameAr,
-              serviceNameEn: draft.items[0]?.serviceItem.nameEn ?? "",
-              serviceNameAr: draft.items[0]?.serviceItem.nameAr ?? "",
-            }),
-          },
-        },
-        tx,
-      );
-
-      await notify(
-        {
-          event: "REQUEST_RECEIVED",
-          data: {
-            requestId: updated.id,
-            requestNo: updated.requestNo,
-            state: "SUBMITTED",
-            link: `/client/requests/${updated.id}`,
-            organisationId: orgId,
-            createdByUserId: session.id,
-            ...notificationCopy("REQUEST_RECEIVED", {
-              requestNo: updated.requestNo,
-              slaHours: String(slaHours),
-            }),
-          },
-        },
-        tx,
-      );
-
-      if (invoiceNo && invoiceId) {
+      try {
+        const { notify } = await import("@/server/notifications/notify");
+        const { notificationCopy } = await import("@/server/notifications/copy");
         await notify(
           {
-            event: "INVOICE_ISSUED",
+            event: "REQUEST_SUBMITTED",
             data: {
               requestId: updated.id,
               requestNo: updated.requestNo,
-              link: `/client/statement?invoice=${invoiceId}`,
+              state: "SUBMITTED",
+              link: `/admin/requests/${updated.id}`,
               organisationId: orgId,
-              ...notificationCopy("INVOICE_ISSUED", {
-                invoiceNo,
+              createdByUserId: session.id,
+              ...notificationCopy("REQUEST_SUBMITTED", {
                 requestNo: updated.requestNo,
-                amount: toNumber(breakdown.total).toFixed(2),
+                customerNameEn: org.nameEn,
+                customerNameAr: org.nameAr,
+                serviceNameEn: draft.items[0]?.serviceItem.nameEn ?? "",
+                serviceNameAr: draft.items[0]?.serviceItem.nameAr ?? "",
               }),
             },
           },
           tx,
         );
+
+        await notify(
+          {
+            event: "REQUEST_RECEIVED",
+            data: {
+              requestId: updated.id,
+              requestNo: updated.requestNo,
+              state: "SUBMITTED",
+              link: `/client/requests/${updated.id}`,
+              organisationId: orgId,
+              createdByUserId: session.id,
+              ...notificationCopy("REQUEST_RECEIVED", {
+                requestNo: updated.requestNo,
+                slaHours: String(slaHours),
+              }),
+            },
+          },
+          tx,
+        );
+
+        if (invoiceNo && invoiceId) {
+          await notify(
+            {
+              event: "INVOICE_ISSUED",
+              data: {
+                requestId: updated.id,
+                requestNo: updated.requestNo,
+                link: `/client/statement?invoice=${invoiceId}`,
+                organisationId: orgId,
+                ...notificationCopy("INVOICE_ISSUED", {
+                  invoiceNo,
+                  requestNo: updated.requestNo,
+                  amount: toNumber(breakdown.total).toFixed(2),
+                }),
+              },
+            },
+            tx,
+          );
+        }
+      } catch (error) {
+        log.error("requests.submit", "notification delivery failed", {
+          requestId: updated.id,
+          error: error instanceof Error ? error.message : "unknown",
+        });
       }
 
       await tx.auditLog.create({
@@ -1623,51 +1650,58 @@ export async function resubmitReturnedRequest(
         });
       }
 
-      const { notify } = await import("@/server/notifications/notify");
-      const { notificationCopy } = await import("@/server/notifications/copy");
-      await notify(
-        {
-          event: "REQUEST_RESUBMITTED",
-          data: {
-            requestId: row.id,
-            requestNo: row.requestNo,
-            state: "UNDER_INTAKE_REVIEW",
-            link: `/admin/requests/${row.id}`,
-            organisationId: orgId,
-            createdByUserId: session.id,
-            assignedToUserId: reviewerStillActive
-              ? request.assignedToUserId
-              : null,
-            ...notificationCopy("REQUEST_RESUBMITTED", {
-              requestNo: row.requestNo,
-              customerNameEn: org.nameEn,
-              customerNameAr: org.nameAr,
-              serviceNameEn: request.items[0]?.serviceItem.nameEn ?? "",
-              serviceNameAr: request.items[0]?.serviceItem.nameAr ?? "",
-            }),
-          },
-        },
-        tx,
-      );
-
-      if (invoiceNo && invoiceId) {
+      try {
+        const { notify } = await import("@/server/notifications/notify");
+        const { notificationCopy } = await import("@/server/notifications/copy");
         await notify(
           {
-            event: "INVOICE_ISSUED",
+            event: "REQUEST_RESUBMITTED",
             data: {
               requestId: row.id,
               requestNo: row.requestNo,
-              link: `/client/statement?invoice=${invoiceId}`,
+              state: "UNDER_INTAKE_REVIEW",
+              link: `/admin/requests/${row.id}`,
               organisationId: orgId,
-              ...notificationCopy("INVOICE_ISSUED", {
-                invoiceNo,
+              createdByUserId: session.id,
+              assignedToUserId: reviewerStillActive
+                ? request.assignedToUserId
+                : null,
+              ...notificationCopy("REQUEST_RESUBMITTED", {
                 requestNo: row.requestNo,
-                amount: toNumber(breakdown.total).toFixed(2),
+                customerNameEn: org.nameEn,
+                customerNameAr: org.nameAr,
+                serviceNameEn: request.items[0]?.serviceItem.nameEn ?? "",
+                serviceNameAr: request.items[0]?.serviceItem.nameAr ?? "",
               }),
             },
           },
           tx,
         );
+
+        if (invoiceNo && invoiceId) {
+          await notify(
+            {
+              event: "INVOICE_ISSUED",
+              data: {
+                requestId: row.id,
+                requestNo: row.requestNo,
+                link: `/client/statement?invoice=${invoiceId}`,
+                organisationId: orgId,
+                ...notificationCopy("INVOICE_ISSUED", {
+                  invoiceNo,
+                  requestNo: row.requestNo,
+                  amount: toNumber(breakdown.total).toFixed(2),
+                }),
+              },
+            },
+            tx,
+          );
+        }
+      } catch (error) {
+        log.error("requests.resubmit", "notification delivery failed", {
+          requestId: row.id,
+          error: error instanceof Error ? error.message : "unknown",
+        });
       }
 
       await tx.auditLog.create({

@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { evaluationReportLabelsFor } from "@/lib/evaluation-report-labels";
 import { cn } from "@/lib/utils";
 import { uploadEvaluationReport } from "@/server/admin/actions";
 import type { AdminRequestDetailItem } from "@/server/admin/queries";
@@ -11,24 +12,6 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 type Document = AdminRequestDetailItem["documents"][number];
-
-const DEFAULT_EVALUATION_REPORT_LABEL = "Evaluation Report";
-
-/**
- * Most services need one generic "Evaluation Report" upload before Complete
- * Evaluation. Cosmetic SCOC (SFDA-COS-002) needs 3 specifically-named
- * documents instead. Kept in sync with the identical map in
- * `src/server/admin/actions.ts` (`EVALUATION_REPORT_LABELS`), which is the
- * source of truth enforced server-side — this copy only drives what the
- * panel renders.
- */
-const EVALUATION_REPORT_LABELS: Record<string, string[]> = {
-  "SFDA-COS-002": ["Evaluation Check List", "Inspection Report", "Test Report"],
-};
-
-function evaluationReportLabelsFor(serviceCode: string): string[] {
-  return EVALUATION_REPORT_LABELS[serviceCode] ?? [DEFAULT_EVALUATION_REPORT_LABEL];
-}
 
 type Props = {
   requestItemId: string;
@@ -144,7 +127,7 @@ function statusBadge(uploaded: boolean, t: ReturnType<typeof useTranslations>) {
  * server-side (`EVALUATION_REPORT_REQUIRED` gate on ASSESSMENT_RUNNING ->
  * TECHNICAL_REVIEW/DECISION) — this panel is where the Evaluator satisfies
  * it. Renders one upload control per required document label for the item's
- * service (see EVALUATION_REPORT_LABELS above): a single plain slot for most
+ * service (see evaluationReportLabelsFor, `@/lib/evaluation-report-labels`): a single plain slot for most
  * services (identical to the original single-document layout), or several
  * individually-labeled slots for services like Cosmetic SCOC that need more
  * than one specific document.

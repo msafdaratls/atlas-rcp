@@ -197,8 +197,18 @@ const GSO_1943_MAPPING: Record<string, GsoMapping> = {
   "RULE-GSO1943-5.8-01": { kind: "presence", fieldKey: ["product_function", "directions"], matchMode: "all" },
   "RULE-GSO1943-6.0-01": { kind: "requires_additional_data", explanation: "Packaging-material safety (chemical compatibility with contents) requires spec/lab data." },
   "RULE-GSO1943-5.5-01A": { kind: "presence", fieldKey: "mfg_date" },
-  "RULE-GSO1943-5.5-01B": { kind: "presence", fieldKey: "exp_date" },
-  "RULE-GSO1943-5.5-01C": { kind: "presence", fieldKey: "pao" },
+  // 01B and 01C are mutually exclusive by the product's actual shelf life
+  // (≤30 months requires expiry date; >30 months requires PAO instead) —
+  // that duration is a formulation fact, not derivable from label artwork,
+  // so neither sub-rule can be safely force-fit onto an unconditional
+  // presence check on its own field (that would fail every product on
+  // whichever field doesn't apply to its real shelf life). The parent rule
+  // RULE-GSO1943-5.5-01 above already enforces the field-level requirement
+  // correctly (`matchMode: "any"` on exp_date/pao) — these two stay routed
+  // to manual review for the shelf-life-conditional determination itself,
+  // same reasoning as 01D immediately below.
+  "RULE-GSO1943-5.5-01B": { kind: "requires_additional_data", explanation: "Mandatory only when shelf life is ≤30 months — that duration isn't derivable from label artwork alone; needs a reviewer to confirm applicability." },
+  "RULE-GSO1943-5.5-01C": { kind: "requires_additional_data", explanation: "Mandatory only when shelf life is >30 months — that duration isn't derivable from label artwork alone; needs a reviewer to confirm applicability." },
   "RULE-GSO1943-5.5-01D": { kind: "requires_additional_data", explanation: "PAO-exemption eligibility (sealed/single-use/pH extreme) depends on formulation data not on the label." },
   "RULE-GSO1943-5.6-01A": { kind: "presence", fieldKey: "warnings" },
   "RULE-GSO1943-5.6-01B": { kind: "requires_additional_data", explanation: "Professional-use warning only applies to professional-use products — needs a reviewer to confirm applicability before checking presence." },

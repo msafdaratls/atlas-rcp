@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { writeAuditLog, requestMeta } from "@/lib/audit";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac";
 import { resolveRequestContext } from "@/lib/request-context";
@@ -157,20 +158,55 @@ export async function deactivateCredential(
   }
 }
 
+const revealCredentialSchema = z.object({
+  credentialId: z.string().min(1),
+  /**
+   * The request item the caller is currently working (e.g. an evaluator
+   * logging into a client's SABER/GHAD account to progress a specific
+   * request). Required so the credential can only be revealed in the
+   * context of a request it's actually attached to — see the scoping check
+   * below.
+   */
+  requestItemId: z.string().min(1),
+});
+
 /**
  * Staff-only: decrypts a credential's plaintext so it can be used to log
  * into the client's actual GHAD/SABER/FASAH account. Every call is
  * audit-logged — this is the action the on-behalf-of audit trail exists for.
+ *
+ * Scoped to a specific `RequestItem` rather than looked up by
+ * `credentialId` alone: a credential can only ever be attached to a
+ * `RequestItem` belonging to the same organisation (enforced in
+ * `saveDraftProductDetails`), so requiring the credential to match the
+ * given item's `platformCredentialId` transitively guarantees the caller
+ * can't decrypt an arbitrary other client's credential by id alone.
  */
 export async function revealCredential(
-  credentialId: string,
+  input: unknown,
 ): Promise<ActionResult<{ loginIdentifier: string; secret: string }>> {
   try {
     const session = await requireSession();
     requirePermission(session, "credentials:reveal");
 
+    const parsed = revealCredentialSchema.safeParse(input);
+    if (!parsed.success) {
+      return { ok: false, error: "VALIDATION" };
+    }
+
+    const requestItem = await prisma.requestItem.findUnique({
+      where: { id: parsed.data.requestItemId },
+      select: { platformCredentialId: true },
+    });
+    if (
+      !requestItem ||
+      requestItem.platformCredentialId !== parsed.data.credentialId
+    ) {
+      return { ok: false, error: "NOT_FOUND" };
+    }
+
     const credential = await prisma.platformCredential.findUnique({
-      where: { id: credentialId },
+      where: { id: parsed.data.credentialId },
       select: {
         id: true,
         organisationId: true,

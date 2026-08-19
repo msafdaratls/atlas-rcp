@@ -196,7 +196,7 @@ export function ExternalDeliverablePanel({
         </span>
       </div>
 
-      {editable && status !== "ISSUED" && isScoc && !deliverable ? (
+      {editable && isScoc && (status === "PENDING_SUBMISSION" || status === "REJECTED") ? (
         <div className="space-y-3">
           <div>
             <Label className="text-xs">{t("scocChecklistTitle")}</Label>
@@ -242,7 +242,7 @@ export function ExternalDeliverablePanel({
             ) : (
               <Send className="size-4" />
             )}
-            {t("submit")}
+            {deliverable ? t("resubmit") : t("submit")}
           </Button>
         </div>
       ) : null}
@@ -376,6 +376,12 @@ export function ExternalDeliverablePanel({
       {status === "ISSUED" && deliverable?.externalRefValue ? (
         <p className="text-xs font-medium text-state-ok">
           {t("issuedRef", { value: deliverable.externalRefValue })}
+        </p>
+      ) : null}
+
+      {status === "REJECTED" && deliverable?.notes ? (
+        <p className="text-xs font-medium text-state-error">
+          {t("rejectedReason", { value: deliverable.notes })}
         </p>
       ) : null}
 

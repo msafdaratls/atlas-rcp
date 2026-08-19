@@ -89,6 +89,29 @@ export async function createDraftKbVersion(input: {
   });
 }
 
+/**
+ * Deterministic JSON stringify — sorts object keys recursively so two
+ * semantically identical payloads always compare equal regardless of
+ * property order. Needed because Postgres jsonb does not preserve object key
+ * order on round-trip (the same gotcha already hit once in this codebase —
+ * see attr-schema.ts's `sortOrder` comment): a plain `JSON.stringify`
+ * comparison would report a rule as "changed" purely because jsonb happened
+ * to return its payload keys in a different order, not because anything
+ * about the rule actually changed.
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    return `{${keys
+      .map((k) => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 /** Diffs a DRAFT version's rule codes against the domain's current ACTIVE version, if any. */
 export async function diffAgainstActive(domain: LabelEvalDomain, draftVersionId: string): Promise<KbDiffResult> {
   const [draftRules, active] = await Promise.all([
@@ -119,7 +142,7 @@ export async function diffAgainstActive(domain: LabelEvalDomain, draftVersionId:
   const changedCodes = [...draftByCode.keys()].filter((c) => {
     const prev = activeByCode.get(c);
     if (!prev) return false;
-    return JSON.stringify(prev.payload) !== JSON.stringify(draftByCode.get(c)!.payload);
+    return stableStringify(prev.payload) !== stableStringify(draftByCode.get(c)!.payload);
   });
 
   const [lookupCountBefore, lookupCountAfter] = await Promise.all([
