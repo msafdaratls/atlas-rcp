@@ -1,6 +1,24 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "playwright";
+import { type Browser, chromium } from "playwright";
+
+let browserPromise: Promise<Browser> | null = null;
+
+/**
+ * One warm Chromium instance per process instead of launching fresh per PDF
+ * (~200-500ms + ~100-300MB RSS each) — relaunches only if the cached browser
+ * has crashed/disconnected. Each render still gets its own isolated
+ * BrowserContext (closed per call) so concurrent renders never share state.
+ */
+async function getBrowser(): Promise<Browser> {
+  if (browserPromise) {
+    const browser = await browserPromise;
+    if (browser.isConnected()) return browser;
+    browserPromise = null;
+  }
+  browserPromise = chromium.launch({ headless: true });
+  return browserPromise;
+}
 
 async function fontFace(family: string, fileName: string, weight: number) {
   const filePath = path.join(process.cwd(), "src/fonts", fileName);
@@ -28,9 +46,10 @@ export async function embeddedFontCss(): Promise<string> {
  * (see embeddedFontCss) — never fetch fonts from a CDN at render time.
  */
 export async function htmlToPdf(html: string): Promise<Buffer> {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await getBrowser();
+  const context = await browser.newContext();
   try {
-    const page = await browser.newPage();
+    const page = await context.newPage();
     await page.setContent(html, { waitUntil: "networkidle" });
     const pdf = await page.pdf({
       format: "A4",
@@ -39,6 +58,6 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
     });
     return Buffer.from(pdf);
   } finally {
-    await browser.close();
+    await context.close();
   }
 }
