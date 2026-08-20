@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   FilePlus2,
+  Files,
   FileSearch,
   FileText,
   FlaskConical,
@@ -97,6 +98,12 @@ const ADMIN_NAV: NavItem[] = [
     key: "requests",
     href: "/requests",
     icon: ClipboardList,
+    roles: REQUESTS_ADMIN_ROLES,
+  },
+  {
+    key: "documents",
+    href: "/documents",
+    icon: Files,
     roles: REQUESTS_ADMIN_ROLES,
   },
   {
