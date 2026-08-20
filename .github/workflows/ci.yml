@@ -30,3 +30,12 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Matches the Dockerfile's build stage: AUTH_SECRET is only read at
+          # runtime, so a placeholder is fine here too. No DATABASE_URL is
+          # needed — prisma generate (above) doesn't touch a live DB, and the
+          # build never queries one for this app's fully dynamic routes.
+          AUTH_SECRET: build-time-placeholder
