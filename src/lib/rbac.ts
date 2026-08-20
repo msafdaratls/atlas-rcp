@@ -75,6 +75,7 @@ export function requirePermission(
     | "audit:read"
     | "settings:admin"
     | "staff:manage"
+    | "system:health"
     | "credentials:manage"
     | "credentials:reveal"
     | "assistant:use",
@@ -187,6 +188,7 @@ export function requirePermission(
       return;
     case "settings:admin":
     case "staff:manage":
+    case "system:health":
       if (!isAtlas || !hasRole(session, "SYSTEM_ADMIN")) {
         throw new Error("FORBIDDEN");
       }

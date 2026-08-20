@@ -12,6 +12,7 @@ import {
   FileText,
   FlaskConical,
   FolderKanban,
+  HeartPulse,
   Headphones,
   LayoutDashboard,
   type LucideIcon,
@@ -168,6 +169,12 @@ const ADMIN_NAV: NavItem[] = [
   },
   // Overview analytics — any Atlas (same as dashboard)
   { key: "analytics", href: "/analytics", icon: BarChart3 },
+  {
+    key: "systemHealth",
+    href: "/system-health",
+    icon: HeartPulse,
+    roles: ["SYSTEM_ADMIN"],
+  },
   {
     key: "settings",
     href: "/settings",

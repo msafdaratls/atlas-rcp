@@ -203,6 +203,20 @@ describe("requirePermission — remaining role-gated permissions", () => {
     );
   });
 
+  it("system:health — SYSTEM_ADMIN only, not even QUALITY_MANAGER", () => {
+    assert.doesNotThrow(() =>
+      requirePermission(atlasSession(["SYSTEM_ADMIN"]), "system:health"),
+    );
+    assert.throws(
+      () => requirePermission(atlasSession(["QUALITY_MANAGER"]), "system:health"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+    assert.throws(
+      () => requirePermission(clientSession(["CLIENT_OWNER"]), "system:health"),
+      (err: unknown) => err instanceof Error && err.message === "FORBIDDEN",
+    );
+  });
+
   it("credentials:manage — client CLIENT_OWNER/CLIENT_ADMIN manage their own org's credentials, CLIENT_USER cannot", () => {
     assert.doesNotThrow(() =>
       requirePermission(clientSession(["CLIENT_OWNER"]), "credentials:manage"),
