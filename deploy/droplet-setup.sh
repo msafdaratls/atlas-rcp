@@ -37,6 +37,26 @@ fi
 echo "==> Building and starting the stack…"
 docker compose -f docker-compose.prod.yml up -d --build
 
+# ── Daily backups: installed here, not left as a manual step ────────────────
+# backup-uploads.sh is a no-op error (exit 1, nothing written) if no
+# atlas_uploads volume exists — harmless when STORAGE_DRIVER=spaces, but it
+# still means a bad STORAGE_DRIVER config fails loudly in cron mail instead
+# of silently having no backup at all.
+echo "==> Installing daily backup cron (03:15, keeps 14 days in /opt/backups)…"
+REPO_DIR="$(pwd)"
+chmod +x deploy/backup-db.sh deploy/backup-uploads.sh
+CRON_MARKER="# atlas-coc daily backups"
+if ! crontab -l 2>/dev/null | grep -qF "$CRON_MARKER"; then
+  (
+    crontab -l 2>/dev/null
+    echo "$CRON_MARKER"
+    echo "15 3 * * * $REPO_DIR/deploy/backup-db.sh"
+    echo "20 3 * * * $REPO_DIR/deploy/backup-uploads.sh"
+  ) | crontab -
+else
+  echo "    (backup cron already installed — leaving crontab as-is)"
+fi
+
 echo
 echo "==> Done. Watch startup with:"
 echo "    docker compose -f docker-compose.prod.yml logs -f"

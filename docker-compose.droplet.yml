@@ -4,12 +4,18 @@
 #
 # The app listens only on 127.0.0.1:3000 — the host's existing reverse proxy
 # adds a vhost for coc.atls.com.sa that proxies to it, and certbot handles TLS.
-# Uploaded documents persist in a named Docker volume (local disk).
 #
 #   cp .env.example .env    # set AUTH_SECRET, AUTH_URL=https://coc.atls.com.sa, …
 #   docker compose -f docker-compose.droplet.yml up -d --build
 #
 # Apply DB migrations run automatically on app start. Health: GET /api/health.
+#
+# STORAGE_DRIVER is intentionally left to `.env`, NOT hardcoded here — set it
+# to "spaces" for durable uploads (recommended for production; see
+# .env.example). If left at the "local" default, uploaded documents land in
+# the `atlas_uploads` volume below, which lives only on this droplet's disk
+# and is NOT covered by `deploy/backup-db.sh` (Postgres only) — pair it with
+# `deploy/backup-uploads.sh`, or switch to Spaces, before relying on it.
 
 services:
   db:
@@ -37,8 +43,8 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atlas_rcp}?schema=public
-      # Local-disk storage inside the persisted volume below.
-      STORAGE_DRIVER: local
+      # Only used when .env sets STORAGE_DRIVER=local (the default); ignored
+      # when STORAGE_DRIVER=spaces. Points at the persisted volume below.
       STORAGE_ROOT: /app/storage/uploads
     env_file:
       - .env

@@ -84,29 +84,57 @@ docker compose -f docker-compose.prod.yml exec db \
   pg_dump -U postgres atlas_rcp > backup-$(date +%F).sql
 ```
 
-### Automated daily backups (bundled Postgres only)
+### Automated daily backups
 
-`deploy/backup-db.sh` dumps the `db` container's database to `/opt/backups`
-(gzip, reads `POSTGRES_USER`/`POSTGRES_DB` from the container itself, no
-secrets in the script) and prunes anything older than 14 days. Install once:
+`./deploy/droplet-setup.sh` installs both backup crons for you (03:15 DB,
+03:20 uploads) — this section is only for a droplet that was already set up
+before that step existed, or for re-installing by hand:
+
+- `deploy/backup-db.sh` dumps the `db` container's database to `/opt/backups`
+  (gzip, reads `POSTGRES_USER`/`POSTGRES_DB` from the container itself, no
+  secrets in the script) and prunes anything older than 14 days. Skip this one
+  if you've moved to Managed Postgres — it backs up on its own.
+- `deploy/backup-uploads.sh` tars the `atlas_uploads` volume the same way —
+  **only relevant when `STORAGE_DRIVER=local`** (the default). If you're on
+  `STORAGE_DRIVER=spaces` there's no local volume to back up and this script
+  exits with an error saying so; that's expected, not a bug.
 
 ```bash
-chmod +x deploy/backup-db.sh
-(crontab -l 2>/dev/null; echo "15 3 * * * $(pwd)/deploy/backup-db.sh") | crontab -
+chmod +x deploy/backup-db.sh deploy/backup-uploads.sh
+(
+  crontab -l 2>/dev/null
+  echo "15 3 * * * $(pwd)/deploy/backup-db.sh"
+  echo "20 3 * * * $(pwd)/deploy/backup-uploads.sh"
+) | crontab -
 ```
 
-Adjust the container name inside the script if you're not using the default
-`coc-db-1` / `atlas-db-1` naming from `docker-compose.droplet.yml` or
+Both scripts auto-detect the container/volume name (matching `...-db-1` /
+`...atlas_uploads` regardless of the Compose project prefix), so they work
+unmodified against either `docker-compose.droplet.yml` or
 `docker-compose.prod.yml`.
+
+**Either way, back up is not the same as durable.** Both scripts write to
+`/opt/backups` on the *same droplet* as the data they're backing up — a disk
+failure takes out both copies together. Copy `/opt/backups` off-droplet on a
+schedule (e.g. `rclone`/`s3cmd` to a DigitalOcean Space) once this is running,
+or better: move Postgres to Managed Postgres and uploads to Spaces, and this
+whole section stops mattering.
 
 ## Production hardening (recommended)
 
 - **Managed Postgres** — swap the bundled `db` service for DigitalOcean Managed
   Postgres (automated backups + pooling): set `DATABASE_URL` in `.env`, delete the
   `db` service and `depends_on` in `docker-compose.prod.yml`.
-- **Storage** — keep `STORAGE_DRIVER=spaces`; the local disk is wiped on redeploy.
+- **Storage** — set `STORAGE_DRIVER=spaces` in `.env`; the local disk isn't
+  durable (wiped on volume loss, and only backed up if you've installed
+  `backup-uploads.sh`). Neither compose file hardcodes the driver, so this is
+  a pure `.env` change plus filling in `SPACES_*`.
 - **Antivirus** — set `AV_DRIVER=clamav` + a clamd sidecar to scan uploads.
-- **Errors** — wire Sentry into `logger.error` (`src/lib/logger.ts`).
+- **Errors** — wire Sentry (or equivalent) into `logger.error`
+  (`src/lib/logger.ts`). Until then, `/admin/system-health`
+  (`system:health` permission, SYSTEM_ADMIN only) surfaces notification and
+  label-eval jobs that exhausted their retries — it's a stopgap, not a
+  replacement for real alerting.
 - **Firewall** — the setup script leaves only SSH/80/443 open; Postgres is on the
   internal Docker network only (never published to the host in prod compose).
 
