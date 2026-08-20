@@ -1,26 +1,19 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
+import { getAnthropicClient } from "@/lib/anthropic-client";
 import { log } from "@/lib/logger";
 
 /**
- * Shared Claude client + structured-output helper for the three AI-assisted
- * steps in this feature (extraction, judgment-proposal, cosmetics
- * classification — see the label-evaluator design doc §10 "cost guards").
- * Server-side only — never imported by client code. `new Anthropic()`
- * resolves ANTHROPIC_API_KEY from the environment; callers are expected to
- * check `process.env.ANTHROPIC_API_KEY` before calling in (each call site
- * fails closed to its existing manual/deterministic behavior when unset, per
+ * Structured-output helper for the three AI-assisted steps in this feature
+ * (extraction, judgment-proposal, cosmetics classification — see the
+ * label-evaluator design doc §10 "cost guards"). Server-side only — never
+ * imported by client code. Callers are expected to check
+ * `process.env.ANTHROPIC_API_KEY` before calling in (each call site fails
+ * closed to its existing manual/deterministic behavior when unset, per
  * extraction/provider.ts's existing pattern — this module does not itself
  * decide what "unset" means for any given feature).
  */
-
-let cachedClient: Anthropic | null = null;
-
-function getClient(): Anthropic {
-  if (!cachedClient) cachedClient = new Anthropic();
-  return cachedClient;
-}
 
 export type StructuredCallInput<T> = {
   /** Logger scope + usage-log tag, e.g. "label-eval.extraction". */
@@ -42,7 +35,7 @@ export type StructuredCallInput<T> = {
  * pattern already used by the extraction job's own retry/backoff.
  */
 export async function callStructured<T>(input: StructuredCallInput<T>): Promise<T> {
-  const message = await getClient().messages.parse({
+  const message = await getAnthropicClient().messages.parse({
     model: input.model,
     max_tokens: input.maxTokens ?? 8000,
     ...(input.system ? { system: input.system } : {}),

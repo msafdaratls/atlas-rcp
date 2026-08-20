@@ -199,15 +199,16 @@ model Organisation {
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
-  users               User[]
-  requests            Request[]
-  invoices            Invoice[]
-  ledgerEntries       LedgerEntry[]
-  payments            Payment[]
-  couponRedemptions   CouponRedemption[]
-  auditLogs           AuditLog[]
-  platformCredentials PlatformCredential[]
-  engagements         Engagement[]
+  users                  User[]
+  requests               Request[]
+  invoices               Invoice[]
+  ledgerEntries          LedgerEntry[]
+  payments               Payment[]
+  couponRedemptions      CouponRedemption[]
+  auditLogs              AuditLog[]
+  platformCredentials    PlatformCredential[]
+  engagements            Engagement[]
+  assistantConversations AssistantConversation[]
 
   @@unique([crNumber])
   @@index([type, status])
@@ -235,18 +236,18 @@ model User {
   roles              UserRole[]
   verificationTokens VerificationToken[]
 
-  createdRequests          Request[]                @relation("RequestCreatedBy")
-  assignedRequests         Request[]                @relation("RequestAssignedTo")
+  createdRequests          Request[]                 @relation("RequestCreatedBy")
+  assignedRequests         Request[]                 @relation("RequestAssignedTo")
   uploadedVersions         DocumentVersion[]
   requestEvents            RequestEvent[]
   requestComments          RequestComment[]
   commentMentions          RequestCommentMention[]
-  reopenRequestsMade       RequestReopenRequest[]   @relation("ReopenRequestedBy")
-  reopenRequestsDecided    RequestReopenRequest[]   @relation("ReopenRequestDecidedBy")
-  activitiesAssigned       RequestItemActivity[]    @relation("ActivityAssignedTo")
-  activitiesCreated        RequestItemActivity[]    @relation("ActivityCreatedBy")
+  reopenRequestsMade       RequestReopenRequest[]    @relation("ReopenRequestedBy")
+  reopenRequestsDecided    RequestReopenRequest[]    @relation("ReopenRequestDecidedBy")
+  activitiesAssigned       RequestItemActivity[]     @relation("ActivityAssignedTo")
+  activitiesCreated        RequestItemActivity[]     @relation("ActivityCreatedBy")
   ledgerEntries            LedgerEntry[]
-  confirmedPayments        Payment[]                @relation("PaymentConfirmedBy")
+  confirmedPayments        Payment[]                 @relation("PaymentConfirmedBy")
   createdCoupons           Coupon[]
   notifications            Notification[]
   notificationPreferences  NotificationPreference[]
@@ -254,8 +255,9 @@ model User {
   createdCredentials       PlatformCredential[]
   externalDeliverablesMade ExternalDeliverable[]
   createdEngagements       Engagement[]
-  defaultEvaluatorFor      ServiceItem[]            @relation("ServiceItemDefaultEvaluator")
+  defaultEvaluatorFor      ServiceItem[]             @relation("ServiceItemDefaultEvaluator")
   requiredTestsAdded       RequestItemRequiredTest[]
+  assistantConversation    AssistantConversation?
 
   @@index([organisationId])
   @@index([status])
@@ -392,22 +394,22 @@ enum DeliverableType {
 }
 
 model RequiredDocument {
-  id                String   @id @default(cuid())
-  serviceItemId     String
-  code              String
-  nameEn            String
-  nameAr            String
-  mandatory         Boolean  @default(true)
-  acceptedMimeTypes String[]
-  maxSizeMb         Int      @default(50)
-  helpEn            String?
-  helpAr            String?
+  id                 String   @id @default(cuid())
+  serviceItemId      String
+  code               String
+  nameEn             String
+  nameAr             String
+  mandatory          Boolean  @default(true)
+  acceptedMimeTypes  String[]
+  maxSizeMb          Int      @default(50)
+  helpEn             String?
+  helpAr             String?
   /// Set once an admin uploads a blank form via catalogue:manage; null means
   /// no downloadable template is available for this document slot yet.
   templateStorageKey String?
   templateFileName   String?
   templateMimeType   String?
-  sortOrder         Int      @default(0)
+  sortOrder          Int      @default(0)
 
   serviceItem      ServiceItem       @relation(fields: [serviceItemId], references: [id], onDelete: Cascade)
   requestDocuments RequestDocument[]
@@ -499,11 +501,11 @@ model RequestItem {
   /// manually if it originated outside this system.
   sourceRequestItemId  String?
 
-  request              Request               @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  serviceItem          ServiceItem           @relation(fields: [serviceItemId], references: [id])
-  platformCredential   PlatformCredential?   @relation(fields: [platformCredentialId], references: [id])
-  sourceRequestItem    RequestItem?          @relation("ItemInputSource", fields: [sourceRequestItemId], references: [id])
-  suppliedToItems      RequestItem[]         @relation("ItemInputSource")
+  request              Request                   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  serviceItem          ServiceItem               @relation(fields: [serviceItemId], references: [id])
+  platformCredential   PlatformCredential?       @relation(fields: [platformCredentialId], references: [id])
+  sourceRequestItem    RequestItem?              @relation("ItemInputSource", fields: [sourceRequestItemId], references: [id])
+  suppliedToItems      RequestItem[]             @relation("ItemInputSource")
   documents            RequestDocument[]
   activities           RequestItemActivity[]
   externalDeliverables ExternalDeliverable[]
@@ -1429,4 +1431,43 @@ model LabelReport {
   promotedByUserId String?
 
   assessment LabelAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+}
+
+// ─── Client assistant chat ─────────────────────────────────────────────────
+
+enum AssistantMessageRole {
+  USER
+  ASSISTANT
+}
+
+/// One growing thread per client user (not per session) — reopening the chat
+/// resumes the same history. Scoped to organisationId so a query can never
+/// cross an org boundary even if userId were somehow wrong.
+model AssistantConversation {
+  id             String   @id @default(cuid())
+  organisationId String
+  userId         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation       @relation(fields: [organisationId], references: [id])
+  user         User               @relation(fields: [userId], references: [id])
+  messages     AssistantMessage[]
+
+  @@unique([userId])
+  @@index([organisationId])
+}
+
+model AssistantMessage {
+  id             String               @id @default(cuid())
+  conversationId String
+  role           AssistantMessageRole
+  content        String
+  /// Set on ASSISTANT rows only — which model produced the reply, for audit.
+  model          String?
+  createdAt      DateTime             @default(now())
+
+  conversation AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }

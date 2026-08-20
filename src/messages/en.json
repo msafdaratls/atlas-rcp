@@ -2033,5 +2033,29 @@
       "rollback": "Reactivate",
       "counts": "{rules} rule(s) · {lookups} lookup record(s)"
     }
+  },
+  "assistant": {
+    "openButtonLabel": "Chat with the Atlas Assistant",
+    "panelTitle": "Atlas Assistant",
+    "panelSubtitle": "Guidance on services, requirements, and how assessment works",
+    "closeLabel": "Close",
+    "placeholder": "Ask about a service, a document, or a requirement…",
+    "send": "Send",
+    "disclaimer": "General guidance only — final decisions are made by Atlas's evaluators.",
+    "emptyTitle": "How can I help?",
+    "emptyBody": "Ask how to apply, what a service requires, or what a specific rule means.",
+    "starterPrompts": [
+      "What documents do I need for a Cosmetics SCOC?",
+      "How does label assessment work?",
+      "What's the SLA for Lab Testing?"
+    ],
+    "thinking": "Thinking…",
+    "errors": {
+      "EMPTY": "Please enter a message.",
+      "TOO_LONG": "That message is too long — please shorten it to 2000 characters.",
+      "UNAUTHORIZED": "Please sign in again.",
+      "FORBIDDEN": "You don't have access to the assistant.",
+      "FAILED": "Something went wrong — please try again."
+    }
   }
 }

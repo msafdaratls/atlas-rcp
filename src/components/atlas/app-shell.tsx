@@ -9,6 +9,7 @@ import {
   AppTopbar,
   type ShellUser,
 } from "@/components/atlas/app-topbar";
+import { AssistantChat } from "@/components/atlas/assistant/assistant-chat";
 import type {
   CommandPaletteClient,
   CommandPaletteRequest,
@@ -158,6 +159,7 @@ export function AppShell({
         organisationLogoUrl={user.organisationLogoUrl}
       >
         {shell}
+        <AssistantChat />
       </OrganisationBrandingProvider>
     );
   }

@@ -76,7 +76,8 @@ export function requirePermission(
     | "settings:admin"
     | "staff:manage"
     | "credentials:manage"
-    | "credentials:reveal",
+    | "credentials:reveal"
+    | "assistant:use",
 ): void {
   const isClient = session.organisation.type === "CLIENT";
   const isAtlas = session.organisation.type === "ATLAS";
@@ -211,6 +212,13 @@ export function requirePermission(
       // client's GHAD/SABER/FASAH account — gated to the same roles that
       // work requests day-to-day, and every reveal is audit-logged.
       if (!isAtlas || !hasAnyRole(session, REQUESTS_ADMIN_ROLES)) {
+        throw new Error("FORBIDDEN");
+      }
+      return;
+    case "assistant:use":
+      // Informational client help — any authenticated client-org user, no
+      // role restriction (mirrors company:read).
+      if (!isClient) {
         throw new Error("FORBIDDEN");
       }
       return;
