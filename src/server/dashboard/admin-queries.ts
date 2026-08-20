@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { toNumber } from "@/lib/pricing";
 import { checkPermission, requirePermission } from "@/lib/rbac";
-import { sumBalance } from "@/server/finance/ledger";
+import { getOrganisationBalances } from "@/server/finance/ledger";
 
 const STAGE_GROUPS: Array<{
   key: string;
@@ -215,17 +215,15 @@ export async function getAdminDashboard(): Promise<AdminDashboardView | null> {
 
       const clients = await prisma.organisation.findMany({
         where: { type: "CLIENT", creditLimit: { gt: 0 } },
-        include: {
-          ledgerEntries: { select: { debit: true, credit: true } },
-        },
       });
+      const balances = await getOrganisationBalances(clients.map((c) => c.id));
 
       overLimit = clients
         .map((c) => ({
           organisationId: c.id,
           nameEn: c.nameEn,
           nameAr: c.nameAr,
-          balance: toNumber(sumBalance(c.ledgerEntries)),
+          balance: toNumber(balances.get(c.id) ?? new Prisma.Decimal(0)),
           creditLimit: toNumber(c.creditLimit),
         }))
         .filter((c) => c.balance > c.creditLimit)

@@ -7,6 +7,7 @@
  * "repository" wrapper around it.
  */
 import { Prisma, type LedgerEntryType } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import type { TxClient } from "@/server/notifications/recipients";
 
 export type AppendLedgerInput = {
@@ -98,4 +99,39 @@ export function sumBalance(
       new Prisma.Decimal(0),
     )
     .toDecimalPlaces(2);
+}
+
+/**
+ * Balance for one or more organisations computed via a DB-side SUM, not by
+ * pulling every LedgerEntry row into JS. Use this instead of
+ * `sumBalance(org.ledgerEntries)` anywhere a full-history `include` would
+ * otherwise be fetched — that pattern is O(all-time rows) per organisation
+ * and gets slower every month as the ledger grows.
+ */
+export async function getOrganisationBalances(
+  organisationIds: string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  const map = new Map<string, Prisma.Decimal>();
+  if (organisationIds.length === 0) return map;
+
+  const rows = await prisma.ledgerEntry.groupBy({
+    by: ["organisationId"],
+    where: { organisationId: { in: organisationIds } },
+    _sum: { debit: true, credit: true },
+  });
+
+  for (const row of rows) {
+    const debit = row._sum.debit ?? new Prisma.Decimal(0);
+    const credit = row._sum.credit ?? new Prisma.Decimal(0);
+    map.set(row.organisationId, debit.minus(credit).toDecimalPlaces(2));
+  }
+  return map;
+}
+
+/** Single-organisation convenience wrapper around {@link getOrganisationBalances}. */
+export async function getOrganisationBalance(
+  organisationId: string,
+): Promise<Prisma.Decimal> {
+  const map = await getOrganisationBalances([organisationId]);
+  return map.get(organisationId) ?? new Prisma.Decimal(0);
 }

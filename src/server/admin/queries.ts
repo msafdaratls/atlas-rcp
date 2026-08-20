@@ -24,7 +24,7 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { toNumber } from "@/lib/pricing";
 import { canTransitionRequest, requirePermission, checkPermission } from "@/lib/rbac";
-import { sumBalance } from "@/server/finance/ledger";
+import { getOrganisationBalance, getOrganisationBalances } from "@/server/finance/ledger";
 
 /**
  * Single source of truth for request-state transitions available to Atlas
@@ -1025,7 +1025,6 @@ export async function listAdminClients(input: {
       prisma.organisation.findMany({
         where,
         include: {
-          ledgerEntries: { select: { debit: true, credit: true } },
           _count: {
             select: {
               requests: {
@@ -1040,6 +1039,8 @@ export async function listAdminClients(input: {
       }),
     ]);
 
+    const balances = await getOrganisationBalances(orgs.map((o) => o.id));
+
     return {
       total,
       page,
@@ -1051,7 +1052,7 @@ export async function listAdminClients(input: {
         nameAr: o.nameAr,
         email: o.email,
         status: o.status,
-        balance: toNumber(sumBalance(o.ledgerEntries)),
+        balance: toNumber(balances.get(o.id) ?? new Prisma.Decimal(0)),
         creditLimit: toNumber(o.creditLimit),
         openRequestCount: o._count.requests,
         createdAt: o.createdAt.toISOString(),
@@ -1129,13 +1130,10 @@ export async function getAdminClientDetail(
     });
     if (!org) return null;
 
-    const [ledgerAll, users, recentRequests, recentLedger] = await Promise.all([
+    const [balance, users, recentRequests, recentLedger] = await Promise.all([
       canViewFinance
-        ? prisma.ledgerEntry.findMany({
-            where: { organisationId: org.id },
-            select: { debit: true, credit: true },
-          })
-        : Promise.resolve([] as Array<{ debit: Prisma.Decimal; credit: Prisma.Decimal }>),
+        ? getOrganisationBalance(org.id)
+        : Promise.resolve(new Prisma.Decimal(0)),
       prisma.user.findMany({
         where: { organisationId: org.id },
         include: { roles: true },
@@ -1187,7 +1185,7 @@ export async function getAdminClientDetail(
       creditLimit: canViewFinance ? toNumber(org.creditLimit) : 0,
       autoHoldWhenOverLimit: canViewFinance ? org.autoHoldWhenOverLimit : false,
       paymentTermsDays: canViewFinance ? org.paymentTermsDays : 0,
-      balance: canViewFinance ? toNumber(sumBalance(ledgerAll)) : 0,
+      balance: canViewFinance ? toNumber(balance) : 0,
       createdAt: org.createdAt.toISOString(),
       users: users.map((u) => ({
         id: u.id,

@@ -17,7 +17,7 @@ import {
   type AgingSummary,
   type LedgerRowView,
 } from "@/server/finance/aging";
-import { sumBalance } from "@/server/finance/ledger";
+import { getOrganisationBalances, sumBalance } from "@/server/finance/ledger";
 
 export type ClientStatementView = {
   organisationNameEn: string;
@@ -177,9 +177,6 @@ export async function getAdminFinanceView(): Promise<AdminFinanceView | null> {
       prisma.organisation.findMany({
         where: { type: "CLIENT" },
         include: {
-          ledgerEntries: {
-            select: { debit: true, credit: true },
-          },
           invoices: {
             where: { status: { in: ["ISSUED", "PARTIALLY_PAID"] } },
             include: { allocations: true },
@@ -187,6 +184,8 @@ export async function getAdminFinanceView(): Promise<AdminFinanceView | null> {
         },
       }),
     ]);
+
+    const balances = await getOrganisationBalances(clients.map((c) => c.id));
 
     const { storage } = await import("@/lib/storage");
     const now = new Date();
@@ -206,7 +205,7 @@ export async function getAdminFinanceView(): Promise<AdminFinanceView | null> {
         receivedAt: p.receivedAt.toISOString(),
       })),
       clientBalances: clients.map((c) => {
-        const balance = toNumber(sumBalance(c.ledgerEntries));
+        const balance = toNumber(balances.get(c.id) ?? new Prisma.Decimal(0));
         let maxDays = 0;
         const openInvoices: Array<{ id: string; invoiceNo: string; openAmount: number }> = [];
         for (const inv of c.invoices) {
