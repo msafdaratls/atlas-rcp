@@ -42,6 +42,7 @@ import {
   transitionAdminRequest,
 } from "@/server/admin/actions";
 import { hasCheckItems } from "@/lib/assessment";
+import { isLabTestingOnlyRequest, isScocOnlyRequest } from "@/lib/scoc-services";
 import type {
   AdminRequestDetail,
   AssignableStaffUser,
@@ -316,24 +317,20 @@ export function AdminRequestDetailPanel({
   }, [chatOpen, data.id, router]);
 
   // SCOC's certificate is externally issued (SABER for SAB-002, SFDA for the
-  // cosmetics equivalent SFDA-COS-002) with no Atlas-authored technical
-  // content, so an all-SCOC request skips TECHNICAL_REVIEW entirely (see
-  // allowedTransitionsFor/SCOC_SERVICE_CODES in queries.ts) — the reviewer
-  // meta-checklist below never applies to it, even at DECISION.
-  const isScocOnly =
-    data.items.length > 0 &&
-    data.items.every((item) =>
-      ["SAB-002", "SFDA-COS-002"].includes(item.serviceItem.code),
-    );
+  // cosmetics equivalent SFDA-COS-002, see @/lib/scoc-services) with no
+  // Atlas-authored technical content, so an all-SCOC request skips
+  // TECHNICAL_REVIEW entirely (see allowedTransitionsFor in queries.ts) —
+  // the reviewer meta-checklist below never applies to it, even at DECISION.
+  const isScocOnly = isScocOnlyRequest(data.items.map((item) => item.serviceItem.code));
 
   // Lab Testing Coordination has no Atlas-authored technical content to
   // review or certify — see completeLabTesting / isLabTestingOnlyRequest —
   // so an all-LAB-001 request completes via a dedicated one-click action
   // instead of the generic Evaluation Report / Certificate / Technical
   // Review machinery, which never applies to it.
-  const isLabTestingOnly =
-    data.items.length > 0 &&
-    data.items.every((item) => item.serviceItem.code === "LAB-001");
+  const isLabTestingOnly = isLabTestingOnlyRequest(
+    data.items.map((item) => item.serviceItem.code),
+  );
   const labTestingAllReported =
     isLabTestingOnly &&
     data.items.every((item) =>

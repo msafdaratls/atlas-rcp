@@ -78,14 +78,7 @@ export const REQUEST_TRANSITIONS: Record<RequestState, RequestState[]> = {
  * hands straight to the Decision Maker. A request bundling SCOC with any
  * other service still goes through the normal REQUEST_TRANSITIONS graph
  * below.
- */
-const SCOC_SERVICE_CODES = ["SAB-002", "SFDA-COS-002"];
-
-export function isScocOnlyRequest(serviceCodes: string[]): boolean {
-  return serviceCodes.length > 0 && serviceCodes.every((c) => SCOC_SERVICE_CODES.includes(c));
-}
-
-/**
+ *
  * Lab Testing Coordination has no Atlas-authored technical content to review
  * or certify — the deliverable is the external lab's own test report — so an
  * all-LAB-001 request skips TECHNICAL_REVIEW *and* DECISION entirely: the
@@ -93,12 +86,17 @@ export function isScocOnlyRequest(serviceCodes: string[]): boolean {
  * ASSESSMENT_RUNNING straight to REPORT_ISSUED (then CLOSED in the same
  * transaction). A request bundling LAB-001 with any other service still goes
  * through the normal REQUEST_TRANSITIONS graph below.
+ *
+ * Both classifications live in @/lib/scoc-services (re-exported here) since
+ * client components need them too and can't import this file (it touches
+ * prisma/requireSession at module scope).
  */
-export const LAB_TESTING_SERVICE_CODE = "LAB-001";
-
-export function isLabTestingOnlyRequest(serviceCodes: string[]): boolean {
-  return serviceCodes.length > 0 && serviceCodes.every((c) => c === LAB_TESTING_SERVICE_CODE);
-}
+export {
+  isLabTestingOnlyRequest,
+  isScocOnlyRequest,
+  LAB_TESTING_SERVICE_CODE,
+} from "@/lib/scoc-services";
+import { isLabTestingOnlyRequest, isScocOnlyRequest } from "@/lib/scoc-services";
 
 /** Safe default when a hold has no recorded prior state (legacy rows). */
 const ON_HOLD_RESUME_FALLBACK: RequestState = "UNDER_INTAKE_REVIEW";

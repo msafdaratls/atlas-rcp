@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { requirePermission, scopedOrganisationId } from "@/lib/rbac";
+import { SABER_SCOC_SERVICE_CODE } from "@/lib/scoc-services";
 import { renderScocCertificatePdf } from "@/server/finance/pdf-templates";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -10,9 +11,6 @@ export const runtime = "nodejs";
 type Params = { params: Promise<{ requestItemId: string }> };
 
 const requestItemIdSchema = z.string().cuid();
-
-/** SAB-002 — the only service this certificate layout applies to. */
-const SCOC_SERVICE_CODE = "SAB-002";
 
 /** SABER shipment certificates are valid ~60 days from issuance. */
 const SCOC_CERT_VALIDITY_DAYS = 60;
@@ -65,7 +63,7 @@ export async function GET(request: Request, { params }: Params) {
     const item = await prisma.requestItem.findFirst({
       where: {
         id: requestItemId,
-        serviceItem: { code: SCOC_SERVICE_CODE },
+        serviceItem: { code: SABER_SCOC_SERVICE_CODE },
         request: {
           state: { in: ["REPORT_ISSUED", "CLOSED"] },
           ...(isAtlas ? {} : { organisationId: scopedOrganisationId(session) }),

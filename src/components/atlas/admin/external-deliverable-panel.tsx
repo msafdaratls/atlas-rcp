@@ -5,6 +5,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  COSMETIC_SCOC_SERVICE_CODE,
+  isSaberScocServiceCode,
+  isScocServiceCode,
+  SABER_SCOC_SERVICE_CODE,
+} from "@/lib/scoc-services";
 import { cn } from "@/lib/utils";
 import {
   markExternalDeliverableIssued,
@@ -33,15 +39,12 @@ type Props = {
 };
 
 // SCOC (SABER Shipment Certificate of Conformity, and its cosmetics
-// equivalent SFDA-COS-002) already collects the shipment/product details it
-// needs on the product-details form, so the generic ref-type/notes
-// submission fields are redundant here — swap them for a pre-submission
-// checklist instead. The two services get different checklist copy (see
-// scocChecklistItems below) since they check different things, but share the
-// same submission mechanics.
-const SABER_SCOC_SERVICE_CODE = "SAB-002";
-const COSMETIC_SCOC_SERVICE_CODE = "SFDA-COS-002";
-const SCOC_SERVICE_CODES = [SABER_SCOC_SERVICE_CODE, COSMETIC_SCOC_SERVICE_CODE];
+// equivalent SFDA-COS-002, see @/lib/scoc-services) already collects the
+// shipment/product details it needs on the product-details form, so the
+// generic ref-type/notes submission fields are redundant here — swap them
+// for a pre-submission checklist instead. The two services get different
+// checklist copy (see scocChecklistItems below) since they check different
+// things, but share the same submission mechanics.
 const SCOC_EXTERNAL_REF_TYPE: Record<string, string> = {
   [SABER_SCOC_SERVICE_CODE]: "SABER_SCOC_CHECKLIST",
   [COSMETIC_SCOC_SERVICE_CODE]: "SFDA_COS_SCOC_CHECKLIST",
@@ -68,11 +71,11 @@ export function ExternalDeliverablePanel({
 }: Props) {
   const t = useTranslations("adminOps.requestDetail.externalDeliverable");
 
-  const isScoc = SCOC_SERVICE_CODES.includes(serviceItem.code);
+  const isScoc = isScocServiceCode(serviceItem.code);
   // The auto-generated certificate PDF/download button only matches SABER's
   // layout (HS code, technical regulation, etc.) — cosmetics SCOC
   // certificates are uploaded files from SFDA, not Atlas-generated.
-  const isSaberScoc = serviceItem.code === SABER_SCOC_SERVICE_CODE;
+  const isSaberScoc = isSaberScocServiceCode(serviceItem.code);
   const status = deliverable?.status ?? "PENDING_SUBMISSION";
 
   const [externalRefType, setExternalRefType] = useState(

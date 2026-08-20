@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { parseAttrSchema } from "@/lib/attr-schema";
+import { isSaberScocServiceCode } from "@/lib/scoc-services";
 import { AttrScalarInput } from "@/components/atlas/requests/attr-field-input";
 import {
   addClientRequestComment,
@@ -885,7 +886,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
             </a>
           </Button>
           {data.items
-            .filter((item) => item.serviceItemCode === "SAB-002")
+            .filter((item) => isSaberScocServiceCode(item.serviceItemCode))
             .map((item) => (
               <Button key={item.id} asChild variant="outline">
                 <a
