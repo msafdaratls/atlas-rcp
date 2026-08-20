@@ -123,12 +123,27 @@ const lookup: EvaluatorFn = (ctx) => {
   };
 };
 
-const wordingJudgment: EvaluatorFn = (ctx) => ({
-  verdict: "NEEDS_REVIEW",
-  rationale:
-    (ctx.payload.commonNonConformities as string | undefined) ??
-    "This item requires human judgment (LLM-assisted proposal not yet configured — design doc §1 Principle 2). Review the confirmed label text against the item's guidance and select a verdict.",
-});
+/**
+ * LLM-proposed judgment (design doc §1 Principle 2 / §6). When
+ * getJudgmentProposals (run-sfda.ts) has a proposal for this rule code, it is
+ * returned verbatim — the caller stamps autoOrManual: "llm_proposed" plus
+ * llmModel/llmPromptVersion when writing it, and a reviewer must still
+ * confirm or override it via "Change assessment". Falls back to the original
+ * static NEEDS_REVIEW when no proposal exists (ANTHROPIC_API_KEY unset, or
+ * this batch's LLM call failed).
+ */
+const wordingJudgment: EvaluatorFn = (ctx) => {
+  const proposal = ctx.llmProposals[ctx.code];
+  if (proposal) {
+    return { verdict: proposal.verdict, evidenceText: proposal.evidenceText, rationale: proposal.rationale };
+  }
+  return {
+    verdict: "NEEDS_REVIEW",
+    rationale:
+      (ctx.payload.commonNonConformities as string | undefined) ??
+      "This item requires human judgment (LLM-assisted proposal not configured or unavailable — design doc §1 Principle 2). Review the confirmed label text against the item's guidance and select a verdict.",
+  };
+};
 
 const requiresAdditionalData: EvaluatorFn = (ctx) => ({
   verdict: "REQUIRES_ADDITIONAL_DATA",

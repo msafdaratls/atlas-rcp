@@ -1,7 +1,11 @@
+import { log } from "@/lib/logger";
 import { prisma } from "@/lib/db";
 import { classify } from "@/server/label-eval/classification/classify";
+import { classifyWithLlm } from "@/server/label-eval/classification/classify-llm";
+import type { ClassificationResult } from "@/server/label-eval/classification/classify";
 import { registerCosmeticsEvaluators } from "@/server/label-eval/evaluators/cosmetics";
 import { runEvaluator, type ConfirmedFields } from "@/server/label-eval/evaluators/registry";
+import { getJudgmentProposals } from "@/server/label-eval/llm/judgment-proposals";
 
 /**
  * Workflow doc §13 final-status vocabulary — NOT SFDA's (accepted /
@@ -81,19 +85,40 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
   const categories = await prisma.labelKbCategory.findMany({ where: { kbVersionId: assessment.kbVersionId } });
 
   // Step 4: classify (or use the reviewer's manual override if one was set).
+  // LLM classification (classify-llm.ts) is used when ANTHROPIC_API_KEY is
+  // set; otherwise the deterministic keyword matcher (classify.ts) — same
+  // fail-closed pattern as everywhere else in this feature. Both enforce the
+  // identical CONFIDENCE_THRESHOLD gate, so the "no confident match"
+  // refusal (design doc §1 Principle 4) is never weaker under the AI path.
+  // A *transient* LLM failure (network/rate-limit/timeout) is caught here
+  // and falls back to the deterministic matcher rather than hard-stopping
+  // into BLOCKED_NO_CATEGORY_MATCH — that failure mode is an infrastructure
+  // problem, not a genuine "no confident match", and must not be treated
+  // as one.
   const existingOverride = assessment.classification?.overrideCategoryCode;
-  const auto = classify(
-    {
-      productNameEn: confirmedFields.product_name?.en,
-      productNameAr: confirmedFields.product_name?.ar,
-      productFunctionEn: confirmedFields.product_function?.en,
-      productFunctionAr: confirmedFields.product_function?.ar,
-      ingredientsList: confirmedFields.ingredients_list?.en,
-      fullLabelTextEn: confirmedFields.full_label_text?.en,
-      fullLabelTextAr: confirmedFields.full_label_text?.ar,
-    },
-    categories,
-  );
+  const classificationInput = {
+    productNameEn: confirmedFields.product_name?.en,
+    productNameAr: confirmedFields.product_name?.ar,
+    productFunctionEn: confirmedFields.product_function?.en,
+    productFunctionAr: confirmedFields.product_function?.ar,
+    ingredientsList: confirmedFields.ingredients_list?.en,
+    fullLabelTextEn: confirmedFields.full_label_text?.en,
+    fullLabelTextAr: confirmedFields.full_label_text?.ar,
+  };
+  let auto: ClassificationResult;
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      auto = await classifyWithLlm(classificationInput, categories);
+    } catch (error) {
+      log.warn("label-eval.classification", "LLM classification failed — falling back to keyword matcher", {
+        assessmentId,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+      auto = classify(classificationInput, categories);
+    }
+  } else {
+    auto = classify(classificationInput, categories);
+  }
   const resolvedCategoryCode = existingOverride ?? auto.categoryCode;
 
   await prisma.labelClassification.upsert({
@@ -144,6 +169,15 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
   ]);
   const lookups = lookupRows.map((l) => ({ tableKey: l.tableKey, payload: l.payload as Record<string, unknown> }));
 
+  // AI-proposed claim judgments (design doc §1 Principle 2 / §6) — one
+  // batched call covering every claim_phase_judgment item, fetched once
+  // before the evaluator loop. Only reached once a category is CONFIRMED
+  // (this line runs after the BLOCKED_NO_CATEGORY_MATCH early-return above),
+  // never against a guessed classification. Returns {} when
+  // ANTHROPIC_API_KEY is unset, a pure no-op when unconfigured.
+  const judgmentRules = rules.filter((r) => r.evaluatorKey === "claim_phase_judgment");
+  const llmProposals = await getJudgmentProposals("COSMETICS", confirmedFields, judgmentRules);
+
   const results = rules.map((rule) => ({
     rule,
     result: runEvaluator(rule.evaluatorKey, {
@@ -155,17 +189,42 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
       fields: confirmedFields,
       classification,
       lookups,
+      llmProposals,
     }),
   }));
 
   await prisma.$transaction(
-    results.map(({ rule, result }) =>
-      prisma.labelItemVerdict.upsert({
+    results.map(({ rule, result }) => {
+      const proposal = llmProposals[rule.code];
+      return prisma.labelItemVerdict.upsert({
         where: { assessmentId_kbRuleId: { assessmentId, kbRuleId: rule.id } },
-        create: { assessmentId, kbRuleId: rule.id, verdict: result.verdict, autoOrManual: "auto", evidenceText: result.evidenceText, rationale: result.rationale },
-        update: { verdict: result.verdict, autoOrManual: "auto", evidenceText: result.evidenceText, rationale: result.rationale },
-      }),
-    ),
+        create: {
+          assessmentId,
+          kbRuleId: rule.id,
+          verdict: result.verdict,
+          autoOrManual: proposal ? "llm_proposed" : "auto",
+          evidenceText: result.evidenceText,
+          rationale: result.rationale,
+          llmModel: proposal?.model ?? null,
+          llmPromptVersion: proposal?.promptVersion ?? null,
+        },
+        update: {
+          verdict: result.verdict,
+          autoOrManual: proposal ? "llm_proposed" : "auto",
+          evidenceText: result.evidenceText,
+          rationale: result.rationale,
+          // `?? null`, not just `proposal?.model`: on `update`, Prisma
+          // treats an `undefined` field value as "leave unchanged," not
+          // "clear it." Without the `?? null`, a rule that had an LLM
+          // proposal on a prior run (llmModel stamped) but has none on a
+          // re-run (key removed, batch call failed) would keep the stale
+          // llmModel/llmPromptVersion even though autoOrManual correctly
+          // flips back to "auto" — a misleading audit trail.
+          llmModel: proposal?.model ?? null,
+          llmPromptVersion: proposal?.promptVersion ?? null,
+        },
+      });
+    }),
   );
 
   // Required tests (design doc §6/§9) — deterministic, category+properties

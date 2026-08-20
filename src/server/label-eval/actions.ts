@@ -28,6 +28,7 @@ import { runSfdaRuleEngine, recomputeSfdaScore } from "@/server/label-eval/evalu
 import { runCosmeticsRuleEngine, recomputeCosmeticsScore } from "@/server/label-eval/evaluators/run-cosmetics";
 import { saveAssessment } from "@/server/admin/actions";
 import { parseAssessment, parseCheckSets } from "@/lib/assessment";
+import { isPromotableVerdict } from "@/server/label-eval/promotion-eligibility";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
@@ -408,6 +409,70 @@ export async function overrideItemVerdict(
   }
 }
 
+const confirmProposedSchema = z.object({
+  assessmentId: z.string().min(1),
+  kbRuleId: z.string().min(1),
+});
+
+/**
+ * Explicit human confirmation of an LLM-proposed judgment verdict (design
+ * doc §1 Principle 2) — the reviewer read the AI's proposed verdict and
+ * agrees with it as-is. Distinct from overrideItemVerdict, which records a
+ * *changed* value: this records that a human looked at an *unchanged* AI
+ * proposal and accepted it. Flips autoOrManual from "llm_proposed" to
+ * "llm_confirmed", which is what isPromotableVerdict (promotion-eligibility.ts)
+ * checks before planPromotion will include the item — without this action
+ * (or an override), an LLM-proposed verdict can never reach the official
+ * checklist. Guarded the same way as applyVerdictOverride: `updateMany`
+ * against the expected "llm_proposed" state so a concurrent confirm/override
+ * from another reviewer can't silently race.
+ */
+export async function confirmProposedVerdict(
+  input: z.infer<typeof confirmProposedSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = confirmProposedSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const assessment = await prisma.labelAssessment.findUnique({
+      where: { id: parsed.data.assessmentId },
+      select: { domain: true },
+    });
+    if (!assessment) return { ok: false, error: "NOT_FOUND" };
+
+    const result = await prisma.labelItemVerdict.updateMany({
+      where: {
+        assessmentId: parsed.data.assessmentId,
+        kbRuleId: parsed.data.kbRuleId,
+        autoOrManual: "llm_proposed",
+      },
+      data: {
+        autoOrManual: "llm_confirmed",
+        overriddenByUserId: session.id,
+        overriddenAt: new Date(),
+      },
+    });
+    if (result.count === 0) return { ok: false, error: "CONFLICT" };
+
+    await writeAuditLog({
+      session,
+      action: "label_eval.verdict.confirm_proposed",
+      entityType: "LabelItemVerdict",
+      entityId: `${parsed.data.assessmentId}:${parsed.data.kbRuleId}`,
+    });
+
+    const basePath = assessment.domain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics";
+    revalidatePath(`/[locale]/admin/label-evaluator/${basePath}/${parsed.data.assessmentId}`, "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") return { ok: false, error: message };
+    return { ok: false, error: "CONFIRM_FAILED" };
+  }
+}
+
 /**
  * Fetches the assessment's verdicts plus the linked RequestItem's official
  * checklist codes, shared by previewPromotion (dry run) and
@@ -487,7 +552,11 @@ async function planPromotion(assessmentId: string): Promise<
   const droppedCodes: string[] = [];
   let withheld = 0;
   for (const v of assessment.verdicts) {
-    if (v.verdict === "COMPLIANT" || v.verdict === "NON_COMPLIANT" || v.verdict === "NA") {
+    // isPromotableVerdict (design doc §1 Principle 2) refuses an
+    // LLM-proposed verdict nobody has confirmed yet — it is withheld exactly
+    // like an unresolved NEEDS_REVIEW/REQUIRES_ADDITIONAL_DATA item, never
+    // silently treated as a human-confirmed pass/fail.
+    if (isPromotableVerdict(v.verdict, v.autoOrManual)) {
       if (knownCodes.has(v.kbRule.code)) verdicts[v.kbRule.code] = v.verdict;
       else droppedCodes.push(v.kbRule.code);
     } else {

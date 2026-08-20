@@ -8,6 +8,7 @@ import {
   CircleHelp,
   FlaskConical,
   Loader2,
+  Sparkles,
   XCircle,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -23,6 +24,7 @@ import { LABEL_FIELD_DEFS, mandatoryFieldKeys } from "@/server/label-eval/fields
 import {
   checkAssessmentClaim,
   confirmFieldsAndRunAssessment,
+  confirmProposedVerdict,
   getLabelAssessmentStatus,
   overrideItemVerdict,
   previewPromotion,
@@ -802,23 +804,54 @@ function VerdictCard({
     });
   }
 
+  // Design doc §1 Principle 2: an LLM may propose a judgment verdict but
+  // never silently decide it — this is the reviewer's explicit "I looked at
+  // this AI proposal and agree" action, distinct from changing the value
+  // (change() above). Until this (or a change) happens, the promotion gate
+  // (isPromotableVerdict, promotion-eligibility.ts) refuses to write this
+  // item to the official checklist no matter what it says.
+  function confirmProposal() {
+    startTransition(async () => {
+      const result = await confirmProposedVerdict({ assessmentId, kbRuleId: verdict.kbRuleId });
+      if (!result.ok) {
+        toast.error(tErrors(result.error as "CONFLICT"));
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  const isAiProposed = verdict.autoOrManual === "llm_proposed";
+
   return (
-    <div className="space-y-2 px-3 py-3">
+    <div className={cn("space-y-2 px-3 py-3", isAiProposed && "bg-state-info/5")}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-xs font-medium text-ink-500">{verdict.code}{verdict.standard ? ` · ${verdict.standard}` : ""}</p>
           <p className="text-sm font-medium text-ink-900">{isAr ? verdict.titleAr : verdict.titleEn || verdict.titleAr}</p>
         </div>
-        <span className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold", meta.tone)}>
-          <Icon className="size-3.5" />
-          {t(meta.labelKey as "verdict.COMPLIANT")}
-        </span>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {isAiProposed ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-state-info/40 bg-state-info/10 px-2 py-1 text-xs font-semibold text-state-info">
+              <Sparkles className="size-3.5" />
+              {t("aiProposedBadge")}
+            </span>
+          ) : null}
+          <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold", meta.tone)}>
+            <Icon className="size-3.5" />
+            {t(meta.labelKey as "verdict.COMPLIANT")}
+          </span>
+        </div>
       </div>
       {verdict.rationale ? <p className="text-xs text-ink-600">{verdict.rationale}</p> : null}
       {verdict.evidenceText ? (
         <p className="rounded border border-line bg-surface-alt/40 px-2 py-1.5 text-xs text-ink-700">
           {t("evidenceLabel")}: {verdict.evidenceText}
         </p>
+      ) : null}
+      {isAiProposed ? <p className="text-[10px] text-state-info">{t("aiProposedNotice")}</p> : null}
+      {verdict.autoOrManual === "llm_confirmed" ? (
+        <p className="text-[10px] text-ink-500">{t("aiProposalConfirmed")}</p>
       ) : null}
       {verdict.autoOrManual === "manual_override" ? (
         <p className="text-[10px] text-ink-500">{t("manuallyOverridden")}</p>
@@ -854,9 +887,16 @@ function VerdictCard({
           </div>
         </div>
       ) : (
-        <Button size="sm" variant="outline" onClick={() => setOverriding(true)}>
-          {t("changeAssessment")}
-        </Button>
+        <div className="flex flex-wrap gap-1.5">
+          {isAiProposed ? (
+            <Button size="sm" disabled={pending} onClick={confirmProposal}>
+              {t("confirmAiProposal")}
+            </Button>
+          ) : null}
+          <Button size="sm" variant="outline" onClick={() => setOverriding(true)}>
+            {t("changeAssessment")}
+          </Button>
+        </div>
       )}
     </div>
   );

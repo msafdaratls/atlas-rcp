@@ -27,7 +27,8 @@ export type ClassificationResult = {
   rationale: string;
 };
 
-const CONFIDENCE_THRESHOLD = 0.15;
+/** Exported so classify-llm.ts's LLM-based path enforces the identical server-side gate (design doc §1 Principle 4) — the model's own stated confidence is never trusted on its own. */
+export const CONFIDENCE_THRESHOLD = 0.15;
 
 /**
  * A stopword coincidentally unique to one category's name (e.g. "Henna

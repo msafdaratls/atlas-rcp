@@ -1,4 +1,5 @@
 import type { LabelVerdict } from "@prisma/client";
+import type { JudgmentProposal } from "@/server/label-eval/llm/judgment-proposals";
 
 /**
  * Evaluator registry (design doc §6). Every evaluator reads ONLY the
@@ -21,6 +22,8 @@ export type RuleContext = {
   fields: ConfirmedFields;
   classification: { categoryCode?: string; properties?: string[] } | null;
   lookups: LookupRow[];
+  /** Rule code -> LLM-proposed verdict (design doc §1 Principle 2), pre-fetched once per run and threaded through exactly like `lookups`. Empty when ANTHROPIC_API_KEY is unset. */
+  llmProposals: Record<string, JudgmentProposal>;
 };
 
 export type EvaluatorResult = {

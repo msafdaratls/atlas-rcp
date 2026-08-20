@@ -1,5 +1,6 @@
 import type { LabelDocumentKind, LabelEvalDomain } from "@prisma/client";
 import { allFieldKeys } from "@/server/label-eval/fields";
+import { ClaudeExtractionProvider } from "@/server/label-eval/extraction/claude-provider";
 
 /**
  * Extraction provider contract (design doc §6/§10). Server-side only — never
@@ -22,7 +23,7 @@ export type ExtractedFieldResult = {
 };
 
 export interface ExtractionProvider {
-  readonly name: "manual" | "paddleocr_vl" | "google_vision";
+  readonly name: "manual" | "paddleocr_vl" | "google_vision" | "claude";
   extract(
     domain: LabelEvalDomain,
     documents: ExtractionInputDocument[],
@@ -89,10 +90,13 @@ export class GoogleVisionProvider implements ExtractionProvider {
 }
 
 /**
- * Selects a provider from LABEL_EVAL_EXTRACTION_PROVIDER (manual | paddleocr_vl | google_vision).
- * Defaults to "manual". Fails closed to manual entry if an unimplemented
- * provider is requested, rather than blocking assessment entirely — a
- * misconfigured env var must never stop a reviewer from working.
+ * Selects a provider from LABEL_EVAL_EXTRACTION_PROVIDER (manual | paddleocr_vl | google_vision | claude).
+ * Defaults to "manual". Fails closed to manual entry if an unimplemented or
+ * unconfigured provider is requested, rather than blocking assessment
+ * entirely — a misconfigured env var must never stop a reviewer from
+ * working. `new Anthropic()` (inside ClaudeExtractionProvider) only runs,
+ * and ANTHROPIC_API_KEY only gets read, when this branch actually executes —
+ * importing this module never constructs a client.
  */
 export function getExtractionProvider(): ExtractionProvider {
   const requested = process.env.LABEL_EVAL_EXTRACTION_PROVIDER;
@@ -101,6 +105,9 @@ export function getExtractionProvider(): ExtractionProvider {
   }
   if (requested === "google_vision" && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     return new GoogleVisionProvider();
+  }
+  if (requested === "claude" && process.env.ANTHROPIC_API_KEY) {
+    return new ClaudeExtractionProvider();
   }
   return new ManualEntryProvider();
 }

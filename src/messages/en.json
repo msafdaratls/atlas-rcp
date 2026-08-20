@@ -1937,6 +1937,10 @@
       },
       "evidenceLabel": "On the label",
       "manuallyOverridden": "Manually overridden by a reviewer.",
+      "aiProposedBadge": "AI-proposed",
+      "aiProposedNotice": "This verdict was proposed by AI and has not been confirmed yet — it will not be included when promoting to the official checklist until a reviewer confirms or changes it.",
+      "aiProposalConfirmed": "AI proposal reviewed and confirmed by a reviewer.",
+      "confirmAiProposal": "Confirm AI proposal",
       "changeAssessment": "Change assessment",
       "overrideRationalePlaceholder": "Reason for this change (required)",
       "classifying": {
@@ -1981,6 +1985,7 @@
       "CLAIM_FAILED": "Could not check evaluator claim status.",
       "INVALID_STATE": "This action isn't available in the current state.",
       "REQUEST_ITEM_UNLINKED": "This assessment is no longer linked to a request item.",
+      "CONFIRM_FAILED": "Could not confirm this AI proposal. Try again.",
       "DUPLICATE_UPLOAD": "This exact workbook was already imported as version {label}.",
       "SCHEMA_CONTRACT_VIOLATION": "The workbook doesn't match the expected structure.",
       "PARSE_FAILED": "Could not parse the workbook.",

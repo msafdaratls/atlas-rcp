@@ -2,6 +2,7 @@ import { recommendDecision } from "@/lib/assessment";
 import { prisma } from "@/lib/db";
 import { registerSfdaEvaluators } from "@/server/label-eval/evaluators/sfda";
 import { runEvaluator, type ConfirmedFields } from "@/server/label-eval/evaluators/registry";
+import { getJudgmentProposals } from "@/server/label-eval/llm/judgment-proposals";
 
 export type RunResult = {
   overallRate: number | null;
@@ -101,6 +102,14 @@ export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult
   ]);
   const lookups = lookupRows.map((l) => ({ tableKey: l.tableKey, payload: l.payload as Record<string, unknown> }));
 
+  // AI-proposed judgment verdicts (design doc §1 Principle 2 / §6) — one
+  // batched call covering every wording_judgment item, fetched once before
+  // the evaluator loop and threaded through ctx exactly like `lookups`.
+  // Returns {} (no proposals) when ANTHROPIC_API_KEY is unset, so this is a
+  // pure no-op when the feature isn't configured.
+  const judgmentRules = rules.filter((r) => r.evaluatorKey === "wording_judgment");
+  const llmProposals = await getJudgmentProposals("SFDA_SUPPLEMENTS", confirmedFields, judgmentRules);
+
   const results = rules.map((rule) => ({
     rule,
     result: runEvaluator(rule.evaluatorKey, {
@@ -112,29 +121,42 @@ export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult
       fields: confirmedFields,
       classification: null, // SFDA has no classifier
       lookups,
+      llmProposals,
     }),
   }));
 
   await prisma.$transaction(
-    results.map(({ rule, result }) =>
-      prisma.labelItemVerdict.upsert({
+    results.map(({ rule, result }) => {
+      const proposal = llmProposals[rule.code];
+      return prisma.labelItemVerdict.upsert({
         where: { assessmentId_kbRuleId: { assessmentId, kbRuleId: rule.id } },
         create: {
           assessmentId,
           kbRuleId: rule.id,
           verdict: result.verdict,
-          autoOrManual: "auto",
+          autoOrManual: proposal ? "llm_proposed" : "auto",
           evidenceText: result.evidenceText,
           rationale: result.rationale,
+          llmModel: proposal?.model ?? null,
+          llmPromptVersion: proposal?.promptVersion ?? null,
         },
         update: {
           verdict: result.verdict,
-          autoOrManual: "auto",
+          autoOrManual: proposal ? "llm_proposed" : "auto",
           evidenceText: result.evidenceText,
           rationale: result.rationale,
+          // `?? null`, not just `proposal?.model`: on `update`, Prisma
+          // treats an `undefined` field value as "leave unchanged," not
+          // "clear it." Without the `?? null`, a rule that had an LLM
+          // proposal on a prior run (llmModel stamped) but has none on a
+          // re-run (key removed, batch call failed) would keep the stale
+          // llmModel/llmPromptVersion even though autoOrManual correctly
+          // flips back to "auto" — a misleading audit trail.
+          llmModel: proposal?.model ?? null,
+          llmPromptVersion: proposal?.promptVersion ?? null,
         },
-      }),
-    ),
+      });
+    }),
   );
 
   const score = scoreSfdaVerdicts(results.map((r) => r.result.verdict));
