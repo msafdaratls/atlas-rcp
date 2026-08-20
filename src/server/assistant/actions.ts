@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { log } from "@/lib/logger";
+import { consumeRateLimitAsync } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/rbac";
 import { buildCatalogueContext } from "@/server/assistant/catalogue-context";
 import { MAX_MESSAGE_LENGTH } from "@/server/assistant/constants";
@@ -56,6 +57,17 @@ export async function sendAssistantMessage(input: { text: string }): Promise<Act
     const parsed = sendSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.issues[0]?.message === "TOO_LONG" ? "TOO_LONG" : "EMPTY" };
+    }
+
+    // Every turn is a paid model call — cap per user so the only client-facing
+    // AI surface can't be spammed into an open-ended cost bill.
+    const limited = await consumeRateLimitAsync({
+      key: `assistant-chat:${session.id}`,
+      limit: 20,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (!limited.ok) {
+      return { ok: false, error: "RATE_LIMITED" };
     }
 
     const conversation = await getOrCreateConversation(session);

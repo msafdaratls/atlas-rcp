@@ -11,6 +11,12 @@ let cachedClient: Anthropic | null = null;
  * — this module doesn't decide that for any given feature.
  */
 export function getAnthropicClient(): Anthropic {
-  if (!cachedClient) cachedClient = new Anthropic();
+  if (!cachedClient) {
+    // Explicit timeout: the chat path calls this synchronously inside a
+    // server action, so an SDK-default (much longer) hang would tie up that
+    // request. Background call sites (extraction/judgment workers) are
+    // already covered by their own outbox retry/backoff.
+    cachedClient = new Anthropic({ timeout: 45_000 });
+  }
   return cachedClient;
 }

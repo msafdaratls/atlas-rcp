@@ -73,6 +73,7 @@
       "finance": "Finance",
       "quality": "Quality",
       "analytics": "Analytics",
+      "systemHealth": "System health",
       "settings": "Settings",
       "audit": "Audit log"
     }
@@ -1634,6 +1635,28 @@
       "total": "{count} documents",
       "prev": "Previous",
       "next": "Next"
+    },
+    "systemHealth": {
+      "pageDescription": "Background jobs that ran out of retries and stopped silently — notification emails and label-evaluator extraction runs.",
+      "outboxFailedStat": "Failed notifications",
+      "outboxPendingStat": "Pending notifications",
+      "extractionFailedStat": "Failed extractions",
+      "outboxTitle": "Failed notifications",
+      "outboxEmpty": "No failed notifications.",
+      "outboxColEvent": "Event",
+      "outboxColChannel": "Channel",
+      "outboxColRecipient": "Recipient",
+      "outboxColAttempts": "Attempts",
+      "outboxColError": "Last error",
+      "outboxColWhen": "Last attempt",
+      "extractionTitle": "Failed label extractions",
+      "extractionEmpty": "No failed extraction jobs.",
+      "extractionColRequest": "Request",
+      "extractionColClient": "Client",
+      "extractionColAttempts": "Attempts",
+      "extractionColError": "Last error",
+      "extractionColWhen": "Last attempt",
+      "noError": "—"
     }
   },
   "myRequests": {
@@ -2077,6 +2100,7 @@
       "TOO_LONG": "That message is too long — please shorten it to 2000 characters.",
       "UNAUTHORIZED": "Please sign in again.",
       "FORBIDDEN": "You don't have access to the assistant.",
+      "RATE_LIMITED": "You've sent a lot of messages — please wait a bit before sending another.",
       "FAILED": "Something went wrong — please try again."
     }
   }

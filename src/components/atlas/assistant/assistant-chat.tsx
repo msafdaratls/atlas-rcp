@@ -13,10 +13,12 @@ import { getAssistantHistory, sendAssistantMessage } from "@/server/assistant/ac
 import { MAX_MESSAGE_LENGTH } from "@/server/assistant/constants";
 import type { AssistantMessageDto } from "@/server/assistant/queries";
 
-type ErrorCode = "EMPTY" | "TOO_LONG" | "UNAUTHORIZED" | "FORBIDDEN" | "FAILED";
+type ErrorCode = "EMPTY" | "TOO_LONG" | "UNAUTHORIZED" | "FORBIDDEN" | "RATE_LIMITED" | "FAILED";
 
 function errorKey(code: string): `errors.${ErrorCode}` {
-  return (["EMPTY", "TOO_LONG", "UNAUTHORIZED", "FORBIDDEN", "FAILED"] as const).includes(code as ErrorCode)
+  return (["EMPTY", "TOO_LONG", "UNAUTHORIZED", "FORBIDDEN", "RATE_LIMITED", "FAILED"] as const).includes(
+    code as ErrorCode,
+  )
     ? (`errors.${code as ErrorCode}` as const)
     : "errors.FAILED";
 }

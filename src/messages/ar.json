@@ -73,6 +73,7 @@
       "finance": "المالية",
       "quality": "الجودة",
       "analytics": "التحليلات",
+      "systemHealth": "سلامة النظام",
       "settings": "الإعدادات",
       "audit": "سجل التدقيق"
     }
@@ -1634,6 +1635,28 @@
       "total": "{count} مستند",
       "prev": "السابق",
       "next": "التالي"
+    },
+    "systemHealth": {
+      "pageDescription": "مهام خلفية استنفدت محاولات الإعادة وتوقفت بصمت — رسائل الإشعارات ومهام استخلاص مقيّم البطاقات.",
+      "outboxFailedStat": "إشعارات فاشلة",
+      "outboxPendingStat": "إشعارات معلّقة",
+      "extractionFailedStat": "مهام استخلاص فاشلة",
+      "outboxTitle": "الإشعارات الفاشلة",
+      "outboxEmpty": "لا توجد إشعارات فاشلة.",
+      "outboxColEvent": "الحدث",
+      "outboxColChannel": "القناة",
+      "outboxColRecipient": "المستلم",
+      "outboxColAttempts": "المحاولات",
+      "outboxColError": "آخر خطأ",
+      "outboxColWhen": "آخر محاولة",
+      "extractionTitle": "مهام الاستخلاص الفاشلة",
+      "extractionEmpty": "لا توجد مهام استخلاص فاشلة.",
+      "extractionColRequest": "الطلب",
+      "extractionColClient": "العميل",
+      "extractionColAttempts": "المحاولات",
+      "extractionColError": "آخر خطأ",
+      "extractionColWhen": "آخر محاولة",
+      "noError": "—"
     }
   },
   "myRequests": {
@@ -2077,6 +2100,7 @@
       "TOO_LONG": "هذه الرسالة طويلة جدًا — يرجى اختصارها إلى 2000 حرف.",
       "UNAUTHORIZED": "يرجى تسجيل الدخول مرة أخرى.",
       "FORBIDDEN": "ليس لديك صلاحية الوصول إلى المساعد.",
+      "RATE_LIMITED": "لقد أرسلت رسائل كثيرة — يرجى الانتظار قليلاً قبل إرسال رسالة أخرى.",
       "FAILED": "حدث خطأ ما — يرجى المحاولة مرة أخرى."
     }
   }
