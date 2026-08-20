@@ -97,78 +97,97 @@ function parseCheckSets(value: unknown) {
     );
 }
 
+// The active catalogue tree changes only when an admin edits it (rare) but is
+// read on every visit to the new-request wizard (constant) — cache it the
+// same way buildCatalogueContext already does for the assistant chat
+// (module-level, short TTL, no invalidation hook: 5 minutes of staleness
+// after a catalogue edit is the accepted trade-off already established
+// there, not a new one introduced here).
+const CATALOGUE_CACHE_TTL_MS = 5 * 60 * 1000;
+let cataloguePayloadCache: { payload: CataloguePayload; expiresAt: number } | null = null;
+
+async function loadCataloguePayload(): Promise<CataloguePayload> {
+  if (cataloguePayloadCache && cataloguePayloadCache.expiresAt > Date.now()) {
+    return cataloguePayloadCache.payload;
+  }
+
+  const [mains, subs, items] = await Promise.all([
+    prisma.mainCategory.findMany({
+      where: { active: true },
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.subCategory.findMany({
+      where: { active: true },
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.serviceItem.findMany({
+      where: { active: true },
+      include: { requiredDocuments: { orderBy: { sortOrder: "asc" } } },
+      orderBy: { sortOrder: "asc" },
+    }),
+  ]);
+
+  const payload: CataloguePayload = {
+    mains: mains.map((m) => ({
+      id: m.id,
+      code: m.code,
+      nameEn: m.nameEn,
+      nameAr: m.nameAr,
+      descEn: m.descEn,
+      descAr: m.descAr,
+      icon: m.icon,
+    })),
+    subs: subs.map((s) => ({
+      id: s.id,
+      mainCategoryId: s.mainCategoryId,
+      code: s.code,
+      nameEn: s.nameEn,
+      nameAr: s.nameAr,
+      descEn: s.descEn,
+      descAr: s.descAr,
+    })),
+    items: items.map((item) => ({
+      id: item.id,
+      subCategoryId: item.subCategoryId,
+      code: item.code,
+      nameEn: item.nameEn,
+      nameAr: item.nameAr,
+      descEn: item.descEn,
+      descAr: item.descAr,
+      basePrice: toNumber(item.basePrice),
+      vatRate: toNumber(item.vatRate),
+      slaHours: item.slaHours,
+      requiredDocumentCount: item.requiredDocuments.length,
+      productAttrSchema: item.productAttrSchema,
+      checkSets: parseCheckSets(item.checkSets),
+      deliverableEn: item.deliverableEn,
+      deliverableAr: item.deliverableAr,
+      deliverableType: item.deliverableType,
+      requiredCredentialPlatform: item.requiredCredentialPlatform,
+      requiredDocuments: item.requiredDocuments.map((d) => ({
+        id: d.id,
+        code: d.code,
+        nameEn: d.nameEn,
+        nameAr: d.nameAr,
+        mandatory: d.mandatory,
+        acceptedMimeTypes: d.acceptedMimeTypes,
+        maxSizeMb: d.maxSizeMb,
+        helpEn: d.helpEn,
+        helpAr: d.helpAr,
+        templateUrl: templateUrlFor(d.templateStorageKey),
+        templateFileName: d.templateFileName,
+      })),
+    })),
+  };
+
+  cataloguePayloadCache = { payload, expiresAt: Date.now() + CATALOGUE_CACHE_TTL_MS };
+  return payload;
+}
+
 export async function getCatalogueForNewRequest(): Promise<CataloguePayload | null> {
   try {
     await resolveRequestContext();
-
-    const [mains, subs, items] = await Promise.all([
-      prisma.mainCategory.findMany({
-        where: { active: true },
-        orderBy: { sortOrder: "asc" },
-      }),
-      prisma.subCategory.findMany({
-        where: { active: true },
-        orderBy: { sortOrder: "asc" },
-      }),
-      prisma.serviceItem.findMany({
-        where: { active: true },
-        include: { requiredDocuments: { orderBy: { sortOrder: "asc" } } },
-        orderBy: { sortOrder: "asc" },
-      }),
-    ]);
-
-    return {
-      mains: mains.map((m) => ({
-        id: m.id,
-        code: m.code,
-        nameEn: m.nameEn,
-        nameAr: m.nameAr,
-        descEn: m.descEn,
-        descAr: m.descAr,
-        icon: m.icon,
-      })),
-      subs: subs.map((s) => ({
-        id: s.id,
-        mainCategoryId: s.mainCategoryId,
-        code: s.code,
-        nameEn: s.nameEn,
-        nameAr: s.nameAr,
-        descEn: s.descEn,
-        descAr: s.descAr,
-      })),
-      items: items.map((item) => ({
-        id: item.id,
-        subCategoryId: item.subCategoryId,
-        code: item.code,
-        nameEn: item.nameEn,
-        nameAr: item.nameAr,
-        descEn: item.descEn,
-        descAr: item.descAr,
-        basePrice: toNumber(item.basePrice),
-        vatRate: toNumber(item.vatRate),
-        slaHours: item.slaHours,
-        requiredDocumentCount: item.requiredDocuments.length,
-        productAttrSchema: item.productAttrSchema,
-        checkSets: parseCheckSets(item.checkSets),
-        deliverableEn: item.deliverableEn,
-        deliverableAr: item.deliverableAr,
-        deliverableType: item.deliverableType,
-        requiredCredentialPlatform: item.requiredCredentialPlatform,
-        requiredDocuments: item.requiredDocuments.map((d) => ({
-          id: d.id,
-          code: d.code,
-          nameEn: d.nameEn,
-          nameAr: d.nameAr,
-          mandatory: d.mandatory,
-          acceptedMimeTypes: d.acceptedMimeTypes,
-          maxSizeMb: d.maxSizeMb,
-          helpEn: d.helpEn,
-          helpAr: d.helpAr,
-          templateUrl: templateUrlFor(d.templateStorageKey),
-          templateFileName: d.templateFileName,
-        })),
-      })),
-    };
+    return await loadCataloguePayload();
   } catch {
     return null;
   }
