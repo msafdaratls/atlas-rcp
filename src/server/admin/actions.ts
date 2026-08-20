@@ -42,6 +42,7 @@ import {
   onHoldResumeTarget,
   REOPEN_TARGET_STATES,
 } from "@/server/admin/queries";
+import { checkTransitionGuards } from "@/server/admin/transition-guards";
 import { appendReversingEntry } from "@/server/finance/ledger";
 
 export type ActionResult<T = undefined> =
@@ -148,24 +149,9 @@ const transitionSchema = z.object({
   note: z.string().trim().max(1000).optional(),
   reasonCodes: z.array(z.enum(RETURN_REASON_CODES)).max(RETURN_REASON_CODES.length).optional(),
   faultAttribution: z.enum(FAULT_ATTRIBUTIONS).optional(),
-  /** Required on the three Conflict-of-Interest-gated transitions; see COI_GATED_TRANSITIONS. */
+  /** Required on the three Conflict-of-Interest-gated transitions; see COI_GATED_TRANSITIONS in transition-guards.ts. */
   coiAcknowledged: z.literal(true).optional(),
 });
-
-/**
- * Transitions the spec requires a mandatory Conflict of Interest Declaration
- * before: completing Evaluation, completing Technical Review, and saving a
- * Certification Decision (both Grant and Refuse).
- */
-const COI_GATED_TRANSITIONS: Array<[RequestState, RequestState]> = [
-  ["ASSESSMENT_RUNNING", "TECHNICAL_REVIEW"],
-  // SCOC skip: completing Evaluation lands directly on Decision, so the same
-  // COI declaration required for a normal "complete Evaluation" applies here.
-  ["ASSESSMENT_RUNNING", "DECISION"],
-  ["TECHNICAL_REVIEW", "DECISION"],
-  ["DECISION", "REPORT_ISSUED"],
-  ["DECISION", "CLOSED"],
-];
 
 export async function transitionAdminRequest(
   input: z.infer<typeof transitionSchema>,
@@ -221,27 +207,16 @@ export async function transitionAdminRequest(
       return { ok: false, error: "FORBIDDEN" };
     }
 
-    if (toState === "RETURNED_TO_CLIENT" && (reasonCodes.length === 0 || !faultAttribution)) {
-      return { ok: false, error: "RETURN_REASON_REQUIRED" };
-    }
-
-    if (toState === "CANCELLED" && !note) {
-      return { ok: false, error: "CANCEL_NOTE_REQUIRED" };
-    }
-
-    // Refusing certification (DECISION -> CLOSED) must carry a reason, same
-    // rule as CANCELLED — this is the "Refuse Certification" path.
-    if (request.state === "DECISION" && toState === "CLOSED" && !note) {
-      return { ok: false, error: "REFUSAL_REASON_REQUIRED" };
-    }
-
-    if (
-      COI_GATED_TRANSITIONS.some(
-        ([from, to]) => from === request.state && to === toState,
-      ) &&
-      !coiAcknowledged
-    ) {
-      return { ok: false, error: "COI_ACKNOWLEDGEMENT_REQUIRED" };
+    const guardResult = checkTransitionGuards({
+      fromState: request.state,
+      toState,
+      note,
+      reasonCodes,
+      faultAttribution,
+      coiAcknowledged,
+    });
+    if (!guardResult.ok) {
+      return { ok: false, error: guardResult.error };
     }
 
     if (
