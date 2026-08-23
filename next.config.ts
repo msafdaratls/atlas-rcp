@@ -4,10 +4,11 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin("./src/lib/i18n/request.ts");
 
 /**
- * Security headers applied to every response. HSTS only takes effect over
- * HTTPS (behind the reverse proxy), so it is safe to send in all environments.
- * CSP is intentionally moderate: `'unsafe-inline'` is required for Next.js's
- * hydration bootstrap and Tailwind's injected styles. Tighten with nonces later.
+ * Static security headers applied to every response. HSTS only takes effect
+ * over HTTPS (behind the reverse proxy), so it is safe to send in all
+ * environments. Content-Security-Policy is NOT here: it needs a per-request
+ * nonce for script-src, so it's generated in src/middleware.ts instead (see
+ * src/lib/security/csp.ts).
  */
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -20,21 +21,6 @@ const securityHeaders = [
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
-  },
-  {
-    key: "Content-Security-Policy",
-    value: [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "connect-src 'self'",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "object-src 'none'",
-    ].join("; "),
   },
 ];
 

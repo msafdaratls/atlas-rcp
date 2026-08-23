@@ -825,6 +825,7 @@ model PlatformCredential {
   secretCiphertext String
   secretIv         String
   secretAuthTag    String
+  secretKeyVersion String       @default("v1")
   createdByUserId  String
   active           Boolean      @default(true)
   createdAt        DateTime     @default(now())

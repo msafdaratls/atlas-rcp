@@ -44,4 +44,44 @@ describe("encryptSecret / decryptSecret", () => {
     };
     assert.throws(() => decryptSecret(tampered));
   });
+
+  it("tags new envelopes with the default key version", () => {
+    const encrypted = encryptSecret("sensitive-value");
+    assert.equal(encrypted.keyVersion, "v1");
+  });
+});
+
+describe("key rotation", () => {
+  it("decrypts an old-version envelope after the current version is rotated forward", () => {
+    process.env.CREDENTIALS_MASTER_KEY_V2 = randomBytes(32).toString("base64");
+    const encryptedUnderV1 = encryptSecret("pre-rotation-secret");
+
+    process.env.CREDENTIALS_MASTER_KEY_VERSION = "v2";
+    try {
+      // A new save now uses v2...
+      const encryptedUnderV2 = encryptSecret("post-rotation-secret");
+      assert.equal(encryptedUnderV2.keyVersion, "v2");
+      assert.equal(decryptSecret(encryptedUnderV2), "post-rotation-secret");
+
+      // ...but the older v1 envelope, written before the rotation, still
+      // decrypts correctly since its own keyVersion is preserved.
+      assert.equal(decryptSecret(encryptedUnderV1), "pre-rotation-secret");
+    } finally {
+      delete process.env.CREDENTIALS_MASTER_KEY_VERSION;
+      delete process.env.CREDENTIALS_MASTER_KEY_V2;
+    }
+  });
+
+  it("throws a clear error when the key for an envelope's version is not configured", () => {
+    assert.throws(
+      () =>
+        decryptSecret({
+          ciphertext: "x",
+          iv: "eA==",
+          authTag: "eA==",
+          keyVersion: "v9",
+        }),
+      /CREDENTIALS_MASTER_KEY_V9 is not set/,
+    );
+  });
 });

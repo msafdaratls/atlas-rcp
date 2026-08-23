@@ -74,6 +74,7 @@ export async function createCredential(
           secretCiphertext: encrypted.ciphertext,
           secretIv: encrypted.iv,
           secretAuthTag: encrypted.authTag,
+          secretKeyVersion: encrypted.keyVersion,
           createdByUserId: ctx.actorUserId,
         },
       });
@@ -214,6 +215,7 @@ export async function revealCredential(
         secretCiphertext: true,
         secretIv: true,
         secretAuthTag: true,
+        secretKeyVersion: true,
         active: true,
       },
     });
@@ -225,6 +227,7 @@ export async function revealCredential(
       ciphertext: credential.secretCiphertext,
       iv: credential.secretIv,
       authTag: credential.secretAuthTag,
+      keyVersion: credential.secretKeyVersion,
     });
 
     const meta = await requestMeta();
