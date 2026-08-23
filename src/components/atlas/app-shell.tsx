@@ -9,6 +9,7 @@ import {
   AppTopbar,
   type ShellUser,
 } from "@/components/atlas/app-topbar";
+import { AdminAssistantChat } from "@/components/atlas/assistant/admin-assistant-chat";
 import { AssistantChat } from "@/components/atlas/assistant/assistant-chat";
 import type {
   CommandPaletteClient,
@@ -164,5 +165,10 @@ export function AppShell({
     );
   }
 
-  return shell;
+  return (
+    <>
+      {shell}
+      <AdminAssistantChat />
+    </>
+  );
 }

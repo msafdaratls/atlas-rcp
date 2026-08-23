@@ -3,9 +3,13 @@ import type { LabelEvalDomain } from "@prisma/client";
 import { getAnthropicClient } from "@/lib/anthropic-client";
 import { log } from "@/lib/logger";
 import { searchKbRules } from "@/server/assistant/kb-search";
+import { recordTokenUsage, type AssistantSurface } from "@/server/assistant/token-budget";
 
 const MODEL = process.env.ASSISTANT_CLAUDE_MODEL || "claude-sonnet-5";
 const MAX_TOOL_ROUNDS = 3;
+// The system prompt already asks for concise, factual replies — 1024 is
+// generous for that and cuts worst-case output cost vs. an unbounded cap.
+const MAX_OUTPUT_TOKENS = 1024;
 const FALLBACK_TEXT =
   "I wasn't able to put together a clear answer to that — please reach out through the Support page and the team will help directly.";
 
@@ -45,22 +49,33 @@ async function runTool(name: string, input: unknown): Promise<string> {
  * search_regulatory_rules tool calls in a bounded loop (cost guard — mirrors
  * label-eval/llm/client.ts's per-call logging, but this feature is
  * conversational so it doesn't use the structured-output helper there).
+ *
+ * Records each round's token usage against the daily budget immediately,
+ * not batched at the end: if a later round throws (e.g. a transient API
+ * error), tokens already spent in an earlier round of this same turn must
+ * still count — otherwise the budget guard silently undercounts real spend.
  */
 export async function runAssistantTurn(input: {
   systemPrompt: string;
   messages: Anthropic.MessageParam[];
-}): Promise<{ text: string; model: string }> {
+  surface: AssistantSurface;
+}): Promise<{ text: string; model: string; totalTokens: number }> {
   const client = getAnthropicClient();
   const working: Anthropic.MessageParam[] = [...input.messages];
+  let totalTokens = 0;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 1500,
+      max_tokens: MAX_OUTPUT_TOKENS,
       system: input.systemPrompt,
       tools: TOOLS,
       messages: working,
     });
+
+    const roundTokens = response.usage.input_tokens + response.usage.output_tokens;
+    totalTokens += roundTokens;
+    await recordTokenUsage(roundTokens, input.surface);
 
     log.info("assistant.chat", "claude turn completed", {
       model: MODEL,
@@ -76,7 +91,7 @@ export async function runAssistantTurn(input: {
         .map((block) => block.text)
         .join("\n")
         .trim();
-      return { text: text || FALLBACK_TEXT, model: MODEL };
+      return { text: text || FALLBACK_TEXT, model: MODEL, totalTokens };
     }
 
     working.push({ role: "assistant", content: response.content });
@@ -95,5 +110,5 @@ export async function runAssistantTurn(input: {
   }
 
   log.warn("assistant.chat", "tool loop exceeded max rounds without a final answer", { model: MODEL });
-  return { text: FALLBACK_TEXT, model: MODEL };
+  return { text: FALLBACK_TEXT, model: MODEL, totalTokens };
 }

@@ -2103,5 +2103,30 @@
       "RATE_LIMITED": "You've sent a lot of messages — please wait a bit before sending another.",
       "FAILED": "Something went wrong — please try again."
     }
+  },
+  "adminAssistant": {
+    "openButtonLabel": "Chat with the Atlas Staff Guide",
+    "panelTitle": "Atlas Staff Guide",
+    "panelSubtitle": "How to use the admin console, step by step",
+    "closeLabel": "Close",
+    "placeholder": "Ask how to do something, or what the next step is…",
+    "send": "Send",
+    "disclaimer": "Internal guidance only — this assistant can't perform actions for you; always use the workflow buttons on the page.",
+    "emptyTitle": "How can I help?",
+    "emptyBody": "Ask how to use a page, what a button does, or what the next step is in the workflow.",
+    "starterPrompts": [
+      "How do I complete application review?",
+      "How do I record a lab-testing sample shipment?",
+      "Where do I manage the service catalogue?"
+    ],
+    "thinking": "Thinking…",
+    "errors": {
+      "EMPTY": "Please enter a message.",
+      "TOO_LONG": "That message is too long — please shorten it to 2000 characters.",
+      "UNAUTHORIZED": "Please sign in again.",
+      "FORBIDDEN": "You don't have access to the assistant.",
+      "RATE_LIMITED": "You've sent a lot of messages — please wait a bit before sending another.",
+      "FAILED": "Something went wrong — please try again."
+    }
   }
 }

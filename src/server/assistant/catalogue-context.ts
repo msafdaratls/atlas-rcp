@@ -68,7 +68,8 @@ async function queryCatalogueContext(): Promise<string> {
   return lines.join("\n\n");
 }
 
-function describeActivities(item: {
+/** Also used by service-lookup.ts to render one service's activities without an AI call. */
+export function describeActivities(item: {
   requiresInspection: boolean;
   requiresLabTesting: boolean;
   requiresFactoryAudit: boolean;
@@ -81,7 +82,8 @@ function describeActivities(item: {
   return activities.length > 0 ? activities.join(", ") : "none beyond document review";
 }
 
-function describeDocuments(
+/** Also used by service-lookup.ts to render one service's documents without an AI call. */
+export function describeDocuments(
   docs: { nameEn: string; nameAr: string; mandatory: boolean; helpEn: string | null }[],
 ): string {
   if (docs.length === 0) return "none listed";

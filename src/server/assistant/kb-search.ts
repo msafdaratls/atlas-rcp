@@ -85,23 +85,44 @@ export function matchRules(rules: LabelKbRule[], query: string, limit = 8): Labe
 }
 
 /**
- * Backs the assistant's `search_regulatory_rules` tool. Only ever reads from
- * the currently ACTIVE KB version per domain (never DRAFT/ARCHIVED) so the
- * client is told the rule Atlas actually evaluates against today.
+ * Only ever reads from the currently ACTIVE KB version per domain (never
+ * DRAFT/ARCHIVED) so callers are told the rule Atlas actually evaluates
+ * against today. Shared by the AI tool below and by regulatory-lookup.ts's
+ * no-AI direct-answer path.
  */
-export async function searchKbRules(query: string, domain?: LabelEvalDomain): Promise<string> {
+export async function loadActiveKbRules(domain?: LabelEvalDomain): Promise<{ hasActiveVersion: boolean; rules: LabelKbRule[] }> {
   const domains: LabelEvalDomain[] = domain ? [domain] : ["SFDA_SUPPLEMENTS", "COSMETICS"];
   const versions = await prisma.labelKbVersion.findMany({
     where: { domain: { in: domains }, status: "ACTIVE" },
-    select: { id: true, domain: true },
+    select: { id: true },
   });
-  if (versions.length === 0) {
+  if (versions.length === 0) return { hasActiveVersion: false, rules: [] };
+  const rules = await prisma.labelKbRule.findMany({ where: { kbVersionId: { in: versions.map((v) => v.id) } } });
+  return { hasActiveVersion: true, rules };
+}
+
+/**
+ * True when at least one rule's title/section/code/payload text genuinely
+ * overlaps a word of the query — i.e. matchRules would return a real match
+ * rather than its "nothing scored, here's some rules anyway" fallback.
+ * regulatory-lookup.ts needs this distinction: showing that fallback as a
+ * confident direct answer (no AI to judge relevance) would be misleading.
+ */
+export function hasRuleMatch(rules: LabelKbRule[], query: string): boolean {
+  const words = tokenize(query);
+  if (words.length === 0) return false;
+  return rules.some((rule) => {
+    const haystack = `${rule.titleEn ?? ""} ${rule.titleAr} ${rule.section ?? ""} ${rule.code} ${safePayloadText(rule.payload)}`.toLowerCase();
+    return words.some((w) => haystack.includes(w));
+  });
+}
+
+/** Backs the assistant's `search_regulatory_rules` tool (used when the AI path is asked to look something up). */
+export async function searchKbRules(query: string, domain?: LabelEvalDomain): Promise<string> {
+  const { hasActiveVersion, rules } = await loadActiveKbRules(domain);
+  if (!hasActiveVersion) {
     return "No active knowledge-base version is loaded for this domain yet — tell the client to contact support for the specific clause text.";
   }
-
-  const rules = await prisma.labelKbRule.findMany({
-    where: { kbVersionId: { in: versions.map((v) => v.id) } },
-  });
   const top = matchRules(rules, query);
   if (top.length === 0) {
     return "No matching rule was found in the active knowledge base for that query.";

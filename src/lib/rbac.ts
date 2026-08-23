@@ -78,7 +78,8 @@ export function requirePermission(
     | "system:health"
     | "credentials:manage"
     | "credentials:reveal"
-    | "assistant:use",
+    | "assistant:use"
+    | "assistant:staff-use",
 ): void {
   const isClient = session.organisation.type === "CLIENT";
   const isAtlas = session.organisation.type === "ATLAS";
@@ -221,6 +222,14 @@ export function requirePermission(
       // Informational client help — any authenticated client-org user, no
       // role restriction (mirrors company:read).
       if (!isClient) {
+        throw new Error("FORBIDDEN");
+      }
+      return;
+    case "assistant:staff-use":
+      // Internal how-to guidance — any authenticated Atlas staff member, no
+      // role restriction (mirrors admin:dashboard: everyone on the admin
+      // side should be able to ask "how do I do X" for their own sections).
+      if (!isAtlas) {
         throw new Error("FORBIDDEN");
       }
       return;

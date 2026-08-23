@@ -7,17 +7,17 @@ import { prisma } from "@/lib/db";
 import { log } from "@/lib/logger";
 import { consumeRateLimitAsync } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/rbac";
-import { matchCannedAnswer } from "@/server/assistant/canned-answers";
-import { buildCatalogueContext } from "@/server/assistant/catalogue-context";
+import { matchCannedAnswer } from "@/server/assistant/admin-canned-answers";
+import { buildAdminManualContext } from "@/server/assistant/admin-manual-context";
+import { buildAdminSystemPrompt } from "@/server/assistant/admin-system-prompt";
 import { MAX_MESSAGE_LENGTH } from "@/server/assistant/constants";
 import { MODEL_CONTEXT_LIMIT, trimForModel } from "@/server/assistant/history-window";
-import { isLikelyOffTopic, OFF_TOPIC_REPLY } from "@/server/assistant/off-topic-guard";
+import { isLikelyOffTopic } from "@/server/assistant/off-topic-guard";
 import { getOrCreateConversation, listRecentMessages, type AssistantMessageDto } from "@/server/assistant/queries";
 import { findRegulatoryAnswer } from "@/server/assistant/regulatory-lookup";
 import { runAssistantTurn } from "@/server/assistant/run-turn";
 import { findServiceAnswer } from "@/server/assistant/service-lookup";
-import { buildSystemPrompt } from "@/server/assistant/system-prompt";
-import { BUDGET_EXCEEDED_REPLY, isTokenBudgetExceeded } from "@/server/assistant/token-budget";
+import { ADMIN_BUDGET_EXCEEDED_REPLY, isTokenBudgetExceeded } from "@/server/assistant/token-budget";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
@@ -28,20 +28,25 @@ const sendSchema = z.object({
 });
 
 const UNAVAILABLE_TEXT =
-  "The assistant is temporarily unavailable — please reach out through the Support page and the team will help directly.";
+  "The assistant is temporarily unavailable — please check with a colleague or System Admin in the meantime.";
+
+const ADMIN_OFF_TOPIC_REPLY = {
+  en: "I'm the Atlas Staff Guide — I can only help with using the admin console and the request workflow. For anything else, please reach out to a colleague or System Admin.",
+  ar: "أنا دليل موظفي أطلس — يمكنني المساعدة فقط في استخدام لوحة الإدارة وسير عمل الطلبات. لأي أمر آخر، يرجى التواصل مع أحد الزملاء أو مدير النظام.",
+};
 
 function toActionError(err: unknown): { ok: false; error: string } {
   if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "FORBIDDEN")) {
     return { ok: false, error: err.message };
   }
-  log.error("assistant.chat", "action failed", { error: String(err) });
+  log.error("admin-assistant.chat", "action failed", { error: String(err) });
   return { ok: false, error: "FAILED" };
 }
 
-export async function getAssistantHistory(): Promise<ActionResult<AssistantMessageDto[]>> {
+export async function getAdminAssistantHistory(): Promise<ActionResult<AssistantMessageDto[]>> {
   try {
     const session = await requireSession();
-    requirePermission(session, "assistant:use");
+    requirePermission(session, "assistant:staff-use");
     const conversation = await getOrCreateConversation(session);
     return { ok: true, data: await listRecentMessages(conversation.id) };
   } catch (err) {
@@ -50,34 +55,25 @@ export async function getAssistantHistory(): Promise<ActionResult<AssistantMessa
 }
 
 /**
- * One chat turn. Before ever calling Claude, tries — in order — a
- * regulatory-clause lookup (live KB rules), a specific-service lookup (live
- * catalogue row), a canned answer (generic platform/process question), and a
- * static decline for an obviously off-topic message. All four are answered
- * straight from stored data: no AI call, no tokens spent, and (unlike a
- * canned string) the first two are always current since they're read from
- * the database on every turn. Only a message none of them can confidently
- * resolve reaches Claude — grounded in the live catalogue +
- * search_regulatory_rules tool — gated last by the daily token-budget guard.
- * Persists whichever reply it lands on and returns the refreshed transcript.
- * Never calls out when ANTHROPIC_API_KEY is unset — same fail-closed
- * convention as label-eval's AI call sites.
+ * One chat turn for Atlas staff — same shape as the client assistant's
+ * sendAssistantMessage (see its doc comment), but grounded in the written
+ * admin manual instead of the live catalogue, and role-filtered throughout:
+ * a canned answer or the AI's manual context only ever include sections the
+ * caller's own role(s) can see. Tracks its own daily token budget and rate
+ * limit, independent of the client assistant's (token-budget.ts's
+ * `surface` param) so heavy use on one side can never lock out the other.
  */
-export async function sendAssistantMessage(input: { text: string }): Promise<ActionResult<AssistantMessageDto[]>> {
+export async function sendAdminAssistantMessage(input: { text: string }): Promise<ActionResult<AssistantMessageDto[]>> {
   try {
     const session = await requireSession();
-    requirePermission(session, "assistant:use");
+    requirePermission(session, "assistant:staff-use");
     const parsed = sendSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.issues[0]?.message === "TOO_LONG" ? "TOO_LONG" : "EMPTY" };
     }
 
-    // Any turn can end up a paid model call — cap per user so the only
-    // client-facing AI surface can't be spammed into an open-ended cost
-    // bill. Applied uniformly (even to canned/off-topic replies) so probing
-    // for the free paths isn't itself a way around the limit.
     const limited = await consumeRateLimitAsync({
-      key: `assistant-chat:${session.id}`,
+      key: `admin-assistant-chat:${session.id}`,
       limit: 20,
       windowMs: 60 * 60 * 1000,
     });
@@ -107,34 +103,35 @@ export async function sendAssistantMessage(input: { text: string }): Promise<Act
       return reply(serviceAnswer, "service-lookup");
     }
 
-    const canned = matchCannedAnswer(parsed.data.text);
+    const canned = matchCannedAnswer(parsed.data.text, session.roles);
     if (canned) {
       return reply(session.locale === "ar" ? canned.ar : canned.en, "canned");
     }
 
     if (isLikelyOffTopic(parsed.data.text)) {
-      return reply(session.locale === "ar" ? OFF_TOPIC_REPLY.ar : OFF_TOPIC_REPLY.en, "off-topic-guard");
+      return reply(session.locale === "ar" ? ADMIN_OFF_TOPIC_REPLY.ar : ADMIN_OFF_TOPIC_REPLY.en, "off-topic-guard");
     }
 
     if (!process.env.ANTHROPIC_API_KEY) {
       return reply(UNAVAILABLE_TEXT, "unavailable");
     }
 
-    if (await isTokenBudgetExceeded("client")) {
-      return reply(session.locale === "ar" ? BUDGET_EXCEEDED_REPLY.ar : BUDGET_EXCEEDED_REPLY.en, "budget-exceeded");
+    if (await isTokenBudgetExceeded("admin")) {
+      return reply(
+        session.locale === "ar" ? ADMIN_BUDGET_EXCEEDED_REPLY.ar : ADMIN_BUDGET_EXCEEDED_REPLY.en,
+        "budget-exceeded",
+      );
     }
 
     const history = await listRecentMessages(conversation.id);
-    const catalogueContext = await buildCatalogueContext();
-    const systemPrompt = buildSystemPrompt({ locale: session.locale, catalogueContext });
+    const manualContext = buildAdminManualContext(session.roles);
+    const systemPrompt = buildAdminSystemPrompt({ locale: session.locale, roles: session.roles, manualContext });
     const claudeMessages: Anthropic.MessageParam[] = trimForModel(history, MODEL_CONTEXT_LIMIT).map((m) => ({
       role: m.role === "USER" ? "user" : "assistant",
       content: m.content,
     }));
 
-    // runAssistantTurn records token spend itself, per round, as it happens —
-    // see its doc comment for why that can't be batched here after the call.
-    const { text, model } = await runAssistantTurn({ systemPrompt, messages: claudeMessages, surface: "client" });
+    const { text, model } = await runAssistantTurn({ systemPrompt, messages: claudeMessages, surface: "admin" });
 
     return reply(text, model);
   } catch (err) {

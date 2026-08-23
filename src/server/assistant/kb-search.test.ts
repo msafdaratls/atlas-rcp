@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { LabelKbRule } from "@prisma/client";
-import { formatRuleForClient, matchRules } from "./kb-search";
+import { formatRuleForClient, hasRuleMatch, matchRules } from "./kb-search";
 
 function rule(overrides: Partial<LabelKbRule>): LabelKbRule {
   return {
@@ -55,6 +55,20 @@ describe("matchRules", () => {
     const rules = Array.from({ length: 10 }, (_, i) => rule({ id: `r${i}`, code: `GSO_9_${i}` }));
     const result = matchRules(rules, "net weight", 3);
     assert.equal(result.length, 3);
+  });
+});
+
+describe("hasRuleMatch", () => {
+  it("is true when a rule's title genuinely overlaps the query", () => {
+    const netWeight = rule({ id: "r1", titleEn: "Net weight declaration", payload: {} });
+    assert.equal(hasRuleMatch([netWeight], "net weight"), true);
+  });
+
+  it("is false when nothing overlaps, unlike matchRules' return-everything fallback", () => {
+    const netWeight = rule({ id: "r1", titleEn: "Net weight declaration", payload: {} });
+    assert.equal(hasRuleMatch([netWeight], "xyzzy-nonexistent-term"), false);
+    // matchRules would still return this rule via its fallback — the two must disagree here.
+    assert.equal(matchRules([netWeight], "xyzzy-nonexistent-term").length, 1);
   });
 });
 
