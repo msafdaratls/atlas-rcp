@@ -24,7 +24,7 @@ const CANNED_ANSWERS: CannedEntry[] = [
     id: "work_queues",
     keywords: ["work queue", "queues page", "pick up work", "قائمة الانتظار", "طوابير العمل"],
     en: "The **Work Queues** page shows six count tiles — Intake, Assessment, Technical review, Decision, Returned, On hold. Clicking one navigates to the **Requests** list filtered to that group. There's no separate \"claim\" button — open a request from the list and either use its stage action (which auto-assigns you if it's unassigned) or the explicit **Assign** control on the request page.",
-    ar: "تعرض صفحة **قوائم الانتظار** ست بطاقات عدّ: الاستلام، التقييم، المراجعة الفنية، القرار، المُعاد، والمُعلّق. الضغط على إحداها ينقلك إلى صفحة **الطلبات** مُفلترة لتلك المجموعة. لا يوجد زر \"استلام\" منفصل — افتح الطلب من القائمة واستخدم إجراء مرحلته (الذي يُسندك تلقائيًا إذا كان الطلب غير مُسند) أو أداة **الإسناد** الصريحة في صفحة الطلب.",
+    ar: "تعرض صفحة **طوابير العمل** ست بطاقات عدّ: الاستلام، التقييم، المراجعة الفنية، القرار، المُعاد، والمُعلّق. الضغط على إحداها ينقلك إلى صفحة **الطلبات** مُفلترة لتلك المجموعة. لا يوجد زر \"استلام\" منفصل — افتح الطلب من القائمة واستخدم إجراء مرحلته (الذي يُسندك تلقائيًا إذا كان الطلب غير مُسند) أو أداة **الإسناد** الصريحة في صفحة الطلب.",
   },
   {
     id: "requests_search",
@@ -42,7 +42,7 @@ const CANNED_ANSWERS: CannedEntry[] = [
     id: "documents_search",
     keywords: ["find a document", "search documents", "documents page", "البحث عن مستند", "صفحة المستندات"],
     en: "The **Documents** page is a system-wide, read-only search across every uploaded file on every request (labels, certificates, reports) — searchable and filterable by file type. Click a request number in the results to jump to that request's detail page.",
-    ar: "صفحة **المستندات** هي أداة بحث للقراءة فقط تغطي جميع الملفات المرفوعة في كل الطلبات (الملصقات، الشهادات، التقارير) — قابلة للبحث والفلترة حسب نوع الملف. اضغط على رقم الطلب في النتائج للانتقال إلى صفحة تفاصيله.",
+    ar: "صفحة **المستندات** هي أداة بحث للقراءة فقط تغطي جميع الملفات المرفوعة في كل الطلبات (بطاقات البيان، الشهادات، التقارير) — قابلة للبحث والفلترة حسب نوع الملف. اضغط على رقم الطلب في النتائج للانتقال إلى صفحة تفاصيله.",
   },
   {
     id: "notifications_admin",
@@ -54,13 +54,13 @@ const CANNED_ANSWERS: CannedEntry[] = [
     id: "engagements",
     keywords: ["engagement", "retainer", "account management service", "الارتباطات", "اتفاقية الحساب"],
     en: "**Engagements** track an ongoing relationship with a client (e.g. an Account Management service) that spawns many requests over time. Use **Create Engagement** to start one, and **New Request** on an engagement's detail page to start a new on-behalf request already linked to it. **Close** ends the engagement.",
-    ar: "تتبّع **الارتباطات (Engagements)** علاقة مستمرة مع عميل (مثل خدمة إدارة الحساب) تُنشئ طلبات متعددة عبر الوقت. استخدم **إنشاء ارتباط** لبدء واحد، وزر **طلب جديد** في صفحة تفاصيل الارتباط لبدء طلب نيابةً عن العميل مرتبط به تلقائيًا. **إغلاق** ينهي الارتباط.",
+    ar: "تتبّع **الارتباطات** علاقة مستمرة مع عميل (مثل خدمة إدارة الحساب) تُنشئ طلبات متعددة عبر الوقت. استخدم **إنشاء ارتباط** لبدء واحد، وزر **طلب جديد** في صفحة تفاصيل الارتباط لبدء طلب نيابةً عن العميل مرتبط به تلقائيًا. **إغلاق** ينهي الارتباط.",
   },
   {
     id: "hold_resume",
     keywords: ["put on hold", "resume request", "on hold", "إيقاف مؤقت", "استئناف الطلب"],
     en: "Any of the four process roles (Intake Officer, Evaluator, Technical Reviewer, Decision Maker) or System Admin can **Put on hold** a request from most active states — this pauses its SLA clock. **Resume** always returns it to the exact state it was held from, never a different one.",
-    ar: "يمكن لأي من الأدوار الأربعة (مسؤول الاستلام، المُقيّم، المُراجع الفني، صاحب القرار) أو مدير النظام **إيقاف** الطلب مؤقتًا من معظم الحالات النشطة — يُوقف هذا عداد مدة الإنجاز. **الاستئناف** يُعيد الطلب دائمًا إلى نفس الحالة التي أُوقف منها، وليس إلى حالة أخرى.",
+    ar: "يمكن لأي من الأدوار الأربعة (مسؤول الاستلام، المُقيّم، المُراجع الفني، صاحب القرار) أو مدير النظام **تعليق** الطلب مؤقتًا من معظم الحالات النشطة — يُوقف هذا عداد مدة الإنجاز. **الاستئناف** يُعيد الطلب دائمًا إلى نفس الحالة التي أُوقف منها، وليس إلى حالة أخرى.",
   },
   {
     id: "cancel_request",
@@ -72,13 +72,13 @@ const CANNED_ANSWERS: CannedEntry[] = [
     id: "coi_gate",
     keywords: ["conflict of interest", "coi checkbox", "coi acknowledgement", "تضارب المصالح", "إقرار تضارب"],
     en: "A **Conflict-of-Interest** checkbox appears before four actions: Complete Evaluation, Complete Testing, Complete Technical Review, and Refuse Certification. You must confirm it — declaring you have no conflicting interest in this client's outcome — before the action proceeds.",
-    ar: "يظهر مربع إقرار **تضارب المصالح** قبل أربعة إجراءات: إكمال التقييم، إكمال الفحص المخبري، إكمال المراجعة الفنية، ورفض الشهادة. يجب تأكيده — بالإقرار بعدم وجود تضارب مصالح لديك في نتيجة هذا العميل — قبل تنفيذ الإجراء.",
+    ar: "يظهر مربع إقرار **تضارب المصالح** قبل أربعة إجراءات: إكمال التقييم، إكمال الاختبار المخبري، إكمال المراجعة الفنية، ورفض الشهادة. يجب تأكيده — بالإقرار بعدم وجود تضارب مصالح لديك في نتيجة هذا العميل — قبل تنفيذ الإجراء.",
   },
   {
     id: "reopen_request",
     keywords: ["reopen a request", "reopen closed", "إعادة فتح الطلب", "إعادة فتح طلب"],
     en: "A client can ask to reopen a Closed or Cancelled request; staff then **Approve** it (picking which state it resumes into) or **Reject** it from the request detail page. Any staff member with access to that request (or System Admin) can also force a direct reopen with a reason, without waiting on a client request.",
-    ar: "يمكن للعميل طلب إعادة فتح طلب \"مغلق\" أو \"ملغى\"؛ يقوم الموظف بعدها بـ**الموافقة** عليه (باختيار الحالة التي يعود إليها) أو **رفضه** من صفحة تفاصيل الطلب. يمكن أيضًا لأي موظف لديه صلاحية على ذلك الطلب (أو مدير النظام) فرض إعادة فتح مباشرة مع ذكر السبب، دون انتظار طلب من العميل.",
+    ar: "يمكن للعميل طلب إعادة فتح طلب \"تم\" أو \"ملغى\"؛ يقوم الموظف بعدها بـ**الموافقة** عليه (باختيار الحالة التي يعود إليها) أو **رفضه** من صفحة تفاصيل الطلب. يمكن أيضًا لأي موظف لديه صلاحية على ذلك الطلب (أو مدير النظام) فرض إعادة فتح مباشرة مع ذكر السبب، دون انتظار طلب من العميل.",
   },
 
   // ── Intake Officer ────────────────────────────────────────────────────
@@ -87,20 +87,20 @@ const CANNED_ANSWERS: CannedEntry[] = [
     roles: ["INTAKE_OFFICER", "SYSTEM_ADMIN"],
     keywords: ["review a submitted request", "under intake review", "intake review", "مراجعة الاستلام", "قيد مراجعة الاستلام"],
     en: "When a new request arrives (state Submitted), move it to **Under intake review** to start checking it. From there, either **Return to Client** if something's missing, or click **Complete Application Review** once it's in order.",
-    ar: "عند وصول طلب جديد (حالة \"مُقدَّم\")، انقله إلى **قيد مراجعة الاستلام** لتبدأ فحصه. من هناك، إمّا **إعادته للعميل** إذا كان ناقصًا، أو الضغط على **إكمال مراجعة الطلب** بمجرد اكتماله.",
+    ar: "عند وصول طلب جديد (حالة \"مُقدَّم\")، انقله إلى **مراجعة الاستلام** لتبدأ فحصه. من هناك، إمّا **إعادته للعميل** إذا كان ناقصًا، أو الضغط على **إكمال مراجعة الطلب** بمجرد اكتماله.",
   },
   {
     id: "complete_application_review",
     roles: ["INTAKE_OFFICER", "SYSTEM_ADMIN"],
     keywords: ["complete application review", "إكمال مراجعة الطلب"],
     en: "**Complete Application Review** is a one-click action that cascades the request through Accepted, Queued, and into Assessment Running in a single step, and automatically assigns it to that service's configured default Evaluator. The client is notified their request was accepted.",
-    ar: "**إكمال مراجعة الطلب** إجراء بضغطة واحدة ينقل الطلب عبر \"مقبول\" و\"في قائمة الانتظار\" وصولًا إلى \"قيد التقييم\" في خطوة واحدة، ويُسنده تلقائيًا إلى المُقيّم الافتراضي المحدد لتلك الخدمة. يصل للعميل إشعار بقبول طلبه.",
+    ar: "**إكمال مراجعة الطلب** إجراء بضغطة واحدة ينقل الطلب عبر \"مقبول\" و\"بانتظار التقييم\" وصولًا إلى \"التقييم جارٍ\" في خطوة واحدة، ويُسنده تلقائيًا إلى المُقيّم الافتراضي المحدد لتلك الخدمة. يصل للعميل إشعار بقبول طلبه.",
   },
   {
     id: "return_to_client",
     keywords: ["return to client", "return reason", "fault attribution", "إعادة الطلب للعميل", "سبب الإعادة"],
     en: "**Return to Client** is available to Intake Officer, Evaluator, Technical Reviewer, Decision Maker, and System Admin from most active states. The dialog requires at least one return reason code plus a fault attribution (Client / Atlas / Regulatory) and a note — the request moves to Returned to client and the client is notified to fix and resubmit.",
-    ar: "خيار **إعادة الطلب للعميل** متاح لمسؤول الاستلام، المُقيّم، المُراجع الفني، صاحب القرار، ومدير النظام من معظم الحالات النشطة. يتطلب مربع الحوار اختيار سبب إعادة واحد على الأقل، مع تحديد الجهة المسؤولة (العميل / أطلس / تنظيمي) وكتابة ملاحظة — ينتقل الطلب إلى حالة \"معاد للعميل\" ويصل للعميل إشعار لتصحيحه وإعادة تقديمه.",
+    ar: "خيار **إعادة الطلب للعميل** متاح لمسؤول الاستلام، المُقيّم، المُراجع الفني، صاحب القرار، ومدير النظام من معظم الحالات النشطة. يتطلب مربع الحوار اختيار سبب إعادة واحد على الأقل، مع تحديد الجهة المسؤولة (العميل / أطلس / تنظيمي) وكتابة ملاحظة — ينتقل الطلب إلى حالة \"مُعاد للعميل\" ويصل للعميل إشعار لتصحيحه وإعادة تقديمه.",
   },
   {
     id: "create_client",
@@ -123,28 +123,28 @@ const CANNED_ANSWERS: CannedEntry[] = [
     roles: ["EVALUATOR", "SYSTEM_ADMIN"],
     keywords: ["assessment panel", "compliance checklist", "لوحة التقييم", "قائمة المطابقة"],
     en: "The **Assessment panel** on a request in Assessment Running is where you mark each service item's compliance checklist — Compliant / Non-Compliant / N-A per check item. This is the same checklist the Label Evaluator's \"Promote to Official Checklist\" writes into when used.",
-    ar: "**لوحة التقييم** في الطلب أثناء \"قيد التقييم\" هي حيث تُحدد حالة كل بند في قائمة المطابقة — مطابق / غير مطابق / لا ينطبق لكل عنصر فحص. هذه هي نفس القائمة التي يكتب فيها زر \"ترحيل إلى القائمة الرسمية\" في مُقيّم الملصقات عند استخدامه.",
+    ar: "**لوحة التقييم** في الطلب أثناء \"التقييم جارٍ\" هي حيث تُحدد حالة كل بند في قائمة المطابقة — مطابق / غير مطابق / لا ينطبق لكل عنصر فحص. هذه هي نفس القائمة التي يكتب فيها زر \"ترحيل إلى القائمة الرسمية\" في مُقيّم البطاقات عند استخدامه.",
   },
   {
     id: "evaluation_activities",
     roles: ["EVALUATOR", "SYSTEM_ADMIN"],
     keywords: ["lab testing steps", "record sample shipment", "select laboratory", "evaluation activities", "أنشطة التقييم", "إرسال العينة", "اختيار المختبر"],
     en: "For lab testing, the sequence in the **Evaluation Activities** panel is: add the required tests -> select a laboratory -> record the sample shipment -> confirm the sample was received -> upload the lab's report -> mark the activity Complete (this last step requires at least one uploaded report). For inspection or factory audit, schedule a date and inspector, then mark it complete.",
-    ar: "بالنسبة للفحص المخبري، التسلسل في لوحة **أنشطة التقييم** هو: إضافة الاختبارات المطلوبة ← اختيار مختبر ← تسجيل شحن العينة ← تأكيد استلام العينة ← رفع تقرير المختبر ← تحديد النشاط كـ\"مكتمل\" (تتطلب هذه الخطوة الأخيرة رفع تقرير واحد على الأقل). أمّا للتفتيش أو تدقيق المصنع، فحدد موعدًا ومفتشًا، ثم علّمه كمكتمل.",
+    ar: "بالنسبة للاختبار المخبري، التسلسل في لوحة **أنشطة التقييم** هو: إضافة الاختبارات المطلوبة ← اختيار مختبر ← تسجيل شحن العينة ← تأكيد استلام العينة ← رفع تقرير المختبر ← تحديد النشاط كـ\"مكتمل\" (تتطلب هذه الخطوة الأخيرة رفع تقرير واحد على الأقل). أمّا للتفتيش أو تدقيق المصنع، فحدد موعدًا ومفتشًا، ثم علّمه كمكتمل.",
   },
   {
     id: "complete_testing",
     roles: ["EVALUATOR", "SYSTEM_ADMIN"],
-    keywords: ["complete testing", "lab testing coordination", "lab-001", "إكمال الفحص المخبري", "إكمال الاختبار"],
+    keywords: ["complete testing", "lab testing coordination", "lab-001", "إكمال الاختبار المخبري", "إكمال الاختبار"],
     en: "For a request made up entirely of Lab Testing Coordination (LAB-001) items, once every item's lab-testing activity is Complete, the **Complete Testing** button appears. One click cascades the request straight to Report issued and then Closed — skipping Technical Review and Decision entirely.",
-    ar: "للطلب المكوّن بالكامل من بنود \"تنسيق الفحص المخبري\" (LAB-001)، بمجرد اكتمال نشاط الفحص المخبري لكل بند، يظهر زر **إكمال الفحص المخبري**. تنقل هذه الضغطة الطلب مباشرة إلى \"صدر التقرير\" ثم \"مغلق\" — متجاوزةً المراجعة الفنية والقرار تمامًا.",
+    ar: "للطلب المكوّن بالكامل من بنود \"تنسيق الاختبارات المخبرية\" (LAB-001)، بمجرد اكتمال نشاط الاختبار المخبري لكل بند، يظهر زر **إكمال الاختبار**. تنقل هذه الضغطة الطلب مباشرة إلى \"صدر التقرير\" ثم \"تم\" — متجاوزةً المراجعة الفنية والقرار تمامًا.",
   },
   {
     id: "evaluation_report",
     roles: ["EVALUATOR", "SYSTEM_ADMIN"],
     keywords: ["evaluation report upload", "upload evaluation report", "رفع تقرير التقييم", "تقرير التقييم"],
     en: "Before you can advance a request out of Assessment Running, an **Evaluation Report** document must be uploaded per required item — do this in the Evaluation Report panel. Trying to advance without it is blocked with an error naming which item is missing its report.",
-    ar: "قبل أن تتمكن من نقل الطلب خارج \"قيد التقييم\"، يجب رفع مستند **تقرير التقييم** لكل بند مطلوب — نفّذ ذلك من لوحة تقرير التقييم. محاولة التقدّم دون ذلك تُحجب برسالة خطأ تحدد البند الناقص لتقريره.",
+    ar: "قبل أن تتمكن من نقل الطلب خارج \"التقييم جارٍ\"، يجب رفع مستند **تقرير التقييم** لكل بند مطلوب — نفّذ ذلك من لوحة تقرير التقييم. محاولة التقدّم دون ذلك تُحجب برسالة خطأ تحدد البند الناقص لتقريره.",
   },
   {
     id: "complete_evaluation",
@@ -156,16 +156,16 @@ const CANNED_ANSWERS: CannedEntry[] = [
   {
     id: "label_evaluator_ai",
     roles: ["EVALUATOR", "SYSTEM_ADMIN"],
-    keywords: ["label evaluator", "promote to official checklist", "ai label", "مُقيّم الملصقات", "ترحيل القائمة الرسمية"],
+    keywords: ["label evaluator", "promote to official checklist", "ai label", "مُقيّم البطاقات", "ترحيل القائمة الرسمية"],
     en: "The **Label Evaluator** (SFDA Supplements / Cosmetics) is an AI-assisted tool inside your normal assessment step. **Start Evaluation** extracts label fields from the uploaded artwork; you confirm or edit each field, reclassify the category if needed, then **Confirm & Run Assessment** proposes a verdict per rule, which you **Confirm** or **Override**. Nothing is official until you do — the AI only proposes. **Promote to Official Checklist** then writes your confirmed verdicts into the request's real Assessment panel.",
-    ar: "**مُقيّم الملصقات** (مكملات SFDA / مستحضرات التجميل) أداة مدعومة بالذكاء الاصطناعي ضمن خطوة التقييم المعتادة لديك. **بدء التقييم** يستخرج حقول الملصق من التصميم المرفوع؛ تُؤكد أو تُعدّل كل حقل، وتُعيد تصنيف الفئة إن لزم، ثم **تأكيد وتشغيل التقييم** يقترح حكمًا لكل بند تُقرره أنت بالـ**تأكيد** أو **التجاوز**. لا يُعتمد شيء رسميًا حتى تفعل ذلك — الذكاء الاصطناعي يقترح فقط. بعدها يكتب **ترحيل إلى القائمة الرسمية** أحكامك المؤكدة في لوحة التقييم الفعلية للطلب.",
+    ar: "**مُقيّم البطاقات** (مكملات SFDA / مستحضرات التجميل) أداة مدعومة بالذكاء الاصطناعي ضمن خطوة التقييم المعتادة لديك. **بدء التقييم** يستخرج حقول البطاقة من التصميم المرفوع؛ تُؤكد أو تُعدّل كل حقل، وتُعيد تصنيف الفئة إن لزم، ثم **تأكيد وتشغيل التقييم** يقترح حكمًا لكل بند تُقرره أنت بالـ**تأكيد** أو **التجاوز**. لا يُعتمد شيء رسميًا حتى تفعل ذلك — الذكاء الاصطناعي يقترح فقط. بعدها يكتب **ترحيل إلى القائمة الرسمية** أحكامك المؤكدة في لوحة التقييم الفعلية للطلب.",
   },
   {
     id: "external_deliverable",
     roles: ["EVALUATOR", "SYSTEM_ADMIN"],
     keywords: ["external deliverable", "attach certificate", "complete certificate issuance", "المستند الخارجي", "إرفاق الشهادة", "إكمال إصدار الشهادة"],
     en: "For SCOC/SABER/SFDA-cosmetics items, the **External Deliverable** panel appears from Decision onward: submit the external application, then once the real certificate comes back, upload it and mark it Issued (or Reject it with a reason). Attaching the certificate is what unlocks **Complete Certificate Issuance** — the only way a Report issued request reaches Closed.",
-    ar: "لبنود SCOC/SABER/مستحضرات التجميل التابعة لـ SFDA، تظهر لوحة **المستند الخارجي** ابتداءً من مرحلة القرار: قدّم الطلب الخارجي، ثم بمجرد وصول الشهادة الفعلية، ارفعها وعلّمها كـ\"صادرة\" (أو ارفضها مع ذكر السبب). إرفاق الشهادة هو ما يُفعّل زر **إكمال إصدار الشهادة** — الطريقة الوحيدة لوصول طلب \"صدر التقرير\" إلى حالة \"مغلق\".",
+    ar: "لبنود SCOC/SABER/مستحضرات التجميل التابعة لـ SFDA، تظهر لوحة **المستند الخارجي** ابتداءً من مرحلة القرار: قدّم الطلب الخارجي، ثم بمجرد وصول الشهادة الفعلية، ارفعها وعلّمها كـ\"صادرة\" (أو ارفضها مع ذكر السبب). إرفاق الشهادة هو ما يُفعّل زر **إكمال إصدار الشهادة** — الطريقة الوحيدة لوصول طلب \"صدر التقرير\" إلى حالة \"تم\".",
   },
 
   // ── Technical Reviewer ────────────────────────────────────────────────
@@ -211,9 +211,9 @@ const CANNED_ANSWERS: CannedEntry[] = [
   {
     id: "coupons_manage",
     roles: ["CATALOGUE_MANAGER", "FINANCE", "SYSTEM_ADMIN"],
-    keywords: ["create a coupon", "discount code", "إنشاء كوبون", "رمز خصم"],
+    keywords: ["create a coupon", "discount code", "إنشاء قسيمة", "رمز خصم"],
     en: "On the **Coupons** page, **Create Coupon** sets the code, bilingual name, discount type (percent or fixed), scope (all services / a category / one service), which clients can use it, and a validity window. The table lets you activate, deactivate, or expire a coupon.",
-    ar: "في صفحة **الكوبونات**، يحدد **إنشاء كوبون** الرمز، والاسم بلغتين، ونوع الخصم (نسبة أو مبلغ ثابت)، والنطاق (كل الخدمات / فئة / خدمة واحدة)، والعملاء المسموح لهم باستخدامه، وفترة الصلاحية. يتيح الجدول تفعيل الكوبون أو تعطيله أو إنهاء صلاحيته.",
+    ar: "في صفحة **القسائم**، يحدد **إنشاء قسيمة** الرمز، والاسم بلغتين، ونوع الخصم (نسبة أو مبلغ ثابت)، والنطاق (كل الخدمات / فئة / خدمة واحدة)، والعملاء المسموح لهم باستخدامه، وفترة الصلاحية. يتيح الجدول تفعيل القسيمة أو تعطيلها أو إنهاء صلاحيتها.",
   },
 
   // ── Catalogue Manager ─────────────────────────────────────────────────
@@ -236,14 +236,14 @@ const CANNED_ANSWERS: CannedEntry[] = [
     roles: ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"],
     keywords: ["manage laboratories", "add a laboratory", "test types", "إدارة المختبرات", "إضافة مختبر", "أنواع الاختبارات"],
     en: "The **Laboratories** page manages two reference tables: accredited Laboratories (code must be globally unique) and Test Types — both create/edit/toggle-active/delete, with delete blocked while a lab or test type is still referenced by a request. This is the data the Evaluator picks from when scheduling lab testing.",
-    ar: "تدير صفحة **المختبرات** جدولين مرجعيين: المختبرات المعتمدة (يجب أن يكون الرمز فريدًا عالميًا) وأنواع الاختبارات — كلاهما بإنشاء/تعديل/تفعيل أو تعطيل/حذف، مع منع الحذف إذا كان المختبر أو نوع الاختبار لا يزال مُشارًا إليه في طلب. هذه هي البيانات التي يختار منها المُقيّم عند جدولة الفحص المخبري.",
+    ar: "تدير صفحة **المختبرات** جدولين مرجعيين: المختبرات المعتمدة (يجب أن يكون الرمز فريدًا عالميًا) وأنواع الاختبارات — كلاهما بإنشاء/تعديل/تفعيل أو تعطيل/حذف، مع منع الحذف إذا كان المختبر أو نوع الاختبار لا يزال مُشارًا إليه في طلب. هذه هي البيانات التي يختار منها المُقيّم عند جدولة الاختبار المخبري.",
   },
   {
     id: "kb_datasets",
     roles: ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"],
     keywords: ["manage datasets", "knowledge base", "kb version", "إدارة قواعد البيانات", "قاعدة المعرفة"],
     en: "**Manage Datasets** on the Label Evaluator pages controls the versioned knowledge base the AI rule engine checks labels against — creating a new version, editing its rules, and publishing it. This only affects Cosmetics/SFDA label evaluation.",
-    ar: "**إدارة قواعد البيانات** في صفحات مُقيّم الملصقات تتحكم في قاعدة المعرفة الإصدارية التي يفحص محرك القواعد الذكي الملصقات بموجبها — إنشاء إصدار جديد، تعديل قواعده، ونشره. يؤثر هذا فقط على تقييم ملصقات مستحضرات التجميل و SFDA.",
+    ar: "**إدارة قواعد البيانات** في صفحات مُقيّم البطاقات تتحكم في قاعدة المعرفة الإصدارية التي يفحص محرك القواعد الذكي البطاقات بموجبها — إنشاء إصدار جديد، تعديل قواعده، ونشره. يؤثر هذا فقط على تقييم بطاقات مستحضرات التجميل و SFDA.",
   },
 
   // ── Quality Manager ───────────────────────────────────────────────────
@@ -280,9 +280,9 @@ const CANNED_ANSWERS: CannedEntry[] = [
   {
     id: "system_health",
     roles: ["SYSTEM_ADMIN"],
-    keywords: ["system health", "dead-lettered", "failed jobs", "صحة النظام", "المهام الفاشلة"],
+    keywords: ["system health", "dead-lettered", "failed jobs", "سلامة النظام", "المهام الفاشلة"],
     en: "The **System Health** page is a read-only diagnostics view of background jobs that dead-lettered after exhausting retries (failed notifications, failed label-extraction jobs) plus a pending-outbox count. There's no retry button — it's for spotting things like a stuck email provider or expired API credential; the fix happens outside the app.",
-    ar: "صفحة **صحة النظام** أداة تشخيص للقراءة فقط تعرض المهام الخلفية التي فشلت نهائيًا بعد استنفاد محاولات إعادة المحاولة (إشعارات فاشلة، مهام استخراج ملصقات فاشلة) بالإضافة إلى عدد الرسائل المعلقة في صندوق الصادر. لا يوجد زر لإعادة المحاولة — الغرض منها رصد مشاكل مثل تعطل مزود البريد أو انتهاء صلاحية مفتاح API؛ يتم الإصلاح خارج التطبيق.",
+    ar: "صفحة **سلامة النظام** أداة تشخيص للقراءة فقط تعرض المهام الخلفية التي فشلت نهائيًا بعد استنفاد محاولات إعادة المحاولة (إشعارات فاشلة، مهام استخراج بطاقات فاشلة) بالإضافة إلى عدد الرسائل المعلقة في صندوق الصادر. لا يوجد زر لإعادة المحاولة — الغرض منها رصد مشاكل مثل تعطل مزود البريد أو انتهاء صلاحية مفتاح API؛ يتم الإصلاح خارج التطبيق.",
   },
   {
     id: "system_admin_override",

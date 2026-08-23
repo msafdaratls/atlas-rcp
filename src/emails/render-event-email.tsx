@@ -80,7 +80,7 @@ export function renderPlainText(
     "",
     `${ctaLabel}: ${buildCtaUrl(locale, payload.link)}`,
     "",
-    "Atlas Support & Services",
+    locale === "ar" ? "أطلس للمساندة والخدمات" : "Atlas Support & Services",
   ].filter((line, i, arr) => !(line === "" && arr[i - 1] === ""));
   return lines.join("\n");
 }

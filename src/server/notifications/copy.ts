@@ -304,7 +304,7 @@ function interpolate(
  */
 const REQUEST_STATE_LABELS: Record<string, { en: string; ar: string }> = {
   DRAFT: { en: "Draft", ar: "مسودة" },
-  SUBMITTED: { en: "Submitted", ar: "مُقدَّم" },
+  SUBMITTED: { en: "Submitted", ar: "مُقدَّم" },
   UNDER_INTAKE_REVIEW: { en: "Under intake review", ar: "مراجعة الاستلام" },
   RETURNED_TO_CLIENT: { en: "Returned to client", ar: "مُعاد للعميل" },
   ACCEPTED: { en: "Accepted", ar: "مقبول" },

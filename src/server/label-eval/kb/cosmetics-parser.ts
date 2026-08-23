@@ -451,7 +451,7 @@ function parseRequiredTests(ws: ExcelJS.Worksheet, warnings: string[]): ParsedKb
         // No Arabic reason text in the source for individual lab-test rows —
         // composed from the hand-translated category name rather than
         // fabricating a full translation (documented gap, not silently absorbed).
-        reasonAr: `اختبار مخبري مطلوب: ${formulaTriggerText}`,
+        reasonAr: `اختبار مخبري مطلوب: ${CATEGORIES.find((c) => c.code === categoryCode)?.nameAr ?? testName}`,
         triggerSource: conditionText,
         productType,
         // Only "Mandatory" rows (keyed purely on Product Category) get a

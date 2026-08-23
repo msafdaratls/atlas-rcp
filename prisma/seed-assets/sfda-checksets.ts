@@ -343,7 +343,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_55_07",
         "titleEn": "Is the dosage form / method of administration clearly stated on the label?",
-        "titleAr": "هل تم بيان الشكل الجرعي / طريقة التناول بوضوح على الملصق؟",
+        "titleAr": "هل تم بيان الشكل الجرعي / طريقة التناول بوضوح على البطاقة؟",
         "priority": "Medium",
         "category": "Labeling",
         "knowledgeBaseAr": "يجب توضيح شكل المنتج أو طريقة تناوله مثل: كبسولات، أقراص، مسحوق، سائل، أكياس، أقراص للمضغ، أقراص فوارة، قطرات، مع بيان طريقة الاستخدام إذا لزم الأمر.",
@@ -387,7 +387,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_55_11",
         "titleEn": "Are the units of measurement for the ingredients correct (mg, µg, IU, g, mL, etc.)?",
-        "titleAr": "هل وحدات قياس المكوّنات صحيحة (ملغ، ميكروغرام، IU، غ، مل، إلخ)؟",
+        "titleAr": "هل وحدات قياس المكوّنات صحيحة (mg، µg، IU، g، mL، إلخ)؟",
         "priority": "High",
         "category": "Composition & Use",
         "knowledgeBaseAr": "تستخدم الوحدات المناسبة حسب نوع المادة مثل g، mg، µg، IU، mL أو غيرها من الوحدات المعترف بها.",
@@ -530,7 +530,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_55_24",
         "titleEn": "Does the label language comply with SFDA requirements?",
-        "titleAr": "هل تمتثل لغة الملصق لمتطلبات الهيئة العامة للغذاء والدواء؟",
+        "titleAr": "هل تمتثل لغة البطاقة لمتطلبات SFDA؟",
         "priority": "Critical",
         "category": "Labeling",
         "knowledgeBaseAr": "يجب أن تكون جميع البيانات الإلزامية مكتوبة باللغة العربية، ويجوز إضافة لغات أخرى بشرط ألا تتعارض مع النص العربي أو تغير معناه، وأن تكون جميع المعلومات متطابقة بين اللغات.",
@@ -706,7 +706,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_2233_14",
         "titleEn": "If a nutrition claim is made, is the related nutrient disclosed?",
-        "titleAr": "في حال وجود ادّعاء غذائي، هل تم الإفصاح عن المُغذّي ذي الصلة؟",
+        "titleAr": "في حال وجود ادّعاء تغذوي، هل تم الإفصاح عن المُغذّي ذي الصلة؟",
         "priority": "High",
         "category": "Claims Disclosure",
         "knowledgeBaseEn": "If a nutrition or health claim is made about a nutrient, that nutrient's value must be disclosed in nutrition label.",
@@ -718,7 +718,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_2233_15",
         "titleEn": "When a nutrition or health claim exists, are the related nutrients disclosed?",
-        "titleAr": "عند وجود ادّعاء غذائي أو صحي، هل تم الإفصاح عن المُغذّيات ذات الصلة؟",
+        "titleAr": "عند وجود ادّعاء تغذوي أو صحي، هل تم الإفصاح عن المُغذّيات ذات الصلة؟",
         "priority": "High",
         "category": "Claims Disclosure",
         "knowledgeBaseEn": "All nutrients necessary to support the nutrition or health claim must be disclosed per standard requirements.",
@@ -790,7 +790,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_2233_21",
         "titleEn": "Are protein, carbohydrates, and fat expressed in grams?",
-        "titleAr": "هل يُعبّر عن البروتين والكربوهيدرات والدهون بالجرام؟",
+        "titleAr": "هل يُعبّر عن البروتين والكربوهيدرات والدهون بالغرام؟",
         "priority": "Medium",
         "category": "Format",
         "knowledgeBaseEn": "Protein, carbohydrates, and fat must be expressed in grams (g).",
@@ -1003,7 +1003,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_2333_01",
         "titleEn": "Does the product contain a health or nutrition claim?",
-        "titleAr": "هل يحتوي المنتج على ادّعاء صحي أو غذائي؟",
+        "titleAr": "هل يحتوي المنتج على ادّعاء صحي أو تغذوي؟",
         "knowledgeBaseAr": "هل يحتوي المنتج على ادعاء صحي أو تغذوي؟",
         "evidenceRequired": "Label review for claim presence",
         "referenceRange": "SFDA FD 2333; Table 1!A1:R376; Table 2!A1:R50",
@@ -1023,7 +1023,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_2333_03",
         "titleEn": "Are nutrition labeling requirements applied when using claims?",
-        "titleAr": "هل تُطبّق متطلبات البطاقة الغذائية عند استخدام الادّعاءات؟",
+        "titleAr": "هل تُطبّق متطلبات البطاقة التغذوية عند استخدام الادّعاءات؟",
         "knowledgeBaseAr": "هل تم تطبيق متطلبات البطاقة التغذوية عند استخدام الادعاءات؟",
         "evidenceRequired": "Complete nutrition label present",
         "referenceRange": "SFDA FD 2333; SFDA FD 2233",
@@ -1113,7 +1113,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_2333_12",
         "titleEn": "If using nutrition claim, is the claim listed in Table (2)?",
-        "titleAr": "في حال استخدام ادّعاء غذائي، هل هو مدرج في الجدول (2)؟",
+        "titleAr": "في حال استخدام ادّعاء تغذوي، هل هو مدرج في الجدول (2)؟",
         "knowledgeBaseAr": "إذا كان يستخدم ادعاء تغذوي، هل الادعاء مدرج في الجدول (2)؟",
         "evidenceRequired": "Exact match in Table 2 permitted claims",
         "referenceRange": "Table 2!A3:R50",
@@ -1123,7 +1123,7 @@ export const foodCheckSets: SfdaCheckSet[] = [
       {
         "code": "FD_2333_13",
         "titleEn": "If using nutrition claim, are all conditions of use met?",
-        "titleAr": "في حال استخدام ادّعاء غذائي، هل تم استيفاء جميع شروط الاستخدام؟",
+        "titleAr": "في حال استخدام ادّعاء تغذوي، هل تم استيفاء جميع شروط الاستخدام؟",
         "knowledgeBaseAr": "إذا كان يستخدم ادعاء تغذوي، هل تم استيفاء جميع شروط الاستخدام؟",
         "evidenceRequired": "Product meets all conditions in Table 2",
         "referenceRange": "Table 2!K (Conditions of use)",

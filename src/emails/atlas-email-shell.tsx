@@ -92,7 +92,7 @@ export function AtlasEmailShell({
                         textAlign: align,
                       }}
                     >
-                      Atlas Support & Services
+                      {locale === "ar" ? "أطلس للمساندة والخدمات" : "Atlas Support & Services"}
                     </Text>
                   </Section>
 
@@ -206,7 +206,9 @@ export function AtlasEmailShell({
                         textAlign: align,
                       }}
                     >
-                      Atlas Support &amp; Services · ISO/IEC 17020 &amp; 17065
+                      {locale === "ar"
+                        ? "أطلس للمساندة والخدمات · معتمدة ISO/IEC 17020 و17065"
+                        : "Atlas Support & Services · ISO/IEC 17020 & 17065"}
                     </Text>
                   </Section>
                 </Container>

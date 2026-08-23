@@ -30,8 +30,8 @@ const CANNED_ANSWERS: CannedEntry[] = [
   {
     id: "payment_invoice",
     keywords: ["invoice", "how do i pay", "payment method", "billing", "فاتورة", "طريقة الدفع", "سداد"],
-    en: "Invoices are generated once a request is priced, and can be paid and reviewed from the **Invoices** page in the portal — you'll also get a notification when a new invoice is ready.",
-    ar: "تُصدر الفواتير بعد تسعير الطلب، ويمكن سدادها ومراجعتها من صفحة **الفواتير** في البوابة — وستصلك إشعار عند إصدار فاتورة جديدة.",
+    en: "Invoices are generated once a request is priced, and can be paid and reviewed from the **Pro forma invoices** tab on the **Statement** page — you'll also get a notification when a new invoice is ready.",
+    ar: "تُصدر الفواتير بعد تسعير الطلب، ويمكن سدادها ومراجعتها من تبويب **الفواتير المبدئية** في صفحة **كشف الحساب** — وستصلك إشعار عند إصدار فاتورة جديدة.",
   },
   {
     id: "certificate_download",

@@ -170,7 +170,7 @@ th,td{border-bottom:1px solid #DDDDDD;padding:6px 4px;text-align:${dir === "rtl"
     <tbody>${lines}</tbody>
   </table>
   <div class="totals">
-    <div><span>${input.locale === "ar" ? "الفرعي" : "Subtotal"}</span><span class="mono">SAR ${money(input.subtotal)}</span></div>
+    <div><span>${input.locale === "ar" ? "المجموع الفرعي" : "Subtotal"}</span><span class="mono">SAR ${money(input.subtotal)}</span></div>
     <div><span>${input.locale === "ar" ? "الخصم" : "Discount"}</span><span class="mono">SAR ${money(input.discount)}</span></div>
     <div><span>${input.locale === "ar" ? "الضريبة" : "VAT"}</span><span class="mono">SAR ${money(input.vatAmount)}</span></div>
     <div><strong>${input.locale === "ar" ? "الإجمالي" : "Total"}</strong><strong class="mono">SAR ${money(input.total)}</strong></div>
