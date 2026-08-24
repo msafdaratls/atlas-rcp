@@ -1,20 +1,29 @@
 /**
  * Content-Security-Policy, generated per-request in middleware (not
- * next.config.ts headers()) so script-src carries a random nonce instead of
- * 'unsafe-inline'. 'strict-dynamic' lets Next.js's own nonce'd bootstrap
- * script load its chunks without listing every hash; browsers that don't
- * support strict-dynamic fall back to 'self' + the nonce.
+ * next.config.ts headers()) — kept here rather than a static header so it's
+ * easy to make per-request again later.
  *
- * style-src still needs 'unsafe-inline': several components set dynamic
+ * script-src needs 'unsafe-inline': a per-request nonce only lands in
+ * Next.js's rendered <script> tags on dynamically-rendered pages, but this
+ * app statically prerenders locale pages (next-intl's setRequestLocale +
+ * generateStaticParams) for performance. On a static page the nonce baked
+ * into the response header never matches (or is entirely absent from) the
+ * build-time HTML, and 'strict-dynamic' — present in an earlier version of
+ * this policy — then drops the 'self' fallback too, so every <script> tag on
+ * every static page silently fails to load. That shipped 2026-08-23 and took
+ * down all client-side JS sitewide (nothing hydrates, no click handlers run)
+ * until this revert. Reintroducing a nonce needs the affected routes moved to
+ * dynamic rendering first — tracked separately, not a quick follow-up.
+ *
+ * style-src also needs 'unsafe-inline': several components set dynamic
  * style={{}} attributes (SLA meter, wizard progress bar, analytics charts),
  * and nonces don't cover the style="" attribute in any browser — only
- * 'unsafe-inline' or a matching hash does. Closing that needs a wider
- * refactor of those components to CSS custom properties, tracked separately.
+ * 'unsafe-inline' or a matching hash does.
  */
-export function buildCsp(nonce: string): string {
+export function buildCsp(): string {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
