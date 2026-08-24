@@ -14,6 +14,39 @@ function templateUrlFor(storageKey: string | null): string | null {
   return storageKey ? storage.publicUrl(storageKey) : null;
 }
 
+/**
+ * Shared by every query that hands required documents to a client surface —
+ * without the nested `templates` a variant slot (SAB-001's risk assessment)
+ * would silently render no download link at all.
+ */
+export const requiredDocumentsInclude = {
+  requiredDocuments: {
+    orderBy: { sortOrder: "asc" },
+    include: { templates: { orderBy: { sortOrder: "asc" } } },
+  },
+} as const;
+
+type RequiredDocumentRow = {
+  templateStorageKey: string | null;
+  templateFileName: string | null;
+  templateVariantAttrKey: string | null;
+  templates: { variantKey: string; storageKey: string; fileName: string }[];
+};
+
+/** The template half of a required-document payload, single or per-variant. */
+function templateFieldsFor(d: RequiredDocumentRow) {
+  return {
+    templateUrl: templateUrlFor(d.templateStorageKey),
+    templateFileName: d.templateFileName,
+    templateVariantAttrKey: d.templateVariantAttrKey,
+    templateVariants: d.templates.map((t) => ({
+      variantKey: t.variantKey,
+      url: storage.publicUrl(t.storageKey),
+      fileName: t.fileName,
+    })),
+  };
+}
+
 export type CatalogueMain = {
   id: string;
   code: string;
@@ -64,7 +97,16 @@ export type CatalogueServiceItem = {
     helpAr: string | null;
     templateUrl: string | null;
     templateFileName: string | null;
+    templateVariantAttrKey: string | null;
+    templateVariants: TemplateVariantView[];
   }>;
+};
+
+/** One blank form for a specific value of the slot's variant attribute. */
+export type TemplateVariantView = {
+  variantKey: string;
+  url: string;
+  fileName: string;
 };
 
 export type CataloguePayload = {
@@ -122,7 +164,7 @@ async function loadCataloguePayload(): Promise<CataloguePayload> {
     }),
     prisma.serviceItem.findMany({
       where: { active: true },
-      include: { requiredDocuments: { orderBy: { sortOrder: "asc" } } },
+      include: requiredDocumentsInclude,
       orderBy: { sortOrder: "asc" },
     }),
   ]);
@@ -174,8 +216,7 @@ async function loadCataloguePayload(): Promise<CataloguePayload> {
         maxSizeMb: d.maxSizeMb,
         helpEn: d.helpEn,
         helpAr: d.helpAr,
-        templateUrl: templateUrlFor(d.templateStorageKey),
-        templateFileName: d.templateFileName,
+        ...templateFieldsFor(d),
       })),
     })),
   };
@@ -250,6 +291,8 @@ export type DraftRequestItemView = {
     helpAr: string | null;
     templateUrl: string | null;
     templateFileName: string | null;
+    templateVariantAttrKey: string | null;
+    templateVariants: TemplateVariantView[];
   }>;
   documents: DraftRequestDocumentView[];
 };
@@ -279,7 +322,7 @@ export async function getDraftRequest(
           orderBy: { sortOrder: "asc" },
           include: {
             serviceItem: {
-              include: { requiredDocuments: { orderBy: { sortOrder: "asc" } } },
+              include: requiredDocumentsInclude,
             },
             documents: {
               include: { currentVersion: true },
@@ -323,8 +366,7 @@ export async function getDraftRequest(
           maxSizeMb: d.maxSizeMb,
           helpEn: d.helpEn,
           helpAr: d.helpAr,
-          templateUrl: templateUrlFor(d.templateStorageKey),
-          templateFileName: d.templateFileName,
+          ...templateFieldsFor(d),
         })),
         documents: item.documents.map((d) => ({
           id: d.id,
@@ -574,6 +616,8 @@ export type ClientRequestDetailItem = {
     helpAr: string | null;
     templateUrl: string | null;
     templateFileName: string | null;
+    templateVariantAttrKey: string | null;
+    templateVariants: TemplateVariantView[];
   }>;
 };
 
@@ -649,7 +693,7 @@ export async function getClientRequestDetail(
           orderBy: { sortOrder: "asc" },
           include: {
             serviceItem: {
-              include: { requiredDocuments: { orderBy: { sortOrder: "asc" } } },
+              include: requiredDocumentsInclude,
             },
             documents: {
               include: {
@@ -771,8 +815,7 @@ export async function getClientRequestDetail(
           maxSizeMb: d.maxSizeMb,
           helpEn: d.helpEn,
           helpAr: d.helpAr,
-          templateUrl: templateUrlFor(d.templateStorageKey),
-          templateFileName: d.templateFileName,
+          ...templateFieldsFor(d),
         })),
       })),
       canResubmit:

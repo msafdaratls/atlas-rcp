@@ -149,11 +149,21 @@ export async function GET(_request: NextRequest, { params }: Params) {
           where: { templateStorageKey: key },
           select: { templateFileName: true },
         });
+        // Per-variant blank forms (e.g. one risk assessment form per SABER
+        // technical regulation) live in their own table but are just as
+        // non-client-specific as the single-template case above.
+        const variantTemplate = docTemplate
+          ? null
+          : await prisma.requiredDocumentTemplate.findFirst({
+              where: { storageKey: key },
+              select: { fileName: true },
+            });
 
-        if (docTemplate) {
+        if (docTemplate || variantTemplate) {
           // A blank form template, not client-specific data — any
           // authenticated user (client or Atlas staff) may download it.
-          downloadName = docTemplate.templateFileName ?? downloadName;
+          downloadName =
+            docTemplate?.templateFileName ?? variantTemplate?.fileName ?? downloadName;
         } else {
           const org = await prisma.organisation.findFirst({
             where: { logoKey: key },

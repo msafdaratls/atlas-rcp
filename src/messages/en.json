@@ -337,7 +337,8 @@
       "additional": "Additional documents",
       "drop": "Drop a file or click to upload",
       "remove": "Remove file",
-      "downloadTemplate": "Download template"
+      "downloadTemplate": "Download template",
+      "chooseTemplate": "Download the form for your technical regulation:"
     },
     "step4": {
       "title": "Review & submit",
@@ -390,7 +391,8 @@
       "BUILDING_MATERIALS_PART5": "Building Materials — Part 5",
       "BUILDING_MATERIALS_PART4": "Building Materials — Part 4",
       "BUILDING_MATERIALS_PART1": "Building Materials — Part 1",
-      "LOW_VOLTAGE_ELECTRICAL": "GCC Low Voltage Electrical Equipment and Appliances"
+      "LOW_VOLTAGE_ELECTRICAL": "GCC Low Voltage Electrical Equipment and Appliances",
+      "AUTO_SPARE_PARTS": "Automotive Spare Parts"
     },
     "summary": {
       "title": "Order summary",
@@ -1117,6 +1119,7 @@
         "requiredDocuments": "Required documents",
         "requiredDocumentsHint": "Attach a downloadable blank-form template per document — clients see a \"Download Template\" link before uploading their filled copy.",
         "noTemplate": "No template uploaded yet",
+        "templateVariants": "{count} per-product forms attached",
         "uploadTemplate": "Upload template",
         "replaceTemplate": "Replace template",
         "removeTemplate": "Remove template",

@@ -1254,6 +1254,8 @@ export type AdminCatalogueItem = {
     nameAr: string;
     mandatory: boolean;
     templateFileName: string | null;
+    /** >0 when the slot's form varies by product attribute instead. */
+    templateVariantCount: number;
   }>;
 };
 
@@ -1266,7 +1268,10 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
       include: {
         subCategory: { include: { mainCategory: true } },
         defaultEvaluator: { select: { fullNameEn: true, fullNameAr: true } },
-        requiredDocuments: { orderBy: { sortOrder: "asc" } },
+        requiredDocuments: {
+          orderBy: { sortOrder: "asc" },
+          include: { _count: { select: { templates: true } } },
+        },
       },
       orderBy: [{ subCategoryId: "asc" }, { sortOrder: "asc" }],
     });
@@ -1304,6 +1309,7 @@ export async function listAdminCatalogue(): Promise<AdminCatalogueItem[] | null>
         nameAr: d.nameAr,
         mandatory: d.mandatory,
         templateFileName: d.templateFileName,
+        templateVariantCount: d._count.templates,
       })),
     }));
   } catch {

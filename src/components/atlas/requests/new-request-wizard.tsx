@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { parseAttrSchema, validateProductAttrs } from "@/lib/attr-schema";
 import { AttrScalarInput } from "@/components/atlas/requests/attr-field-input";
+import { DocumentTemplateLinks } from "@/components/atlas/requests/document-template-links";
 import { computeOrderBreakdown } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import {
@@ -37,7 +38,7 @@ import {
   uploadRequestDocument,
 } from "@/server/requests/actions";
 import { endRequestOnBehalf } from "@/server/requests/on-behalf";
-import { Download, Pill, Sparkles, Upload, X } from "lucide-react";
+import { Pill, Sparkles, Upload, X } from "lucide-react";
 import type {
   CataloguePayload,
   CatalogueServiceItem,
@@ -57,6 +58,8 @@ type UploadSlotState = {
   helpAr?: string | null;
   templateUrl?: string | null;
   templateFileName?: string | null;
+  templateVariantAttrKey?: string | null;
+  templateVariants?: { variantKey: string; url: string; fileName: string }[];
   documentId?: string;
   fileName?: string;
   mimeType?: string;
@@ -131,6 +134,8 @@ function buildSlots(
       helpAr: doc.helpAr,
       templateUrl: doc.templateUrl,
       templateFileName: doc.templateFileName,
+      templateVariantAttrKey: doc.templateVariantAttrKey,
+      templateVariants: doc.templateVariants,
       documentId: existing?.id,
       fileName: existing?.currentVersion?.fileName,
       mimeType: existing?.currentVersion?.mimeType,
@@ -210,6 +215,7 @@ export function NewRequestWizard({
   engagementId = null,
 }: Props) {
   const t = useTranslations("newRequest");
+  const tEnums = useTranslations("newRequest.enums");
   const tCredentials = useTranslations("company.credentials");
   const locale = useLocale();
   const [credentials, setCredentials] = useState(initialCredentials);
@@ -1277,6 +1283,12 @@ export function NewRequestWizard({
             </p>
             {items.map((item) => {
               const catalogueItem = catalogueItemById.get(item.serviceItemId);
+              // Product name disambiguates the groups: several products of the
+              // same service repeat the same slots, and product-specific forms
+              // (SAB-001's risk assessment) need one upload per product.
+              const productName =
+                (locale === "ar" ? item.productNameAr : item.productNameEn).trim() ||
+                item.productNameEn.trim();
               return (
                 <div key={item.requestItemId} className="space-y-3">
                   <p className="text-sm font-semibold text-ink-900">
@@ -1285,6 +1297,7 @@ export function NewRequestWizard({
                         ? catalogueItem.nameAr
                         : catalogueItem.nameEn
                       : ""}
+                    {productName ? ` — ${productName}` : ""}
                   </p>
                   <ul className="space-y-3">
                     {item.slots.map((slot, index) => (
@@ -1317,18 +1330,16 @@ export function NewRequestWizard({
                                 {locale === "ar" ? slot.helpAr : slot.helpEn}
                               </p>
                             ) : null}
-                            {slot.templateUrl ? (
-                              <a
-                                href={slot.templateUrl}
-                                download={slot.templateFileName ?? undefined}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-atlas-green-600 underline-offset-2 hover:underline"
-                              >
-                                <Download className="size-3.5" />
-                                {t("step3.downloadTemplate")}
-                              </a>
-                            ) : null}
+                            <DocumentTemplateLinks
+                              templateUrl={slot.templateUrl}
+                              templateFileName={slot.templateFileName}
+                              templateVariantAttrKey={slot.templateVariantAttrKey}
+                              templateVariants={slot.templateVariants}
+                              productAttrs={item.attrs}
+                              downloadLabel={t("step3.downloadTemplate")}
+                              chooseLabel={t("step3.chooseTemplate")}
+                              variantLabel={(key) => tEnums(key as never)}
+                            />
                           </div>
                           {slot.fileName ? (
                             <Button

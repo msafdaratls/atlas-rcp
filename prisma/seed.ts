@@ -19,6 +19,7 @@ import bcrypt from "bcryptjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { foodCheckSets } from "./seed-assets/sfda-checksets";
+import { installDocumentTemplates } from "./install-document-templates";
 
 const prisma = new PrismaClient();
 
@@ -1304,6 +1305,10 @@ async function main() {
     "BUILDING_MATERIALS_PART4",
     "BUILDING_MATERIALS_PART1",
     "LOW_VOLTAGE_ELECTRICAL",
+    // Added 2026-08-24 alongside the per-regulation risk assessment forms: the
+    // client supplied an Auto Spare Parts form, which needs a matching value
+    // here for anyone to ever be offered it.
+    "AUTO_SPARE_PARTS",
   ] as const;
 
   const svcSaberPcoc = await createServiceItem({
@@ -1318,27 +1323,30 @@ async function main() {
     sortOrder: 1,
     docs: [
       {
+        // Code kept as IMPORTER_DECLARATION (stable key on existing rows); the
+        // label follows the form itself, which is titled "Supplier Declaration
+        // of Conformity" and is filled on the importer's letterhead.
         code: "IMPORTER_DECLARATION",
-        nameEn: "Importer declaration",
-        nameAr: "إقرار المستورد",
+        nameEn: "Supplier declaration",
+        nameAr: "إقرار المورّد",
         mandatory: true,
         acceptedMimeTypes: ["application/pdf"],
         helpEn:
-          "Download the template, fill it out on your Importer Header Letter, then upload the completed file.",
+          "Download the template, fill it out on your Importer Header Letter, then upload the signed file. The same declaration may be reused for every product on this request.",
         helpAr:
-          "نزّل النموذج، واملأه على الترويسة الرسمية للمستورد (Header Letter)، ثم ارفع الملف المكتمل.",
+          "نزّل النموذج، واملأه على الترويسة الرسمية للمستورد (Header Letter)، ثم ارفع الملف موقّعاً. يمكن استخدام الإقرار نفسه لجميع منتجات هذا الطلب.",
         sortOrder: 1,
       },
       {
         code: "MANUFACTURER_DECLARATION",
         nameEn: "Manufacturer declaration",
-        nameAr: "إقرار المصنّع",
+        nameAr: "إقرار الصانع",
         mandatory: true,
         acceptedMimeTypes: ["application/pdf"],
         helpEn:
-          "Download the template, fill it out on your Importer Header Letter, then upload the completed file.",
+          "Download the template, fill it out on the manufacturer's letterhead, then upload the signed file. The same declaration may be reused for every product on this request.",
         helpAr:
-          "نزّل النموذج، واملأه على الترويسة الرسمية للمستورد (Header Letter)، ثم ارفع الملف المكتمل.",
+          "نزّل النموذج، واملأه على الترويسة الرسمية للصانع، ثم ارفع الملف موقّعاً. يمكن استخدام الإقرار نفسه لجميع منتجات هذا الطلب.",
         sortOrder: 2,
       },
       {
@@ -1367,14 +1375,17 @@ async function main() {
       },
       {
         code: "RISK_ASSESSMENT",
-        nameEn: "Risk assessment",
-        nameAr: "تقييم المخاطر",
+        nameEn: "Risk assessment form",
+        nameAr: "نموذج تقييم المخاطر",
         mandatory: true,
         acceptedMimeTypes: ["application/pdf"],
+        // The blank form differs per technical regulation, so this slot uses
+        // the variant templates installed by install-document-templates.ts
+        // rather than a single templateStorageKey.
         helpEn:
-          "Download the template, fill it out on your Importer Header Letter, then upload the completed file.",
+          "Download the form for your technical regulation, fill it out on your Importer Header Letter, then upload the signed file. The risk assessment is product-specific — a separate form is required for each product.",
         helpAr:
-          "نزّل النموذج، واملأه على الترويسة الرسمية للمستورد (Header Letter)، ثم ارفع الملف المكتمل.",
+          "نزّل النموذج الخاص باللائحة الفنية لمنتجك، واملأه على الترويسة الرسمية للمستورد (Header Letter)، ثم ارفع الملف موقّعاً. تقييم المخاطر خاص بكل منتج — يلزم نموذج منفصل لكل منتج.",
         sortOrder: 6,
       },
     ],
@@ -1397,9 +1408,9 @@ async function main() {
           titleEn: "Technical regulation",
           titleAr: "اللائحة الفنية",
           helpEn:
-            "Textile Products; Ornaments and Accessories; Paper and Cardboard; Packaging; General Requirements for Machinery Safety; Food Safety in Kitchen Tools and Appliances; Communications and ICT Devices; Building Materials Part 5/4/1; GCC Low Voltage Electrical Equipment and Appliances.",
+            "Textile Products; Ornaments and Accessories; Paper and Cardboard; Packaging; General Requirements for Machinery Safety; Food Safety in Kitchen Tools and Appliances; Communications and ICT Devices; Building Materials Part 5/4/1; GCC Low Voltage Electrical Equipment and Appliances; Automotive Spare Parts. Your choice also selects which risk assessment form you download.",
           helpAr:
-            "المنسوجات؛ الحلي والإكسسوارات؛ الورق والكرتون؛ التغليف؛ السلامة العامة للآلات؛ سلامة أدوات وأجهزة المطبخ؛ أجهزة الاتصالات وتقنية المعلومات؛ مواد البناء الجزء 5/4/1؛ الأجهزة الكهربائية منخفضة الجهد.",
+            "المنسوجات؛ الحلي والإكسسوارات؛ الورق والكرتون؛ التغليف؛ السلامة العامة للآلات؛ سلامة أدوات وأجهزة المطبخ؛ أجهزة الاتصالات وتقنية المعلومات؛ مواد البناء الجزء 5/4/1؛ الأجهزة الكهربائية منخفضة الجهد؛ قطع غيار المركبات. يحدد اختيارك أيضاً نموذج تقييم المخاطر الذي ستنزّله.",
         },
         saber_request_number: {
           type: "string",
@@ -3168,6 +3179,11 @@ async function main() {
     await writeSeedFile(key, PLACEHOLDER_PDF, "application/pdf");
   }
 
+  // Blank client-facing forms (Supplier/Manufacturer declarations). Shared with
+  // `npm run db:templates`, which is how production installs them since it
+  // never runs this seed.
+  const templateResults = await installDocumentTemplates(prisma);
+
   process.stdout.write(
     `${JSON.stringify(
       {
@@ -3193,6 +3209,7 @@ async function main() {
           quality: qualityManager.email,
           admin: admin.email,
         },
+        documentTemplates: templateResults,
         tip: "Admin demo: ATLAS_DEMO_USER_EMAIL=admin@atlas.com · Client: owner@alnoorpharma.sa",
       },
       null,

@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:templates": "tsx prisma/install-document-templates.ts",
     "db:reset": "prisma migrate reset",
     "jobs": "tsx scripts/notification-jobs.ts"
   },

@@ -602,6 +602,26 @@ function RequiredDocumentTemplateRow({
     );
   }
 
+  // Slots whose form varies per product (SAB-001's risk assessment) hold a set
+  // of templates rather than one file. Uploading a single template here would
+  // be ignored by the client UI, so the controls are hidden and the set is
+  // reported read-only — it is managed by prisma/install-document-templates.ts.
+  if (doc.templateVariantCount > 0) {
+    return (
+      <li className="flex flex-col gap-2 rounded-md border border-line bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-ink-900">
+            {locale === "ar" ? doc.nameAr : doc.nameEn}
+            {doc.mandatory ? <span className="ms-2 text-state-bad">*</span> : null}
+          </p>
+          <p className="text-xs text-ink-500">
+            {t("edit.templateVariants", { count: doc.templateVariantCount })}
+          </p>
+        </div>
+      </li>
+    );
+  }
+
   return (
     <li className="flex flex-col gap-2 rounded-md border border-line bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
       <div>

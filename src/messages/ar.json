@@ -337,7 +337,8 @@
       "additional": "مستندات إضافية",
       "drop": "أسقط ملفاً أو انقر للرفع",
       "remove": "إزالة الملف",
-      "downloadTemplate": "تنزيل النموذج"
+      "downloadTemplate": "تنزيل النموذج",
+      "chooseTemplate": "نزّل النموذج الخاص باللائحة الفنية لمنتجك:"
     },
     "step4": {
       "title": "مراجعة وتقديم",
@@ -390,7 +391,8 @@
       "BUILDING_MATERIALS_PART5": "مواد البناء — الجزء 5",
       "BUILDING_MATERIALS_PART4": "مواد البناء — الجزء 4",
       "BUILDING_MATERIALS_PART1": "مواد البناء — الجزء 1",
-      "LOW_VOLTAGE_ELECTRICAL": "الأجهزة الكهربائية منخفضة الجهد الخليجية"
+      "LOW_VOLTAGE_ELECTRICAL": "الأجهزة الكهربائية منخفضة الجهد الخليجية",
+      "AUTO_SPARE_PARTS": "قطع غيار المركبات"
     },
     "summary": {
       "title": "ملخص الطلب",
@@ -1117,6 +1119,7 @@
         "requiredDocuments": "المستندات المطلوبة",
         "requiredDocumentsHint": "أرفق نموذجًا فارغًا قابلاً للتنزيل لكل مستند — يرى العميل رابط «تنزيل النموذج» قبل رفع نسخته المعبأة.",
         "noTemplate": "لم يتم رفع نموذج بعد",
+        "templateVariants": "{count} نماذج مرفقة حسب المنتج",
         "uploadTemplate": "رفع نموذج",
         "replaceTemplate": "استبدال النموذج",
         "removeTemplate": "إزالة النموذج",

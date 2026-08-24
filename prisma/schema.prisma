@@ -409,13 +409,40 @@ model RequiredDocument {
   templateStorageKey String?
   templateFileName   String?
   templateMimeType   String?
+  /// Names the productAttrSchema key whose value picks one of `templates`
+  /// below — e.g. "technical_regulation" on SAB-001's risk assessment, where
+  /// each SABER technical regulation has its own blank form. Null means this
+  /// slot has a single template (templateStorageKey) or none at all.
+  templateVariantAttrKey String?
   sortOrder          Int      @default(0)
 
   serviceItem      ServiceItem       @relation(fields: [serviceItemId], references: [id], onDelete: Cascade)
   requestDocuments RequestDocument[]
+  templates        RequiredDocumentTemplate[]
 
   @@unique([serviceItemId, code])
   @@index([serviceItemId, sortOrder])
+}
+
+/// One blank form per value of the parent's `templateVariantAttrKey`. Used
+/// where a single document slot needs a different form depending on the
+/// product — SAB-001 accepts one risk assessment per product, but which form
+/// to fill depends on the product's technical regulation.
+model RequiredDocumentTemplate {
+  id                 String @id @default(cuid())
+  requiredDocumentId String
+  /// Matches a value of the parent's templateVariantAttrKey attribute
+  /// (e.g. "TEXTILE"). Case-sensitive, compared exactly.
+  variantKey         String
+  storageKey         String
+  fileName           String
+  mimeType           String
+  sortOrder          Int    @default(0)
+
+  requiredDocument RequiredDocument @relation(fields: [requiredDocumentId], references: [id], onDelete: Cascade)
+
+  @@unique([requiredDocumentId, variantKey])
+  @@index([requiredDocumentId, sortOrder])
 }
 
 // ─── Requests ────────────────────────────────────────────────────────────────

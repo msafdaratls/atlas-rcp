@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { parseAttrSchema } from "@/lib/attr-schema";
 import { isSaberScocServiceCode } from "@/lib/scoc-services";
 import { AttrScalarInput } from "@/components/atlas/requests/attr-field-input";
+import { DocumentTemplateLinks } from "@/components/atlas/requests/document-template-links";
 import {
   addClientRequestComment,
   discardDraftRequest,
@@ -32,7 +33,6 @@ import type { ClientRequestDetail } from "@/server/requests/queries";
 import { format } from "date-fns";
 import { arSA, enGB } from "date-fns/locale";
 import {
-  Download,
   FilePlus2,
   Loader2,
   Lock,
@@ -472,11 +472,18 @@ export function ClientRequestDetailPanel({ data }: Props) {
                   (i) => i.requestItemId === item.id,
                 )!;
                 const attrFields = parseAttrSchema(item.productAttrSchema);
+                // Product name disambiguates the groups: several products of
+                // the same service repeat the same slots, and product-specific
+                // forms (SAB-001's risk assessment) need one upload per product.
+                const productName =
+                  (locale === "ar" ? item.productNameAr : item.productNameEn).trim() ||
+                  item.productNameEn.trim();
                 return (
                   <div key={item.id} className="space-y-3">
                     <div className="space-y-3 rounded-md border border-line bg-surface p-3">
                       <h3 className="text-sm font-semibold text-ink-900">
                         {locale === "ar" ? item.serviceNameAr : item.serviceNameEn}
+                        {productName ? ` — ${productName}` : ""}
                         {" — "}
                         {t("edit.title")}
                       </h3>
@@ -649,6 +656,10 @@ export function ClientRequestDetailPanel({ data }: Props) {
                       </Button>
                     </div>
                     <div className="space-y-3">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                        {t("documents")}
+                        {productName ? ` — ${productName}` : ""}
+                      </h4>
                       {item.requiredDocuments.map((slot) => {
                         const existing = item.documents.find(
                           (d) => d.requiredDocumentId === slot.id,
@@ -673,18 +684,16 @@ export function ClientRequestDetailPanel({ data }: Props) {
                                   {locale === "ar" ? slot.helpAr : slot.helpEn}
                                 </p>
                               ) : null}
-                              {slot.templateUrl ? (
-                                <a
-                                  href={slot.templateUrl}
-                                  download={slot.templateFileName ?? undefined}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-atlas-green-600 underline-offset-2 hover:underline"
-                                >
-                                  <Download className="size-3.5" />
-                                  {tStep3("downloadTemplate")}
-                                </a>
-                              ) : null}
+                              <DocumentTemplateLinks
+                                templateUrl={slot.templateUrl}
+                                templateFileName={slot.templateFileName}
+                                templateVariantAttrKey={slot.templateVariantAttrKey}
+                                templateVariants={slot.templateVariants}
+                                productAttrs={item.productAttrs}
+                                downloadLabel={tStep3("downloadTemplate")}
+                                chooseLabel={tStep3("chooseTemplate")}
+                                variantLabel={(key) => tEnums(key as never)}
+                              />
                             </div>
                             <div className="flex items-center gap-2">
                               <input
