@@ -36,6 +36,14 @@ COPY --from=builder /app/.next/static ./.next/static
 # which are excluded from the traced bundle by serverExternalPackages.
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
+# Source + tsconfig are needed by the maintenance scripts under prisma/ that
+# are run with tsx against a live deployment (`npm run db:templates` installs
+# the blank client forms, which `prisma migrate deploy` cannot do because it
+# only executes SQL and cannot copy bytes into the storage volume). They import
+# the app's own storage adapter via the "@/*" path alias, so both must be
+# present — the server bundle itself does not read them.
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 EXPOSE 3000
 
