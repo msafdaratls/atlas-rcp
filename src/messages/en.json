@@ -2012,7 +2012,7 @@
       "FORBIDDEN": "You don't have permission to do this.",
       "WRONG_DOMAIN": "This item does not belong to this evaluator.",
       "NOT_EVALUABLE": "This request is no longer available for evaluation.",
-      "IN_FLIGHT": "An evaluation is already in progress for this item.",
+      "IN_FLIGHT": "An evaluation is already in progress for this item — opening it.",
       "NO_ACTIVE_DATASET": "No active dataset for this domain yet — upload one from the dataset admin screen.",
       "SOURCE_DOCUMENT_UNREADABLE": "Could not read the source document from storage.",
       "NO_DOCUMENTS": "No artwork or ingredient list is attached to this item yet.",

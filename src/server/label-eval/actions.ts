@@ -6,6 +6,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { log } from "@/lib/logger";
 import { requirePermission } from "@/lib/rbac";
 import { computeDocumentsFingerprint } from "@/server/label-eval/fingerprint";
 import { DOCUMENT_KIND_BY_REQUIRED_CODE } from "@/server/label-eval/fields";
@@ -329,14 +330,65 @@ export async function confirmFieldsAndRunAssessment(
       data: { confirmedAt: new Date(), confirmedByUserId: session.id },
     });
 
-    if (assessment.domain === "SFDA_SUPPLEMENTS") {
-      await runSfdaRuleEngine(assessmentId);
-      await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { status: "ASSESSED" } });
-    } else {
-      await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { status: "CLASSIFYING" } });
-      await runCosmeticsRuleEngine(assessmentId);
-      // run-cosmetics.ts itself sets the final status (ASSESSED or
-      // BLOCKED_NO_CATEGORY_MATCH) — never overwritten here.
+    // The rule-engine call below is the only point where this action leaves
+    // the assessment in a status it cannot re-enter on its own: the guard at
+    // the top admits AWAITING_REVIEW only, and every in-flight status
+    // (IN_FLIGHT_STATUSES, concurrency.ts) also blocks starting a fresh run.
+    // A throw partway through therefore used to strand the item with no
+    // route back — no retry, no reset, a manual DB update the only way out.
+    // Restoring AWAITING_REVIEW keeps the action re-runnable and preserves
+    // the reviewer's confirmed field values, which a fresh run would discard.
+    // A crash that kills the process skips this handler entirely;
+    // reclaimStalledAssessments (recovery.ts) is the backstop for that.
+    try {
+      if (assessment.domain === "SFDA_SUPPLEMENTS") {
+        // No claim needed: run-sfda only ever upserts verdicts keyed on
+        // @@unique([assessmentId, kbRuleId]) and rebuilds nothing, so two
+        // overlapping runs converge on the same rows. Wasteful, not unsafe.
+        await runSfdaRuleEngine(assessmentId);
+        await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { status: "ASSESSED" } });
+      } else {
+        // Claim the transition instead of assuming it. `assessment.status`
+        // was read at the top of this action, so two reviewers clicking
+        // together — or a reviewer racing the reclaim sweep on a long run —
+        // could both pass that check and enter the engine at once. That
+        // matters here specifically because run-cosmetics rebuilds
+        // LabelRequiredTest with deleteMany + createMany and that table has
+        // no unique constraint, so an overlap would silently duplicate every
+        // required test rather than erroring. `updateMany` with the expected
+        // status is the same guard concurrency.ts uses for verdict overrides
+        // and admin/actions.ts uses for request-state transitions.
+        const claimed = await prisma.labelAssessment.updateMany({
+          where: { id: assessmentId, status: "AWAITING_REVIEW" },
+          data: { status: "CLASSIFYING" },
+        });
+        // Lost the race — the run that won owns the assessment now. Return
+        // without resetting anything, so the winner is left undisturbed.
+        if (claimed.count === 0) return { ok: false, error: "INVALID_STATE" };
+        await runCosmeticsRuleEngine(assessmentId);
+        // run-cosmetics.ts itself sets the final status (ASSESSED or
+        // BLOCKED_NO_CATEGORY_MATCH) — never overwritten here.
+      }
+    } catch (error) {
+      log.error("label-eval.assessment", "rule engine failed — returning assessment to AWAITING_REVIEW", {
+        assessmentId,
+        domain: assessment.domain,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+      try {
+        await prisma.labelAssessment.update({
+          where: { id: assessmentId },
+          data: { status: "AWAITING_REVIEW" },
+        });
+      } catch (resetError) {
+        // Losing the reset leaves the row stalled until the recovery sweep
+        // picks it up; surface it so that delay is explainable.
+        log.error("label-eval.assessment", "could not restore AWAITING_REVIEW after a failed run", {
+          assessmentId,
+          error: resetError instanceof Error ? resetError.message : "unknown",
+        });
+      }
+      return { ok: false, error: "RUN_FAILED" };
     }
 
     await writeAuditLog({

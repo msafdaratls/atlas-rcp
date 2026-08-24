@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { bilingualTitle } from "@/lib/bilingual-title";
 import { cn } from "@/lib/utils";
 import {
   computeAssessment,
@@ -128,7 +129,10 @@ export function AssessmentPanel({
     });
   }
 
-  const title = (en: string, ar: string) => (isAr ? ar : en);
+  // Falls back across languages rather than showing whatever sits in the
+  // reader's own column: promoted cosmetics claim items can carry a literal
+  // "0" where the English text should be (see bilingual-title.ts).
+  const title = (en: string, ar: string, fallback = "") => bilingualTitle(en, ar, isAr, fallback);
 
   return (
     <section className="space-y-4 rounded-lg border border-line bg-surface p-4">
@@ -300,7 +304,7 @@ function AssessmentRow({
         <div className="min-w-0 flex-1">
           <p className="text-sm text-ink-900">
             <span className="font-data text-xs text-ink-400">{index}.</span>{" "}
-            {isAr ? item.titleAr : item.titleEn}
+            {bilingualTitle(item.titleEn, item.titleAr, isAr, item.code)}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             {item.priority ? (

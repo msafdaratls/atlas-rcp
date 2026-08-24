@@ -12,7 +12,15 @@ import { prisma } from "@/lib/db";
  * writer, so it gets its own protection here rather than reusing anything.
  */
 
-const IN_FLIGHT_STATUSES = ["EXTRACTING", "AWAITING_REVIEW", "CLASSIFYING"] as const;
+/**
+ * Statuses that count as a live run and therefore block starting a new one.
+ * Exported because every one of them must also have a stall-recovery
+ * decision — see STALL_RECOVERY in recovery.ts, which is keyed on this type
+ * so the two cannot drift apart.
+ */
+export const IN_FLIGHT_STATUSES = ["EXTRACTING", "AWAITING_REVIEW", "CLASSIFYING"] as const;
+
+export type InFlightStatus = (typeof IN_FLIGHT_STATUSES)[number];
 
 export class AlreadyClaimedError extends Error {
   constructor(public readonly claimedByUserId: string) {

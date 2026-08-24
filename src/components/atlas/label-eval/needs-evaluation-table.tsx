@@ -31,8 +31,19 @@ export function NeedsEvaluationTable({ rows, domain }: Props) {
     startTransition(async () => {
       const result = await startLabelAssessment({ requestItemId, domain });
       if (!result.ok) {
-        const key = result.error.split(":")[0] as string;
-        toast.error(tErrors(key as "START_FAILED"));
+        const [key, detail] = result.error.split(":");
+        // A run already exists for this item. concurrency.ts's stated intent
+        // is that "the reviewer resumes the existing run instead of creating
+        // a duplicate", and the action already returns that run's id — but
+        // the id used to be split off and thrown away, so the queue row just
+        // raised an error every time and offered no way through. Open the
+        // existing run instead.
+        if (key === "IN_FLIGHT" && detail) {
+          toast.info(tErrors("IN_FLIGHT"));
+          router.push(`/${locale}/admin/label-evaluator/${basePath}/${detail}`);
+          return;
+        }
+        toast.error(tErrors((key ?? "START_FAILED") as "START_FAILED"));
         return;
       }
       router.push(`/${locale}/admin/label-evaluator/${basePath}/${result.data.assessmentId}`);

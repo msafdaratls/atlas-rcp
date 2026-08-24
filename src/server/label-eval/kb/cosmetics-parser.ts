@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { normaliseTitle } from "@/lib/bilingual-title";
 import { SchemaContractError, type ParsedKbLookup, type ParsedKbRule } from "@/server/label-eval/kb/sfda-parser";
 
 /**
@@ -288,7 +289,10 @@ function parseGso1943(ws: ExcelJS.Worksheet, warnings: string[]): ParsedKbRule[]
     if (!mapping) {
       warnings.push(`Regulatory KB row ${r}: GSO 1943 rule "${ruleId}" has no field mapping in the parser — imported as requires_additional_data (needs a reviewer to classify).`);
     }
-    const titleEn = cellText(row, REG_COL.reqSimplified) ?? cellText(row, REG_COL.reqOriginal) ?? ruleId;
+    const titleEn =
+      normaliseTitle(cellText(row, REG_COL.reqSimplified)) ??
+      normaliseTitle(cellText(row, REG_COL.reqOriginal)) ??
+      ruleId;
     const resolvedMapping: GsoMapping = mapping ?? {
       kind: "requires_additional_data",
       explanation: "No field mapping defined for this rule yet — needs manual review.",
@@ -508,8 +512,14 @@ function parseClaims(ws: ExcelJS.Worksheet, warnings: string[]): ParsedKbRule[] 
     }
     seenCodes.set(claimId, (seenCodes.get(claimId) ?? 0) + 1);
 
-    const claimEn = cellText(row, CLAIMS_COL.claimEn);
-    const claimAr = cellText(row, CLAIMS_COL.claimAr);
+    // The source writes a literal "0" — not a blank — in "Claim (English)"
+    // for every General claim from CLAIM-GEN-3-2 on. Normalising it to null
+    // here keeps the digit out of the LLM judgment prompt and the assistant's
+    // KB search, both of which read titleEn directly rather than through the
+    // UI's bilingual fallback. The Arabic text below still carries the real
+    // question, so nothing is invented and the gap stays visible.
+    const claimEn = normaliseTitle(cellText(row, CLAIMS_COL.claimEn));
+    const claimAr = normaliseTitle(cellText(row, CLAIMS_COL.claimAr));
     const recordType = cellText(row, CLAIMS_COL.recordType);
     if (!recordType) recordTypeMissing++;
 

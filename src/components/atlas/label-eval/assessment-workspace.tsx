@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { bilingualTitle } from "@/lib/bilingual-title";
 import { cn } from "@/lib/utils";
 import { LABEL_FIELD_DEFS, mandatoryFieldKeys } from "@/server/label-eval/fields";
 import {
@@ -828,7 +829,9 @@ function VerdictCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-xs font-medium text-ink-500">{verdict.code}{verdict.standard ? ` · ${verdict.standard}` : ""}</p>
-          <p className="text-sm font-medium text-ink-900">{isAr ? verdict.titleAr : verdict.titleEn || verdict.titleAr}</p>
+          <p className="text-sm font-medium text-ink-900">
+            {bilingualTitle(verdict.titleEn, verdict.titleAr, isAr, verdict.code)}
+          </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {isAiProposed ? (
