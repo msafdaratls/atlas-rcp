@@ -24,6 +24,14 @@ export type StructuredCallInput<T> = {
   schema: z.ZodType<T>;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
   maxTokens?: number;
+  /**
+   * Per-call override of the client's default 45s timeout (anthropic-client.ts).
+   * A timed-out request is still billed and gets retried by the SDK (up to
+   * maxRetries), so a call whose payload can legitimately take longer than
+   * 45s — e.g. extraction's base64 document/image content — must raise this
+   * rather than eat a guaranteed-wasted retry cycle on every slow request.
+   */
+  timeoutMs?: number;
 };
 
 /**
@@ -35,16 +43,19 @@ export type StructuredCallInput<T> = {
  * pattern already used by the extraction job's own retry/backoff.
  */
 export async function callStructured<T>(input: StructuredCallInput<T>): Promise<T> {
-  const message = await getAnthropicClient().messages.parse({
-    model: input.model,
-    max_tokens: input.maxTokens ?? 8000,
-    ...(input.system ? { system: input.system } : {}),
-    output_config: {
-      format: zodOutputFormat(input.schema),
-      ...(input.effort ? { effort: input.effort } : {}),
+  const message = await getAnthropicClient().messages.parse(
+    {
+      model: input.model,
+      max_tokens: input.maxTokens ?? 8000,
+      ...(input.system ? { system: input.system } : {}),
+      output_config: {
+        format: zodOutputFormat(input.schema),
+        ...(input.effort ? { effort: input.effort } : {}),
+      },
+      messages: [{ role: "user", content: input.content }],
     },
-    messages: [{ role: "user", content: input.content }],
-  });
+    input.timeoutMs ? { timeout: input.timeoutMs } : undefined,
+  );
 
   log.info(input.scope, "claude structured call completed", {
     model: input.model,

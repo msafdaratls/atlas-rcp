@@ -159,6 +159,14 @@ export class ClaudeExtractionProvider implements ExtractionProvider {
       content: [...documentBlocks, { type: "text", text: instructions }],
       schema: buildExtractionSchema(domain),
       effort: "medium",
+      // The shared client's default is 45s (anthropic-client.ts), tuned for
+      // the chat path's short text turns. This call can carry up to
+      // MAX_TOTAL_BASE64_BYTES (28 MB) of documents/images, which routinely
+      // exceeds that — and a client-side timeout doesn't cancel or refund
+      // the server-side call, so a too-short timeout here means paying for
+      // the same oversized vision call up to 3 times (SDK default retries)
+      // before the worker's own retry even kicks in.
+      timeoutMs: 180_000,
     });
 
     return keys.map((key) => {

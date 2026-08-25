@@ -15,11 +15,33 @@ export async function processExtractionJobBatch(limit = 10): Promise<number> {
   const now = new Date();
   const staleBefore = new Date(now.getTime() - 5 * 60 * 1000);
 
-  // Reclaim stuck PROCESSING rows (worker crash / deploy mid-run).
-  await prisma.labelExtractionJob.updateMany({
+  // Reclaim stuck PROCESSING rows (worker crash / deploy mid-run). Counted as
+  // an attempt and dead-lettered past BACKOFF_MS.length exactly like the
+  // catch block below — a job that dies before reaching that catch (OOM
+  // kill, container restart) must not bypass the attempt cap and requeue
+  // indefinitely, burning a fresh Claude call every cycle forever.
+  const stuck = await prisma.labelExtractionJob.findMany({
     where: { status: "PROCESSING", updatedAt: { lt: staleBefore } },
-    data: { status: "PENDING", nextAttemptAt: now },
   });
+  for (const job of stuck) {
+    const attempts = job.attempts + 1;
+    const dead = attempts >= BACKOFF_MS.length;
+    const delay = BACKOFF_MS[Math.min(attempts - 1, BACKOFF_MS.length - 1)]!;
+    await prisma.$transaction([
+      prisma.labelExtractionJob.update({
+        where: { id: job.id },
+        data: {
+          status: dead ? "FAILED" : "PENDING",
+          attempts,
+          lastError: dead ? "EXTRACTION_STALLED_REPEATEDLY" : job.lastError,
+          nextAttemptAt: dead ? now : new Date(now.getTime() + delay),
+        },
+      }),
+      ...(dead
+        ? [prisma.labelAssessment.update({ where: { id: job.assessmentId }, data: { status: "ERROR" } })]
+        : []),
+    ]);
+  }
 
   const pending = await prisma.labelExtractionJob.findMany({
     where: { status: "PENDING", nextAttemptAt: { lte: now } },
