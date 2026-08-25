@@ -1,4 +1,4 @@
-import type { LabelEvalDomain, LabelKbStatus, RequestState } from "@prisma/client";
+import type { LabelAssessmentStatus, LabelEvalDomain, LabelKbStatus, RequestState } from "@prisma/client";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac";
@@ -142,6 +142,70 @@ export async function listNeedsEvaluation(
     });
 
     return rows;
+  } catch {
+    return null;
+  }
+}
+
+export type RecentAssessmentRow = {
+  id: string;
+  status: LabelAssessmentStatus;
+  requestNo: string;
+  organisationName: string;
+  serviceItemCode: string;
+  updatedAt: string;
+  finalVerdict: string | null;
+  promotedAt: string | null;
+};
+
+/**
+ * "Recent evaluations" — assessments already started or finished for this
+ * domain, most-recently-updated first. `listNeedsEvaluation` above
+ * deliberately excludes anything past EXTRACTING (an ASSESSED assessment
+ * with a matching fingerprint drops off that queue by design — it no longer
+ * *needs* evaluation). That's correct for the queue, but it left no way for
+ * a reviewer to find an item they just finished, or one still mid-run, once
+ * it fell out of "needs evaluation" — confirmed live: a completed cosmetics
+ * assessment looked "vanished" even though its row was intact. This reads
+ * straight off LabelAssessment's own immutable snapshot fields
+ * (requestNo/organisationName/serviceItemCode), so it doesn't need — and
+ * isn't affected by — RequestItem still existing or the request's current
+ * state/documents.
+ */
+export async function listRecentAssessments(
+  domain: LabelEvalDomain,
+  limit = 20,
+): Promise<RecentAssessmentRow[] | null> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+
+    const rows = await prisma.labelAssessment.findMany({
+      where: { domain },
+      select: {
+        id: true,
+        status: true,
+        requestNo: true,
+        organisationName: true,
+        serviceItemCode: true,
+        updatedAt: true,
+        finalVerdict: true,
+        report: { select: { promotedAt: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      requestNo: r.requestNo,
+      organisationName: r.organisationName,
+      serviceItemCode: r.serviceItemCode,
+      updatedAt: r.updatedAt.toISOString(),
+      finalVerdict: r.finalVerdict,
+      promotedAt: r.report?.promotedAt?.toISOString() ?? null,
+    }));
   } catch {
     return null;
   }

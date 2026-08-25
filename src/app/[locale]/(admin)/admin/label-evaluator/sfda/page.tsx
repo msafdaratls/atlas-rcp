@@ -4,13 +4,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/atlas/empty-state";
 import { NeedsEvaluationTable } from "@/components/atlas/label-eval/needs-evaluation-table";
+import { RecentAssessmentsTable } from "@/components/atlas/label-eval/recent-assessments-table";
 import { PageHeader } from "@/components/atlas/page-header";
 import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth/session";
 import { isLocale, type Locale } from "@/lib/i18n/config";
 import { requirePagePermission } from "@/lib/page-auth";
 import { checkPermission } from "@/lib/rbac";
-import { listNeedsEvaluation } from "@/server/label-eval/queries";
+import { listNeedsEvaluation, listRecentAssessments } from "@/server/label-eval/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ export default async function SfdaEvaluatorQueuePage({ params }: Props) {
   const tDatasets = await getTranslations("labelEval.datasets");
   const tNav = await getTranslations("nav.admin");
   const rows = await listNeedsEvaluation("SFDA_SUPPLEMENTS");
+  const recentRows = await listRecentAssessments("SFDA_SUPPLEMENTS");
 
   return (
     <div>
@@ -50,6 +52,9 @@ export default async function SfdaEvaluatorQueuePage({ params }: Props) {
       ) : (
         <EmptyState icon={FileSearch} title={t("empty")} description={t("emptyDescription")} />
       )}
+      {recentRows && recentRows.length > 0 ? (
+        <RecentAssessmentsTable rows={recentRows} domain="SFDA_SUPPLEMENTS" locale={locale} />
+      ) : null}
     </div>
   );
 }

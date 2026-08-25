@@ -1931,7 +1931,27 @@
         "firstSubmission": "تقديم أول",
         "resubmission": "إعادة تقديم"
       },
-      "startEvaluation": "بدء التقييم"
+      "startEvaluation": "بدء التقييم",
+      "recent": {
+        "title": "التقييمات الأخيرة",
+        "columns": {
+          "request": "الطلب",
+          "client": "العميل",
+          "status": "الحالة",
+          "updated": "آخر تحديث",
+          "action": "إجراء"
+        },
+        "status": {
+          "EXTRACTING": "جارٍ الاستخراج",
+          "CLASSIFYING": "جارٍ التصنيف",
+          "AWAITING_REVIEW": "بانتظار المراجعة",
+          "ASSESSED": "تم التقييم",
+          "BLOCKED_NO_CATEGORY_MATCH": "محظور",
+          "ERROR": "خطأ"
+        },
+        "promoted": "(تم الترحيل)",
+        "open": "فتح"
+      }
     },
     "workspace": {
       "kbVersionLabel": "قاعدة البيانات الفعّالة: {version}",

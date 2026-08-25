@@ -1931,7 +1931,27 @@
         "firstSubmission": "First submission",
         "resubmission": "Resubmission"
       },
-      "startEvaluation": "Start evaluation"
+      "startEvaluation": "Start evaluation",
+      "recent": {
+        "title": "Recent evaluations",
+        "columns": {
+          "request": "Request",
+          "client": "Client",
+          "status": "Status",
+          "updated": "Updated",
+          "action": "Action"
+        },
+        "status": {
+          "EXTRACTING": "Extracting",
+          "CLASSIFYING": "Classifying",
+          "AWAITING_REVIEW": "Awaiting review",
+          "ASSESSED": "Assessed",
+          "BLOCKED_NO_CATEGORY_MATCH": "Blocked",
+          "ERROR": "Error"
+        },
+        "promoted": "(promoted)",
+        "open": "Open"
+      }
     },
     "workspace": {
       "kbVersionLabel": "Active dataset: {version}",
