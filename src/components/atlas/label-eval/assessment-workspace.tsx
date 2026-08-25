@@ -31,6 +31,7 @@ import {
   previewPromotion,
   promoteToOfficialChecklist,
   reclassifyAssessment,
+  retryExtraction,
   updateExtractedField,
 } from "@/server/label-eval/actions";
 import type { AssessmentDetail, AssessmentDetailVerdict } from "@/server/label-eval/queries";
@@ -150,10 +151,7 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
     return (
       <>
         {claimBanner}
-        <div className="flex items-center gap-3 rounded-lg border border-state-bad/30 bg-state-bad/10 p-6">
-          <XCircle className="size-5 text-state-bad" />
-          <p className="text-sm text-state-bad">{t("errorState")}</p>
-        </div>
+        <ExtractionErrorPanel detail={detail} t={t} tErrors={tErrors} router={router} />
       </>
     );
   }
@@ -181,6 +179,58 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
       {claimBanner}
       <AssessedView detail={detail} domain={domain} t={t} tErrors={tErrors} isAr={isAr} router={router} />
     </>
+  );
+}
+
+// ─── Step: extraction dead-lettered — offer a retry, not just a red box ────
+
+/**
+ * ERROR used to be a terminal state in the UI: a red panel and nothing to
+ * click, so a run that failed extraction could only be revived by editing
+ * the database. That was tolerable while ManualEntryProvider (which cannot
+ * fail) was the only configured provider; with a real provider selected via
+ * LABEL_EVAL_EXTRACTION_PROVIDER, a transient upstream failure is reachable
+ * and must not cost the reviewer their run.
+ */
+function ExtractionErrorPanel({
+  detail,
+  t,
+  tErrors,
+  router,
+}: {
+  detail: AssessmentDetail;
+  t: ReturnType<typeof useTranslations<"labelEval.workspace">>;
+  tErrors: ReturnType<typeof useTranslations<"labelEval.errors">>;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const [pending, startTransition] = useTransition();
+
+  function retry() {
+    startTransition(async () => {
+      const result = await retryExtraction({ assessmentId: detail.id });
+      if (!result.ok) {
+        toast.error(tErrors(result.error as "RETRY_FAILED"));
+        return;
+      }
+      // Back to EXTRACTING — the extracting panel's existing poll takes over.
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-state-bad/30 bg-state-bad/10 p-6">
+      <div className="flex items-start gap-3">
+        <XCircle className="mt-0.5 size-5 shrink-0 text-state-bad" />
+        <div>
+          <p className="text-sm font-medium text-state-bad">{t("errorState")}</p>
+          <p className="mt-1 text-xs text-ink-600">{t("errorStateHint")}</p>
+        </div>
+      </div>
+      <Button variant="outline" className="mt-4" disabled={pending} onClick={retry}>
+        {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+        {t("retryExtraction")}
+      </Button>
+    </div>
   );
 }
 

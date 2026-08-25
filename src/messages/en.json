@@ -1939,7 +1939,9 @@
         "title": "Extracting label data…",
         "description": "This runs in the background — you can leave this page and come back."
       },
-      "errorState": "Extraction failed after repeated attempts. Contact an administrator.",
+      "errorState": "Extraction failed after repeated attempts.",
+      "errorStateHint": "This is usually a temporary problem reading the artwork. Retry the extraction, or contact an administrator if it keeps failing.",
+      "retryExtraction": "Retry extraction",
       "missingBanner": "The following required fields are not yet confirmed:",
       "readyBanner": "All required fields are confirmed. You can continue the assessment.",
       "missingFieldsToast": "Confirm all required fields before continuing.",
@@ -2022,6 +2024,7 @@
       "START_FAILED": "Could not start the evaluation. Try again.",
       "SAVE_FAILED": "Could not save. Try again.",
       "RUN_FAILED": "Could not run the assessment. Try again.",
+      "RETRY_FAILED": "Could not restart extraction. Try again.",
       "MISSING_FIELDS": "Confirm all required fields first.",
       "OVERRIDE_FAILED": "Could not change the assessment. Try again.",
       "RATIONALE_REQUIRED": "A reason is required for this change.",

@@ -1,6 +1,7 @@
 import type { LabelEvalDomain } from "@prisma/client";
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { log } from "@/lib/logger";
 import { storage } from "@/lib/storage";
 import { LABEL_FIELD_DEFS, allFieldKeys } from "@/server/label-eval/fields";
 import { callStructured } from "@/server/label-eval/llm/client";
@@ -19,7 +20,47 @@ import type {
  * unset either and the caller falls back to ManualEntryProvider (provider.ts).
  */
 
+/**
+ * The only image types the Messages API accepts. Deliberately narrower than
+ * the artwork upload slot's own allowlist, which also permits `image/tiff`
+ * (prisma/seed.ts `labelMime`) — a TIFF artwork cannot be sent at all and is
+ * skipped below rather than charged against the payload budget.
+ */
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/**
+ * Ceiling on the base64 payload sent in one extraction call. The Messages
+ * API rejects a request over 32 MB outright, and a document upload is
+ * allowed up to ServiceItem.maxSizeMb (50 MB by default, next.config.ts's
+ * bodySizeLimit) — so a single large artwork PDF can exceed it on its own
+ * once base64 inflates it by 4/3. That rejection is a permanent 400: the
+ * extraction worker would burn all three attempts on it and dead-letter the
+ * assessment into ERROR. Budgeting here instead turns "too big to send" into
+ * the same honest gap as an unreadable copy — the affected fields stay empty
+ * and needsReview for the reviewer to fill in. 28 MB leaves headroom for the
+ * instructions, system prompt, and response schema in the same request.
+ */
+export const MAX_TOTAL_BASE64_BYTES = 28 * 1024 * 1024;
+
+/** The Messages API's hard per-request ceiling — what the budget above must stay under. */
+export const ANTHROPIC_REQUEST_LIMIT_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Per-image ceiling, which the aggregate budget above does NOT imply: a
+ * single 12 MB PNG artwork sits well inside the 28 MB request budget and is
+ * still rejected on its own. 10 MB is the limit for base64 images on the
+ * Claude API, which is what getAnthropicClient() talks to; Bedrock and
+ * Vertex cap the same field at 5 MB, so revisit this if the client is ever
+ * repointed at a partner-operated platform. PDFs have no equivalent
+ * per-document byte limit — the request cap is their only ceiling — so this
+ * is checked for image blocks only.
+ */
+export const MAX_IMAGE_BASE64_BYTES = 10 * 1024 * 1024;
+
+/** Exact base64 length of `n` raw bytes, without allocating the string. Exported for direct unit testing. */
+export function base64Length(n: number): number {
+  return Math.ceil(n / 3) * 4;
+}
 
 const extractedFieldSchema = z.object({
   valueEn: z.string().nullable(),
@@ -37,21 +78,54 @@ async function buildDocumentContentBlocks(
   documents: ExtractionInputDocument[],
 ): Promise<Anthropic.Messages.ContentBlockParam[]> {
   const blocks: Anthropic.Messages.ContentBlockParam[] = [];
+  let budgetUsed = 0;
   for (const doc of documents) {
+    // Resolve sendability BEFORE reading or charging anything. A document
+    // that can never become a content block must not consume budget on the
+    // way past, or it silently crowds out a later document that would have
+    // fit — the artwork slot accepts image/tiff, which is exactly such a
+    // document. Same honest-gap outcome either way: the fields it covered
+    // stay empty and needsReview.
+    const isPdf = doc.mimeType === "application/pdf";
+    const isImage = IMAGE_MIME_TYPES.has(doc.mimeType);
+    if (!isPdf && !isImage) {
+      log.warn("label-eval.extraction", "document mime type not supported for extraction; skipped", {
+        storageKey: doc.storageKey,
+        kind: doc.kind,
+        mimeType: doc.mimeType,
+      });
+      continue;
+    }
+
     const stored = await storage.get(doc.storageKey);
     if (!stored) continue; // unreadable copy — extraction proceeds with whatever else is available
+    const encodedSize = base64Length(stored.body.length);
+
+    // Skip rather than send a request the API will reject — both ceilings are
+    // permanent 400s, which the worker would retry into a dead letter. Keep
+    // going after a skip: a later, smaller document may still fit.
+    const tooBigAlone = isImage && encodedSize > MAX_IMAGE_BASE64_BYTES;
+    const tooBigTogether = budgetUsed + encodedSize > MAX_TOTAL_BASE64_BYTES;
+    if (tooBigAlone || tooBigTogether) {
+      log.warn("label-eval.extraction", "document too large to send for extraction; skipped", {
+        storageKey: doc.storageKey,
+        kind: doc.kind,
+        rawBytes: stored.body.length,
+        reason: tooBigAlone ? "per-image-limit" : "request-budget",
+      });
+      continue;
+    }
+
+    budgetUsed += encodedSize;
     const data = stored.body.toString("base64");
-    if (doc.mimeType === "application/pdf") {
+    if (isPdf) {
       blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data } });
-    } else if (IMAGE_MIME_TYPES.has(doc.mimeType)) {
+    } else {
       blocks.push({
         type: "image",
         source: { type: "base64", media_type: doc.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data },
       });
     }
-    // Any other mime type is skipped — the affected fields simply stay
-    // unfilled and needsReview, same honest-gap behavior as a field the
-    // model couldn't read.
   }
   return blocks;
 }

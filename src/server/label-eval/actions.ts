@@ -163,6 +163,92 @@ export async function startLabelAssessment(
   }
 }
 
+const retryExtractionSchema = z.object({ assessmentId: z.string().min(1) });
+
+/**
+ * Requeues extraction for an assessment that dead-lettered into ERROR.
+ *
+ * ERROR is reachable two ways: the extraction job exhausted its three
+ * attempts (extraction/worker.ts), or the recovery sweep found an EXTRACTING
+ * row whose job can no longer progress (recovery.ts's STALL_RECOVERY). Until
+ * now nothing could move a row back out of it — no action admitted the
+ * status and the workspace rendered a bare red panel — so the only way out
+ * was a manual DB update.
+ *
+ * That was survivable while ManualEntryProvider was the only configured
+ * provider, because it cannot fail: it returns needsReview fields without
+ * doing any I/O. Pointing LABEL_EVAL_EXTRACTION_PROVIDER at a real provider
+ * makes a genuinely failed extraction reachable (API outage, rate limit,
+ * unreadable artwork), and stranding a reviewer's run on one is not an
+ * acceptable outcome for a transient upstream problem.
+ *
+ * Resets `attempts` so the reviewer gets a full set of retries rather than
+ * one immediately-dead-lettering attempt, and clears `lastError` so a stale
+ * message can't be mistaken for the result of this run.
+ */
+export async function retryExtraction(
+  input: z.infer<typeof retryExtractionSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = retryExtractionSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { assessmentId } = parsed.data;
+
+    const assessment = await prisma.labelAssessment.findUnique({
+      where: { id: assessmentId },
+      select: { id: true, domain: true, status: true },
+    });
+    if (!assessment) return { ok: false, error: "NOT_FOUND" };
+    if (assessment.status !== "ERROR") return { ok: false, error: "INVALID_STATE" };
+
+    // One transaction so the status flip and the requeue cannot land apart:
+    // an assessment moved to EXTRACTING with no runnable job behind it is
+    // stranded until the recovery sweep drags it back half an hour later.
+    const requeued = await prisma.$transaction(async (tx) => {
+      // Guarded on status so two reviewers clicking retry together produce
+      // one requeue, not two — the loser matches nothing and rolls back
+      // before either write touches the job row.
+      const claimed = await tx.labelAssessment.updateMany({
+        where: { id: assessmentId, status: "ERROR" },
+        data: { status: "EXTRACTING" },
+      });
+      if (claimed.count === 0) return false;
+
+      // upsert, not update: recovery.ts sends an assessment to ERROR when the
+      // job row is dead-lettered OR missing altogether, and an `update` on the
+      // missing case would throw after the status flip had already committed.
+      await tx.labelExtractionJob.upsert({
+        where: { assessmentId },
+        create: { assessmentId },
+        update: { status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: new Date() },
+      });
+      return true;
+    });
+    if (!requeued) return { ok: false, error: "INVALID_STATE" };
+
+    await writeAuditLog({
+      session,
+      action: "label_eval.extraction.retry",
+      entityType: "LabelAssessment",
+      entityId: assessmentId,
+      before: { status: "ERROR" },
+      after: { status: "EXTRACTING" },
+    });
+
+    revalidatePath(
+      `/[locale]/admin/label-evaluator/${assessment.domain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics"}/${assessmentId}`,
+      "page",
+    );
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") return { ok: false, error: message };
+    return { ok: false, error: "RETRY_FAILED" };
+  }
+}
+
 /** Lightweight poll target for the extraction-status UI (design doc §9). */
 export async function getLabelAssessmentStatus(
   assessmentId: string,
