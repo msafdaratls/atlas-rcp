@@ -6,10 +6,16 @@ import { searchKbRules } from "@/server/assistant/kb-search";
 import { recordTokenUsage, type AssistantSurface } from "@/server/assistant/token-budget";
 
 const MODEL = process.env.ASSISTANT_CLAUDE_MODEL || "claude-sonnet-5";
-const MAX_TOOL_ROUNDS = 3;
-// The system prompt already asks for concise, factual replies — 1024 is
-// generous for that and cuts worst-case output cost vs. an unbounded cap.
-const MAX_OUTPUT_TOKENS = 1024;
+// Two rounds is one tool call plus the answer that uses it, which is the only
+// shape search_regulatory_rules actually needs. A third round only ever
+// bought a second search, and every extra round re-sends the whole prompt.
+const MAX_TOOL_ROUNDS = 2;
+// The system prompt asks for a short answer and output is billed on what is
+// actually produced, so this is a runaway guard rather than a budget: set it
+// low enough to bound the worst case, high enough that a normal answer is
+// never cut off mid-sentence (a truncated reply just gets asked again, which
+// costs more than it saves).
+const MAX_OUTPUT_TOKENS = 800;
 const FALLBACK_TEXT =
   "I wasn't able to put together a clear answer to that — please reach out through the Support page and the team will help directly.";
 
@@ -68,12 +74,29 @@ export async function runAssistantTurn(input: {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: MAX_OUTPUT_TOKENS,
-      system: input.systemPrompt,
+      // Cached, because this is where nearly all the input cost lives: the
+      // system prompt carries the whole service catalogue (client) or role
+      // manual (admin) and is byte-identical on every turn of every
+      // conversation, so re-sending it at full price each time was paying
+      // over and over for text that never changes. Caching is a prefix match
+      // over tools -> system -> messages, and TOOLS is a module constant, so
+      // one breakpoint here covers both. Reads bill at ~10% of the input
+      // rate; the trade is that the first turn of a cold conversation writes
+      // the cache at ~125%, which pays for itself from the second turn on.
+      system: [{ type: "text", text: input.systemPrompt, cache_control: { type: "ephemeral" } }],
       tools: TOOLS,
       messages: working,
     });
 
-    const roundTokens = response.usage.input_tokens + response.usage.output_tokens;
+    // Caching moves the bulk of the prompt OUT of `input_tokens` and into the
+    // two cache counters, so summing input+output alone would silently stop
+    // counting ~85% of every turn and quietly loosen the daily budget by
+    // roughly an order of magnitude. Count every token the request actually
+    // processed, cached or not, so the guard keeps meaning what its name says.
+    const cacheWrite = response.usage.cache_creation_input_tokens ?? 0;
+    const cacheRead = response.usage.cache_read_input_tokens ?? 0;
+    const roundTokens =
+      response.usage.input_tokens + cacheWrite + cacheRead + response.usage.output_tokens;
     totalTokens += roundTokens;
     await recordTokenUsage(roundTokens, input.surface);
 
@@ -83,6 +106,11 @@ export async function runAssistantTurn(input: {
       stopReason: response.stop_reason,
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
+      // A cacheRead of 0 on a follow-up turn means the prefix stopped
+      // matching — the prompt picked up something volatile and the saving is
+      // gone. Logged so that shows up rather than just costing more.
+      cacheWrite,
+      cacheRead,
     });
 
     if (response.stop_reason !== "tool_use") {

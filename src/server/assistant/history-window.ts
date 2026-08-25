@@ -7,8 +7,14 @@ import type { AssistantMessageDto } from "@/server/assistant/queries";
  * bound input-token cost on long-running threads. Must stay even: messages
  * strictly alternate USER/ASSISTANT, and the Messages API rejects a list
  * that doesn't start on "user".
+ *
+ * Three exchanges rather than five: history is the one part of the prompt
+ * that cannot be cached (it grows every turn, so it is never a stable
+ * prefix), which makes it the most expensive tokens in the request. Help
+ * questions are near enough to self-contained that the older pairs were
+ * paying full rate to be ignored.
  */
-export const MODEL_CONTEXT_LIMIT = 10;
+export const MODEL_CONTEXT_LIMIT = 6;
 
 /**
  * Slices the most recent `limit` messages, dropping a leading ASSISTANT
