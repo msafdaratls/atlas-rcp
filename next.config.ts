@@ -41,6 +41,15 @@ const nextConfig: NextConfig = {
       // presigned direct-to-Spaces uploads to take them off the action body.
       bodySizeLimit: "60mb",
     },
+    // Every admin page in this app marks itself `force-dynamic`, but that
+    // only controls server-side rendering — the client Router Cache still
+    // caches the RSC payload for 30s (Next 15 default) on back/forward and
+    // sibling-link navigation. Confirmed live: leave a running Label
+    // Evaluator assessment (EXTRACTING/CLASSIFYING) via a nav link and come
+    // back within 30s, and the page renders the stale pre-run snapshot,
+    // making the in-progress run look like it vanished. dynamic: 0 makes
+    // every such navigation refetch instead of reusing the cache.
+    staleTimes: { dynamic: 0 },
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
