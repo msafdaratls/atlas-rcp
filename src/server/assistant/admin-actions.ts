@@ -7,7 +7,8 @@ import { prisma } from "@/lib/db";
 import { log } from "@/lib/logger";
 import { consumeRateLimitAsync } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/rbac";
-import { matchCannedAnswer } from "@/server/assistant/admin-canned-answers";
+import { isAssistantAiEnabled } from "@/server/assistant/ai-toggle";
+import { buildAdminFallbackReply, matchCannedAnswer } from "@/server/assistant/admin-canned-answers";
 import { buildAdminManualContext } from "@/server/assistant/admin-manual-context";
 import { buildAdminSystemPrompt } from "@/server/assistant/admin-system-prompt";
 import { MAX_MESSAGE_LENGTH } from "@/server/assistant/constants";
@@ -26,9 +27,6 @@ export type ActionResult<T = undefined> =
 const sendSchema = z.object({
   text: z.string().trim().min(1, "EMPTY").max(MAX_MESSAGE_LENGTH, "TOO_LONG"),
 });
-
-const UNAVAILABLE_TEXT =
-  "The assistant is temporarily unavailable — please check with a colleague or System Admin in the meantime.";
 
 const ADMIN_OFF_TOPIC_REPLY = {
   en: "I'm the Atlas Staff Guide — I can only help with using the admin console and the request workflow. For anything else, please reach out to a colleague or System Admin.",
@@ -72,9 +70,12 @@ export async function sendAdminAssistantMessage(input: { text: string }): Promis
       return { ok: false, error: parsed.error.issues[0]?.message === "TOO_LONG" ? "TOO_LONG" : "EMPTY" };
     }
 
+    // Tight while the AI can bill, loose once it can't — see the client
+    // assistant's sendAssistantMessage for the reasoning.
+    const aiEnabled = isAssistantAiEnabled();
     const limited = await consumeRateLimitAsync({
       key: `admin-assistant-chat:${session.id}`,
-      limit: 20,
+      limit: aiEnabled ? 20 : 120,
       windowMs: 60 * 60 * 1000,
     });
     if (!limited.ok) {
@@ -112,8 +113,10 @@ export async function sendAdminAssistantMessage(input: { text: string }): Promis
       return reply(session.locale === "ar" ? ADMIN_OFF_TOPIC_REPLY.ar : ADMIN_OFF_TOPIC_REPLY.en, "off-topic-guard");
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return reply(UNAVAILABLE_TEXT, "unavailable");
+    // Off by default (ai-toggle.ts) — the role-filtered stored bank answers
+    // instead, and says what it can cover rather than dead-ending.
+    if (!aiEnabled) {
+      return reply(buildAdminFallbackReply(parsed.data.text, session.roles, session.locale), "stored-fallback");
     }
 
     if (await isTokenBudgetExceeded("admin")) {

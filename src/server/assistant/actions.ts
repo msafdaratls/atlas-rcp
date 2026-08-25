@@ -7,7 +7,8 @@ import { prisma } from "@/lib/db";
 import { log } from "@/lib/logger";
 import { consumeRateLimitAsync } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/rbac";
-import { matchCannedAnswer } from "@/server/assistant/canned-answers";
+import { isAssistantAiEnabled } from "@/server/assistant/ai-toggle";
+import { buildFallbackReply, matchCannedAnswer } from "@/server/assistant/canned-answers";
 import { buildCatalogueContext } from "@/server/assistant/catalogue-context";
 import { MAX_MESSAGE_LENGTH } from "@/server/assistant/constants";
 import { MODEL_CONTEXT_LIMIT, trimForModel } from "@/server/assistant/history-window";
@@ -26,9 +27,6 @@ export type ActionResult<T = undefined> =
 const sendSchema = z.object({
   text: z.string().trim().min(1, "EMPTY").max(MAX_MESSAGE_LENGTH, "TOO_LONG"),
 });
-
-const UNAVAILABLE_TEXT =
-  "The assistant is temporarily unavailable — please reach out through the Support page and the team will help directly.";
 
 function toActionError(err: unknown): { ok: false; error: string } {
   if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "FORBIDDEN")) {
@@ -60,8 +58,11 @@ export async function getAssistantHistory(): Promise<ActionResult<AssistantMessa
  * resolve reaches Claude — grounded in the live catalogue +
  * search_regulatory_rules tool — gated last by the daily token-budget guard.
  * Persists whichever reply it lands on and returns the refreshed transcript.
- * Never calls out when ANTHROPIC_API_KEY is unset — same fail-closed
- * convention as label-eval's AI call sites.
+ *
+ * The AI step is off by default (ai-toggle.ts). While it's off, a message
+ * none of the stored paths resolved gets buildFallbackReply's "here's what
+ * I can answer" reply — near-miss topics drawn from the same bank — rather
+ * than a dead end, and no token is ever spent.
  */
 export async function sendAssistantMessage(input: { text: string }): Promise<ActionResult<AssistantMessageDto[]>> {
   try {
@@ -72,13 +73,17 @@ export async function sendAssistantMessage(input: { text: string }): Promise<Act
       return { ok: false, error: parsed.error.issues[0]?.message === "TOO_LONG" ? "TOO_LONG" : "EMPTY" };
     }
 
-    // Any turn can end up a paid model call — cap per user so the only
-    // client-facing AI surface can't be spammed into an open-ended cost
-    // bill. Applied uniformly (even to canned/off-topic replies) so probing
-    // for the free paths isn't itself a way around the limit.
+    // While the AI is on, any turn can end up a paid model call, so the cap
+    // is tight and applies uniformly (even to stored replies) — probing for
+    // the free paths must not itself be a way around the cost limit. With
+    // the AI off there is no bill to run up and the assistant is purely a
+    // help manual, so a client working through a list of questions must not
+    // be cut off after twenty; the looser cap is then only abuse protection
+    // for the per-turn database writes.
+    const aiEnabled = isAssistantAiEnabled();
     const limited = await consumeRateLimitAsync({
       key: `assistant-chat:${session.id}`,
-      limit: 20,
+      limit: aiEnabled ? 20 : 120,
       windowMs: 60 * 60 * 1000,
     });
     if (!limited.ok) {
@@ -107,7 +112,10 @@ export async function sendAssistantMessage(input: { text: string }): Promise<Act
       return reply(serviceAnswer, "service-lookup");
     }
 
-    const canned = matchCannedAnswer(parsed.data.text);
+    // With the AI off there's nothing better for a service-specific message
+    // to fall through to, so the generic process answer beats no answer;
+    // with it on, that message is worth the model's full catalogue grounding.
+    const canned = matchCannedAnswer(parsed.data.text, { deferSpecificServiceToAi: aiEnabled });
     if (canned) {
       return reply(session.locale === "ar" ? canned.ar : canned.en, "canned");
     }
@@ -116,8 +124,8 @@ export async function sendAssistantMessage(input: { text: string }): Promise<Act
       return reply(session.locale === "ar" ? OFF_TOPIC_REPLY.ar : OFF_TOPIC_REPLY.en, "off-topic-guard");
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return reply(UNAVAILABLE_TEXT, "unavailable");
+    if (!aiEnabled) {
+      return reply(buildFallbackReply(parsed.data.text, session.locale), "stored-fallback");
     }
 
     if (await isTokenBudgetExceeded("client")) {

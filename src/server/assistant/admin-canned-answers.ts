@@ -1,4 +1,10 @@
 import type { Role } from "@prisma/client";
+import {
+  bestMatch,
+  suggestEntries,
+  topicLabel,
+  type KeywordEntry,
+} from "@/server/assistant/keyword-match";
 
 /**
  * Static Q&A shortcuts for the admin/staff assistant chat — the bilingual
@@ -10,7 +16,7 @@ import type { Role } from "@prisma/client";
  */
 export type CannedAnswer = { en: string; ar: string };
 
-type CannedEntry = CannedAnswer & { id: string; keywords: string[]; roles?: Role[] };
+type CannedEntry = CannedAnswer & KeywordEntry & { roles?: Role[] };
 
 const CANNED_ANSWERS: CannedEntry[] = [
   // ── All staff ─────────────────────────────────────────────────────────
@@ -58,7 +64,7 @@ const CANNED_ANSWERS: CannedEntry[] = [
   },
   {
     id: "hold_resume",
-    keywords: ["put on hold", "resume request", "on hold", "إيقاف مؤقت", "استئناف الطلب"],
+    keywords: ["put on hold", "resume request", "on hold", "إيقاف مؤقت", "تعليق الطلب", "أعلق الطلب", "معلّق", "استئناف الطلب"],
     en: "Any of the four process roles (Intake Officer, Evaluator, Technical Reviewer, Decision Maker) or System Admin can **Put on hold** a request from most active states — this pauses its SLA clock. **Resume** always returns it to the exact state it was held from, never a different one.",
     ar: "يمكن لأي من الأدوار الأربعة (مسؤول الاستلام، المُقيّم، المُراجع الفني، صاحب القرار) أو مدير النظام **تعليق** الطلب مؤقتًا من معظم الحالات النشطة — يُوقف هذا عداد مدة الإنجاز. **الاستئناف** يُعيد الطلب دائمًا إلى نفس الحالة التي أُوقف منها، وليس إلى حالة أخرى.",
   },
@@ -294,28 +300,41 @@ const CANNED_ANSWERS: CannedEntry[] = [
 ];
 
 /**
- * Returns a canned answer only on an unambiguous, generic match within the
- * caller's own roles: candidates outside `roles` are excluded before
- * scoring, then (as in the client version) at least one keyword hit and a
- * single clear best-scoring entry — a tie defers to the AI rather than
- * guessing.
+ * Returns a stored answer only on a clear match within the caller's own
+ * roles: candidates outside `roles` are excluded before scoring, so a
+ * reply can never describe a page or action that staff member can't reach.
+ * Scoring and tie-handling live in keyword-match.ts.
  */
 export function matchCannedAnswer(text: string, roles: Role[]): CannedAnswer | null {
-  const normalized = text.toLowerCase();
+  const entry = bestMatch(visibleTo(roles), text);
+  return entry ? { en: entry.en, ar: entry.ar } : null;
+}
 
-  let best: { entry: CannedEntry; score: number } | null = null;
-  let tied = false;
-  for (const entry of CANNED_ANSWERS) {
-    if (entry.roles && !entry.roles.some((r) => roles.includes(r))) continue;
-    const score = entry.keywords.reduce((acc, kw) => acc + (normalized.includes(kw) ? 1 : 0), 0);
-    if (score === 0) continue;
-    if (!best || score > best.score) {
-      best = { entry, score };
-      tied = false;
-    } else if (score === best.score) {
-      tied = true;
-    }
-  }
-  if (!best || tied) return null;
-  return { en: best.entry.en, ar: best.entry.ar };
+function visibleTo(roles: Role[]): CannedEntry[] {
+  return CANNED_ANSWERS.filter((entry) => !entry.roles || entry.roles.some((r) => roles.includes(r)));
+}
+
+/** Topics offered when nothing matched and there's no near-miss to suggest — all visible to every staff role. */
+const HEADLINE_TOPIC_IDS = ["dashboard", "work_queues", "requests_search", "assign_request", "hold_resume", "documents_search"];
+
+/**
+ * The reply for a message no stored answer resolved. With the AI fallback
+ * off (see ai-toggle.ts) this is the last word rather than a stepping
+ * stone, so it names the topics closest to what was actually asked —
+ * role-filtered like everything else here — instead of dead-ending.
+ */
+export function buildAdminFallbackReply(text: string, roles: Role[], locale: string): string {
+  const visible = visibleTo(roles);
+  const near = suggestEntries(visible, text, 5);
+  const entries = near.length > 0 ? near : visible.filter((e) => HEADLINE_TOPIC_IDS.includes(e.id));
+  const topics = entries.map((entry) => `- ${topicLabel(entry, locale)}`).join("\n");
+
+  return locale === "ar"
+    ? `ليست لديّ إجابة محفوظة لهذا السؤال تحديداً. يمكنني الإرشاد في المواضيع التالية ضمن صلاحياتك — اسألني عن أيٍّ منها:\n\n${topics}\n\nويمكنني أيضاً بيان متطلبات أي خدمة في الكتالوج أو ما ينص عليه بند تنظيمي مسجّل في قاعدة المعرفة. ولأي أمر خارج ذلك، يرجى الاستفسار من أحد الزملاء أو مدير النظام.`
+    : `I don't have a stored answer for that one. Here's what I can guide you through within your access — ask me about any of these:\n\n${topics}\n\nI can also give you any catalogue service's requirements, or what a regulatory clause in the knowledge base says. For anything beyond that, please check with a colleague or System Admin.`;
+}
+
+/** Test seam: the matched topic's id, so coverage tests can assert routing without exporting the bank. */
+export function matchCannedTopicId(text: string, roles: Role[]): string | null {
+  return bestMatch(visibleTo(roles), text)?.id ?? null;
 }
