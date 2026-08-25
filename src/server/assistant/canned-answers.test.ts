@@ -54,6 +54,14 @@ const ROUTING: [string, string][] = [
   ["كيف أحمّل الشهادة؟", "certificate_download"],
   ["كيف أتواصل مع الدعم؟", "contact_support"],
   ["كم يستغرق الطلب؟", "sla_timeline"],
+  // Regressions found in review: each of these returned the wrong topic or
+  // nothing at all. See keyword-match.test.ts for the underlying rules.
+  ["how do I change my password on my profile", "account_access"],
+  ["إلغاء الطلب", "cancel_request"],
+  ["هل يمكنني إلغاء الطلب؟", "cancel_request"],
+  ["أين رسائل الطلب؟", "messages"],
+  ["متى يكون جاهزاً؟", "sla_timeline"],
+  ["نظرة عامة على البوابة", "portal_overview"],
 ];
 
 describe("matchCannedAnswer routing", () => {

@@ -15,6 +15,20 @@ describe("tokenize", () => {
   it("folds Arabic diacritics, hamza forms and the definite article", () => {
     assert.deepEqual(tokenize("أُعيد الطلب"), ["اعيد", "طلب"]);
   });
+
+  it("drops Arabic stopwords despite their pre-normalization spelling", () => {
+    // Written "على"/"الى"/"متى" but normalized to "علي"/"الي"/"متي" before
+    // lookup; entries stored un-normalized never matched and survived as
+    // scoring tokens, making every phrase containing them harder to match.
+    assert.deepEqual(tokenize("على الى متى"), []);
+  });
+
+  it("does not strip a leading alef-lam that is not the definite article", () => {
+    assert.deepEqual(tokenize("إلغاء"), ["الغاء"]);
+    assert.deepEqual(tokenize("إلكتروني"), ["الكتروني"]);
+    // The real article is still stripped.
+    assert.deepEqual(tokenize("الطلبات"), ["طلبات"]);
+  });
 });
 
 describe("scoreKeywords", () => {
@@ -34,6 +48,22 @@ describe("scoreKeywords", () => {
   it("does not let a message token match a keyword it is only a suffix of", () => {
     // "submit" must not satisfy "resubmit" — that answered the wrong question.
     assert.equal(scoreKeywords(["resubmit"], tokenize("how to submit request")), 0);
+  });
+
+  it("does not match a Latin keyword buried inside an unrelated word", () => {
+    // "word file" once scored against "password"/"profile" and answered a
+    // locked-out client with a list of accepted upload formats.
+    assert.equal(scoreKeywords(["word file"], tokenize("change my password on my profile")), 0);
+    assert.equal(scoreKeywords(["form"], tokenize("platform information")), 0);
+    assert.equal(scoreKeywords(["work"], tokenize("artwork")), 0);
+    // A genuine prefix is still a match — "format" really does start with "form".
+    assert.equal(scoreKeywords(["form"], tokenize("what file format")), 1);
+  });
+
+  it("stems an Arabic message token against a longer keyword token", () => {
+    // طلب must satisfy the keyword طلبي; a floor of 4 excluded three-letter
+    // roots, which is most of them.
+    assert.ok(scoreKeywords(["إلغاء طلبي"], tokenize("هل يمكنني إلغاء الطلب؟")) > 0);
   });
 
   it("counts two keywords that collapse to the same tokens only once", () => {

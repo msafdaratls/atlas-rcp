@@ -16,6 +16,13 @@
  * phrase outranks an incidental one-word overlap.
  */
 
+const ARABIC_SCRIPT = /[؀-ۿ]/;
+
+/** Arabic and Latin inflect differently, so tokenMatches applies a different rule to each. */
+function isArabic(token: string): boolean {
+  return ARABIC_SCRIPT.test(token);
+}
+
 /** Tashkeel/harakat plus tatweel — decoration that varies by typist and must never affect a match. */
 const ARABIC_DIACRITICS = /[ً-ْٰـ]/g;
 
@@ -39,12 +46,26 @@ export function normalizeText(text: string): string {
 }
 
 /**
+ * Words that simply begin with alef-lam rather than carrying the definite
+ * article. Length alone cannot separate these from real cases — "الطلب"
+ * (the request) and "الغاء" (cancellation) are both five letters stripping
+ * to three — so the ambiguous ones are listed. Written post-normalization,
+ * which is the form stripArabicArticle actually sees.
+ */
+const NOT_ARTICLE_PREFIXED = new Set([
+  "الغاء", "الغي", "الزام", "الزامي", "الزاميه", "التزام", "الحاق",
+  "الكتروني", "الكترونيه", "الوان", "الهام", "الف", "الاف",
+]);
+
+/**
  * Strips the Arabic definite article so "الطلبات" and "طلب" reach the same
  * stem. Guarded on length so short words that merely start with alef-lam
- * (e.g. "ألم") aren't mutilated.
+ * (e.g. "ألم") aren't mutilated, and on the deny-list above for the longer
+ * ones length cannot catch.
  */
 function stripArabicArticle(token: string): string {
-  return token.length > 4 && token.startsWith("ال") ? token.slice(2) : token;
+  if (token.length <= 4 || !token.startsWith("ال") || NOT_ARTICLE_PREFIXED.has(token)) return token;
+  return token.slice(2);
 }
 
 /**
@@ -68,7 +89,11 @@ const STOPWORDS = new Set([
   "get", "got", "need", "want", "have", "has", "had", "make", "made", "show", "tell",
   "في", "على", "الى", "عن", "هل", "مع", "او", "ثم", "كيف", "ماذا", "اين", "متى", "لماذا",
   "انا", "لي", "هذا", "هذه", "التي", "الذي", "كل", "قد", "لا", "نعم",
-]);
+// Normalized on the way in: tokenize() folds ى -> ي before consulting this
+// set, so an entry written "على" would never be looked up and would survive
+// as a scoring token, making every keyword phrase containing it harder to
+// match rather than easier.
+].map((word) => normalizeText(word)));
 
 export function tokenize(text: string): string[] {
   return normalizeText(text)
@@ -86,18 +111,32 @@ export function tokenize(text: string): string[] {
  * higher floor missed the commonest inflections outright; 1-2 letter
  * fragments are already gone by tokenize().
  *
- * The reverse direction is prefix-only, not substring: a message token may
- * be the stem of a longer keyword (invoice -> invoices), but must not match
- * it from the middle or end, or "submit" would satisfy the keyword
- * "resubmit" and answer the wrong question.
+ * Both directions are prefix-anchored for Latin script: a message token may
+ * be the stem of a longer keyword (invoice -> invoices) or vice versa, but
+ * must not match from the middle or end, or "submit" would satisfy
+ * "resubmit" and "word" would satisfy "password".
  */
 function tokenMatches(needle: string, messageTokens: string[]): boolean {
-  return messageTokens.some(
-    (t) =>
-      t === needle ||
-      (needle.length >= 3 && t.includes(needle)) ||
-      (t.length >= 4 && needle.startsWith(t)),
-  );
+  return messageTokens.some((t) => {
+    if (t === needle) return true;
+
+    // Arabic attaches affixes at BOTH ends (ال / و / ب prefixes, possessive
+    // and plural suffixes), so neither direction can be anchored, and the
+    // floor is 3 because Arabic roots are routinely three letters — طلب has
+    // to be able to stem طلبي whichever side of the comparison it lands on.
+    if (isArabic(needle) || isArabic(t)) {
+      return (
+        (needle.length >= 3 && t.includes(needle)) ||
+        (t.length >= 3 && needle.includes(t))
+      );
+    }
+
+    // Latin inflection is a suffix, so both directions anchor to the prefix.
+    // An unanchored test here matched keyword fragments in the middle of
+    // unrelated words — "word file" scored against "password"/"profile" and
+    // answered a locked-out client with accepted upload formats.
+    return (needle.length >= 3 && t.startsWith(needle)) || (t.length >= 4 && needle.startsWith(t));
+  });
 }
 
 // Keyword lists are module constants re-scanned on every turn; tokenizing
@@ -198,8 +237,6 @@ export function suggestEntries<T extends KeywordEntry>(entries: T[], text: strin
     .slice(0, limit)
     .map((scored) => scored.entry);
 }
-
-const ARABIC_SCRIPT = /[؀-ۿ]/;
 
 /**
  * A human-readable topic name for the fallback list, taken from the entry's
