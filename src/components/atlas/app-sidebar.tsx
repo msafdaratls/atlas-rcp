@@ -234,7 +234,7 @@ export function AppSidebar({
         className,
       )}
     >
-      <nav className="flex-1 space-y-1 p-2" aria-label={mode}>
+      <nav className="flex-1 space-y-1 overflow-y-auto overscroll-contain p-2" aria-label={mode}>
         {items.map((item) => {
           const href = `${basePath}${item.href}`;
           const active = item.key === activeKey;

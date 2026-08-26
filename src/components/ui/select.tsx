@@ -36,13 +36,13 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "relative z-50 max-h-72 min-w-32 overflow-hidden rounded-md border border-line bg-popover text-popover-foreground shadow-elevation",
+        "relative z-50 max-h-[min(18rem,var(--radix-select-content-available-height))] min-w-32 overflow-hidden rounded-md border border-line bg-popover text-popover-foreground shadow-elevation",
         className,
       )}
       position={position}
       {...props}
     >
-      <SelectPrimitive.Viewport className="p-1">
+      <SelectPrimitive.Viewport className="max-h-[inherit] overflow-y-auto overscroll-contain p-1">
         {children}
       </SelectPrimitive.Viewport>
     </SelectPrimitive.Content>

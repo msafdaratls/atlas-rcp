@@ -50,7 +50,7 @@ function SheetContent({
       <SheetOverlay />
       <Dialog.Content
         className={cn(
-          "fixed inset-y-0 z-50 flex h-full w-[min(100%,20rem)] flex-col border-line bg-surface shadow-elevation duration-150 ease-out",
+          "fixed inset-y-0 z-50 flex h-full w-[min(100%,20rem)] flex-col overflow-y-auto overscroll-contain border-line bg-surface shadow-elevation duration-150 ease-out",
           side === "start"
             ? "start-0 border-e data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left rtl:data-[state=closed]:slide-out-to-right rtl:data-[state=open]:slide-in-from-right"
             : "end-0 border-s data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right rtl:data-[state=closed]:slide-out-to-left rtl:data-[state=open]:slide-in-from-left",
