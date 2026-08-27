@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleHelp,
+  FileQuestion,
   FlaskConical,
   Loader2,
   Sparkles,
@@ -44,6 +45,7 @@ const VERDICT_META: Record<string, { icon: typeof CheckCircle2; tone: string; la
   NA: { icon: CircleHelp, tone: "text-ink-500 border-line bg-surface-alt", labelKey: "verdict.NA" },
   NEEDS_REVIEW: { icon: AlertTriangle, tone: "text-state-warn border-state-warn/40 bg-state-warn/10", labelKey: "verdict.NEEDS_REVIEW" },
   REQUIRES_ADDITIONAL_DATA: { icon: FlaskConical, tone: "text-ink-600 border-line bg-surface-alt", labelKey: "verdict.REQUIRES_ADDITIONAL_DATA" },
+  MISSING: { icon: FileQuestion, tone: "text-state-warn border-state-warn/40 bg-state-warn/10", labelKey: "verdict.MISSING" },
 };
 
 const FINAL_VERDICT_TONE: Record<string, string> = {
@@ -634,6 +636,7 @@ function AssessedView({
             {t("scoreCounts", {
               compliant: counts.COMPLIANT ?? 0,
               nonCompliant: counts.NON_COMPLIANT ?? 0,
+              missing: counts.MISSING ?? 0,
               needsReview: counts.NEEDS_REVIEW ?? 0,
               requiresData: counts.REQUIRES_ADDITIONAL_DATA ?? 0,
             })}
@@ -888,7 +891,7 @@ function VerdictCard({
   // documented requirement for SFDA, so it stays optional there.
   const rationaleRequired = domain === "COSMETICS";
 
-  const OPTIONS: string[] = ["COMPLIANT", "NON_COMPLIANT", "NA", "NEEDS_REVIEW", "REQUIRES_ADDITIONAL_DATA"];
+  const OPTIONS: string[] = ["COMPLIANT", "NON_COMPLIANT", "NA", "NEEDS_REVIEW", "REQUIRES_ADDITIONAL_DATA", "MISSING"];
 
   function change(newVerdict: string) {
     if (rationaleRequired && !rationale.trim()) return;

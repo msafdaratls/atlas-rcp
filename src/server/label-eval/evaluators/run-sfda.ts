@@ -12,6 +12,7 @@ export type RunResult = {
   na: number;
   needsReview: number;
   requiresAdditionalData: number;
+  missing: number;
 };
 
 /**
@@ -42,12 +43,14 @@ function scoreSfdaVerdicts(verdicts: string[]): {
   na: number;
   needsReview: number;
   requiresAdditionalData: number;
+  missing: number;
 } {
   let compliant = 0;
   let nonCompliant = 0;
   let na = 0;
   let needsReview = 0;
   let requiresAdditionalData = 0;
+  let missing = 0;
   for (const verdict of verdicts) {
     switch (verdict) {
       case "COMPLIANT": compliant++; break;
@@ -55,21 +58,23 @@ function scoreSfdaVerdicts(verdicts: string[]): {
       case "NA": na++; break;
       case "NEEDS_REVIEW": needsReview++; break;
       case "REQUIRES_ADDITIONAL_DATA": requiresAdditionalData++; break;
+      case "MISSING": missing++; break;
     }
   }
 
   const rate = compliant + nonCompliant === 0 ? null : compliant / (compliant + nonCompliant);
   // "Complete" per src/lib/assessment.ts semantics: every item resolved to
-  // compliant/nonCompliant/na. NEEDS_REVIEW and REQUIRES_ADDITIONAL_DATA are
-  // provisional — the reviewer must resolve them before a firm decision.
-  const complete = needsReview === 0 && requiresAdditionalData === 0;
+  // compliant/nonCompliant/na. NEEDS_REVIEW, REQUIRES_ADDITIONAL_DATA and
+  // MISSING (required data never confirmed) are all provisional — the
+  // reviewer must resolve them before a firm decision.
+  const complete = needsReview === 0 && requiresAdditionalData === 0 && missing === 0;
   const decision = recommendDecision(rate, complete);
   const finalVerdict: RunResult["finalVerdict"] =
     decision === "ACCEPTED" ? "accepted" :
     decision === "ACCEPTED_WITH_REMARKS" ? "accepted_with_remarks" :
     decision === "REJECTED" ? "rejected" : "incomplete";
 
-  return { rate, finalVerdict, compliant, nonCompliant, na, needsReview, requiresAdditionalData };
+  return { rate, finalVerdict, compliant, nonCompliant, na, needsReview, requiresAdditionalData, missing };
 }
 
 /**
@@ -173,5 +178,6 @@ export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult
     na: score.na,
     needsReview: score.needsReview,
     requiresAdditionalData: score.requiresAdditionalData,
+    missing: score.missing,
   };
 }

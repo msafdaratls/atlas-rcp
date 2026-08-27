@@ -27,32 +27,38 @@ export type RunCosmeticsResult =
       compliant: number;
       nonCompliant: number;
       needsReview: number;
+      missing: number;
     };
 
 /**
  * Any real NON_COMPLIANT is a hard fail (matches the doc's "Non-Compliant").
- * Otherwise, anything still unresolved (NEEDS_REVIEW or
- * REQUIRES_ADDITIONAL_DATA) means the assessment isn't actually done yet —
- * "Requires Review", not a false-confident pass. Only once everything is
- * resolved clean does it become "Compliant".
+ * Otherwise, anything still unresolved (NEEDS_REVIEW, REQUIRES_ADDITIONAL_DATA,
+ * or MISSING — required data never confirmed) means the assessment isn't
+ * actually done yet — "Requires Review", not a false-confident pass. Only
+ * once everything is resolved clean does it become "Compliant". MISSING is
+ * tracked separately from needsReview so the UI can tell "data was never
+ * provided" apart from "data was provided but needs a human judgment call".
  */
 function scoreCosmeticsVerdicts(verdicts: { verdict: string }[]): {
   finalVerdict: CosmeticsFinalVerdict;
   compliant: number;
   nonCompliant: number;
   needsReview: number;
+  missing: number;
 } {
   let compliant = 0;
   let nonCompliant = 0;
   let needsReview = 0;
+  let missing = 0;
   for (const { verdict } of verdicts) {
     if (verdict === "COMPLIANT") compliant++;
     else if (verdict === "NON_COMPLIANT") nonCompliant++;
     else if (verdict === "NEEDS_REVIEW" || verdict === "REQUIRES_ADDITIONAL_DATA") needsReview++;
+    else if (verdict === "MISSING") missing++;
   }
   const finalVerdict: CosmeticsFinalVerdict =
-    nonCompliant > 0 ? "non_compliant" : needsReview > 0 ? "requires_review" : "compliant";
-  return { finalVerdict, compliant, nonCompliant, needsReview };
+    nonCompliant > 0 ? "non_compliant" : needsReview > 0 || missing > 0 ? "requires_review" : "compliant";
+  return { finalVerdict, compliant, nonCompliant, needsReview, missing };
 }
 
 /**

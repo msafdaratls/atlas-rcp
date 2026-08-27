@@ -21,7 +21,7 @@ const presence: EvaluatorFn = (ctx) => {
       }
     }
     return {
-      verdict: "NON_COMPLIANT",
+      verdict: "MISSING",
       rationale: `Required field(s) not confirmed: ${mapped.join(", ")}`,
     };
   }
@@ -29,7 +29,7 @@ const presence: EvaluatorFn = (ctx) => {
   const hints = FD_2233_KEYWORD_HINTS[ctx.code];
   if (hints) {
     const table = anyValue(ctx.fields["nutrition_table"]);
-    if (!table) return { verdict: "NON_COMPLIANT", rationale: "Nutrition table not provided." };
+    if (!table) return { verdict: "MISSING", rationale: "Nutrition table not provided." };
     const hay = table.toLowerCase();
     const found = hints.some((h) => hay.includes(h.toLowerCase()));
     return found
@@ -60,7 +60,7 @@ const bilingualPresence: EvaluatorFn = (ctx) => {
   if (missing.length === 0) {
     return { verdict: "COMPLIANT", rationale: "All bilingual fields confirmed in both Arabic and English." };
   }
-  return { verdict: "NON_COMPLIANT", rationale: `Missing Arabic or English text for: ${missing.join(", ")}` };
+  return { verdict: "MISSING", rationale: `Missing Arabic or English text for: ${missing.join(", ")}` };
 };
 
 const SECTION_TABLE_KEYS: Record<string, string[]> = {

@@ -529,8 +529,8 @@ export async function confirmFieldsAndRunAssessment(
 const overrideSchema = z.object({
   assessmentId: z.string().min(1),
   kbRuleId: z.string().min(1),
-  expectedPreviousVerdict: z.enum(["COMPLIANT", "NON_COMPLIANT", "NA", "NEEDS_REVIEW", "REQUIRES_ADDITIONAL_DATA"]),
-  newVerdict: z.enum(["COMPLIANT", "NON_COMPLIANT", "NA", "NEEDS_REVIEW", "REQUIRES_ADDITIONAL_DATA"]),
+  expectedPreviousVerdict: z.enum(["COMPLIANT", "NON_COMPLIANT", "NA", "NEEDS_REVIEW", "REQUIRES_ADDITIONAL_DATA", "MISSING"]),
+  newVerdict: z.enum(["COMPLIANT", "NON_COMPLIANT", "NA", "NEEDS_REVIEW", "REQUIRES_ADDITIONAL_DATA", "MISSING"]),
   rationale: z.string().trim().max(1000).optional(),
 });
 

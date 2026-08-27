@@ -2010,7 +2010,7 @@
       "englishPlaceholder": "English",
       "arabicPlaceholder": "Arabic",
       "save": "Save",
-      "scoreCounts": "Compliant {compliant} · Non-compliant {nonCompliant} · Needs review {needsReview} · Requires data {requiresData}",
+      "scoreCounts": "Compliant {compliant} · Non-compliant {nonCompliant} · Missing {missing} · Needs review {needsReview} · Requires data {requiresData}",
       "overallRate": "Overall rate",
       "sectionCounts": "{compliant}/{total} compliant · {nonCompliant} non-compliant",
       "decision": {
@@ -2039,7 +2039,8 @@
         "NON_COMPLIANT": "Non-compliant",
         "NA": "N/A",
         "NEEDS_REVIEW": "Needs review",
-        "REQUIRES_ADDITIONAL_DATA": "Requires additional data"
+        "REQUIRES_ADDITIONAL_DATA": "Requires additional data",
+        "MISSING": "Missing"
       },
       "evidenceLabel": "On the label",
       "manuallyOverridden": "Manually overridden by a reviewer.",

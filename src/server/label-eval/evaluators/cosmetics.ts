@@ -39,7 +39,7 @@ const labelPresence: EvaluatorFn = (ctx) => {
     return { verdict: "COMPLIANT", evidenceText: evidence, rationale: "Confirmed field(s) present." };
   }
   const missing = values.filter((v) => !v.value).map((v) => v.key).join(", ");
-  return { verdict: "NON_COMPLIANT", rationale: `Required field(s) "${missing}" not confirmed.` };
+  return { verdict: "MISSING", rationale: `Required field(s) "${missing}" not confirmed.` };
 };
 
 /**
@@ -59,7 +59,7 @@ const labelFormat: EvaluatorFn = (ctx) => {
   }
   const value = anyValue(ctx.fields[fieldKey]);
   if (!value) {
-    return { verdict: "NON_COMPLIANT", rationale: `Required field "${fieldKey}" is not confirmed.` };
+    return { verdict: "MISSING", rationale: `Required field "${fieldKey}" is not confirmed.` };
   }
   if (value.toLowerCase().includes(pattern.toLowerCase())) {
     return { verdict: "COMPLIANT", evidenceText: value, rationale: `Found required text "${pattern}".` };

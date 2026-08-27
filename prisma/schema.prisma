@@ -1206,6 +1206,7 @@ enum LabelVerdict {
   NA
   NEEDS_REVIEW // LLM-proposed, awaiting human confirmation
   REQUIRES_ADDITIONAL_DATA // needs formulation/lab/dossier input; also the fail-safe outcome of a lookup miss
+  MISSING // required field was never confirmed/provided — distinct from a confirmed value that fails the rule
 }
 
 model LabelKbVersion {

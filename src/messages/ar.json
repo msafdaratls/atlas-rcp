@@ -2010,7 +2010,7 @@
       "englishPlaceholder": "الإنجليزية",
       "arabicPlaceholder": "العربية",
       "save": "حفظ",
-      "scoreCounts": "مطابق {compliant} · غير مطابق {nonCompliant} · بحاجة لمراجعة {needsReview} · يتطلب بيانات {requiresData}",
+      "scoreCounts": "مطابق {compliant} · غير مطابق {nonCompliant} · بيانات ناقصة {missing} · بحاجة لمراجعة {needsReview} · يتطلب بيانات {requiresData}",
       "overallRate": "المعدل الإجمالي",
       "sectionCounts": "{compliant}/{total} مطابق · {nonCompliant} غير مطابق",
       "decision": {
@@ -2039,7 +2039,8 @@
         "NON_COMPLIANT": "غير مطابق",
         "NA": "لا ينطبق",
         "NEEDS_REVIEW": "بحاجة لمراجعة",
-        "REQUIRES_ADDITIONAL_DATA": "يتطلب بيانات إضافية"
+        "REQUIRES_ADDITIONAL_DATA": "يتطلب بيانات إضافية",
+        "MISSING": "بيانات ناقصة"
       },
       "evidenceLabel": "على البطاقة",
       "manuallyOverridden": "تم تعديله يدوياً من قبل مُقيِّم.",
