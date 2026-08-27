@@ -132,6 +132,46 @@ function containsWholeTerm(haystack: string, term: string): boolean {
 }
 
 /**
+ * COSING Annex II/III entries are written as narrow, conditional bans, not
+ * plain substance names — e.g. "Alanroot oil (CAS No 97676-35-2), when used
+ * as a fragrance ingredient" or "Paraffin waxes (coal), ..., if they
+ * contain > 0.005% w/w benzo[a]pyrene". Confirmed live: whole-word matching
+ * a generic declared ingredient like "Fragrance" or "Paraffin" against the
+ * FULL entry text hits the qualifier clause's own generic wording, not the
+ * actual prohibited substance, producing a false NON_COMPLIANT on ordinary,
+ * permitted ingredients. Strip the parenthetical CAS/EC annotation and the
+ * trailing ", when used as .../if it contains .../unless .../except ..."
+ * qualifier clause so only the actual substance name remains for matching.
+ */
+function coreSubstanceName(entryName: string): string {
+  const noParens = entryName.replace(/\([^)]*\)/g, " ");
+  const noQualifier = noParens.split(
+    /,\s*(?:when used|if\s+(?:it|they|used|present)|unless|except|for use|in\s+(?:the\s+)?(?:absence|presence)|only\s+when)/i,
+  )[0];
+  return noQualifier.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * A declared ingredient matches an Annex entry if either name contains the
+ * other as a whole phrase — but for a single-word term (no internal
+ * whitespace, e.g. "Fragrance", "Paraffin"), require an exact match against
+ * the cleaned core substance name rather than mere whole-word containment.
+ * A single generic word is too easy to find somewhere inside a longer,
+ * unrelated substance name (see coreSubstanceName above); multi-word terms
+ * are specific enough that phrase containment stays safe.
+ */
+function matchesAnnexEntry(entryName: string, term: string): boolean {
+  const normTerm = term.trim().toLowerCase();
+  if (!normTerm) return false;
+  const core = coreSubstanceName(entryName);
+  if (!core) return false;
+  if (/\s/.test(normTerm)) {
+    return containsWholeTerm(core, normTerm) || containsWholeTerm(normTerm, core);
+  }
+  return normTerm === core;
+}
+
+/**
  * COSING ingredient screen. Unlike SFDA's permitted-list `lookup` evaluator
  * (a miss is ambiguous, so it fails safe to REQUIRES_ADDITIONAL_DATA), this
  * is a PROHIBITED/RESTRICTED-list screen — the live cosmetics tool's own
@@ -140,7 +180,7 @@ function containsWholeTerm(haystack: string, term: string): boolean {
  * II (prohibited) is a hard NON_COMPLIANT; Annex III (restricted) needs a
  * human look at the usage conditions.
  */
-const ingredientLookup: EvaluatorFn = (ctx) => {
+export const ingredientLookup: EvaluatorFn = (ctx) => {
   const ingredientsText = anyValue(ctx.fields["ingredients_list"]);
   if (!ingredientsText) {
     return { verdict: "NEEDS_REVIEW", rationale: "No confirmed ingredient list to screen." };
@@ -156,7 +196,7 @@ const ingredientLookup: EvaluatorFn = (ctx) => {
 
   for (const term of terms) {
     const prohibited = ctx.lookups.find(
-      (l) => l.tableKey === COSING_PROHIBITED_TABLE && containsWholeTerm(lookupIngredientName(l.payload) ?? "", term),
+      (l) => l.tableKey === COSING_PROHIBITED_TABLE && matchesAnnexEntry(lookupIngredientName(l.payload) ?? "", term),
     );
     if (prohibited) {
       return { verdict: "NON_COMPLIANT", evidenceText: term, rationale: `"${term}" matches a COSING Annex II (prohibited) entry.` };
@@ -164,7 +204,7 @@ const ingredientLookup: EvaluatorFn = (ctx) => {
   }
   for (const term of terms) {
     const restricted = ctx.lookups.find(
-      (l) => l.tableKey === COSING_RESTRICTED_TABLE && containsWholeTerm(lookupIngredientName(l.payload) ?? "", term),
+      (l) => l.tableKey === COSING_RESTRICTED_TABLE && matchesAnnexEntry(lookupIngredientName(l.payload) ?? "", term),
     );
     if (restricted) {
       return { verdict: "NEEDS_REVIEW", evidenceText: term, rationale: `"${term}" matches a COSING Annex III (restricted) entry — verify usage conditions are met.` };
