@@ -315,6 +315,8 @@ export type AssessmentDetailVerdict = {
   titleAr: string;
   priority: string | null;
   standard: string | null;
+  /** KB rule type (e.g. CLAIM_PHASE_ITEM) — drives how evidence is presented. */
+  ruleType: string;
   verdict: string;
   autoOrManual: string;
   evidenceText: string | null;
@@ -421,7 +423,7 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
             previousVerdict: true,
             overriddenByUserId: true,
             overriddenAt: true,
-            kbRule: { select: { code: true, section: true, titleEn: true, titleAr: true, priority: true, payload: true } },
+            kbRule: { select: { code: true, section: true, titleEn: true, titleAr: true, priority: true, payload: true, ruleType: true } },
           },
           // Stable order by rule code — an override must not visibly reshuffle
           // the card list (default insertion order isn't guaranteed stable
@@ -536,6 +538,7 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
         titleAr: v.kbRule.titleAr,
         priority: v.kbRule.priority,
         standard: (v.kbRule.payload as Record<string, unknown> | null)?.standard as string | undefined ?? null,
+        ruleType: v.kbRule.ruleType,
         verdict: v.verdict,
         autoOrManual: v.autoOrManual,
         evidenceText: v.evidenceText,

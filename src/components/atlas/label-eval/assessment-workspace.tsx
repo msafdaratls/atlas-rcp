@@ -62,6 +62,22 @@ const FINAL_VERDICT_TONE: Record<string, string> = {
   requires_review: "bg-surface-alt text-ink-500 border-line",
 };
 
+/**
+ * The `claims_detected` field is free text holding every claim the extraction
+ * picked off the artwork, one per line or separated by ";" / "|" (both appear
+ * in real extractions). Split it so claim items can list them all rather than
+ * showing one run-on paragraph. Falls back to the Arabic value when the
+ * English one is empty.
+ */
+function splitClaims(valueEn: string | null, valueAr: string | null): string[] {
+  const raw = (valueEn?.trim() || valueAr?.trim()) ?? "";
+  if (!raw) return [];
+  return raw
+    .split(/\r?\n|;|\|/)
+    .map((c) => c.replace(/^[-•*\d.)\s]+/, "").trim())
+    .filter(Boolean);
+}
+
 function pct(rate: number | null): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`;
 }
@@ -594,6 +610,14 @@ function AssessedView({
     return c;
   }, [detail.verdicts]);
 
+  // Claim items are judged against the whole extracted claim list, so their
+  // "On the label" evidence shows every detected claim rather than only the
+  // fragment the LLM proposal happened to quote.
+  const detectedClaims = useMemo(() => {
+    const f = detail.fields.find((x) => x.fieldKey === "claims_detected");
+    return splitClaims(f?.valueEn ?? null, f?.valueAr ?? null);
+  }, [detail.fields]);
+
   const [pending, startTransition] = useTransition();
   const [previewPending, startPreviewTransition] = useTransition();
   const [preview, setPreview] = useState<{ written: number; withheld: number; priorDataExists: boolean } | null>(null);
@@ -650,7 +674,17 @@ function AssessedView({
       </div>
 
       {sections.map(([section, verdicts]) => (
-        <SectionCard key={section} section={section} verdicts={verdicts} isAr={isAr} assessmentId={detail.id} domain={domain} t={t} router={router} />
+        <SectionCard
+          key={section}
+          section={section}
+          verdicts={verdicts}
+          isAr={isAr}
+          assessmentId={detail.id}
+          domain={domain}
+          detectedClaims={detectedClaims}
+          t={t}
+          router={router}
+        />
       ))}
 
       {domain === "COSMETICS" ? <RequiredTestsTable detail={detail} t={t} isAr={isAr} /> : null}
@@ -824,6 +858,7 @@ export function SectionCard({
   isAr,
   assessmentId,
   domain,
+  detectedClaims = [],
   t,
   router,
 }: {
@@ -832,6 +867,8 @@ export function SectionCard({
   isAr: boolean;
   assessmentId: string;
   domain: LabelEvalDomain;
+  /** Every claim extracted into the `claims_detected` field, for claim items. */
+  detectedClaims?: string[];
   t: ReturnType<typeof useTranslations<"labelEval.workspace">>;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -857,7 +894,16 @@ export function SectionCard({
       {open ? (
         <div className="divide-y divide-line">
           {verdicts.map((v) => (
-            <VerdictCard key={v.kbRuleId} verdict={v} isAr={isAr} assessmentId={assessmentId} domain={domain} t={t} router={router} />
+            <VerdictCard
+              key={v.kbRuleId}
+              verdict={v}
+              isAr={isAr}
+              assessmentId={assessmentId}
+              domain={domain}
+              detectedClaims={detectedClaims}
+              t={t}
+              router={router}
+            />
           ))}
         </div>
       ) : null}
@@ -870,6 +916,7 @@ function VerdictCard({
   isAr,
   assessmentId,
   domain,
+  detectedClaims = [],
   t,
   router,
 }: {
@@ -877,6 +924,7 @@ function VerdictCard({
   isAr: boolean;
   assessmentId: string;
   domain: LabelEvalDomain;
+  detectedClaims?: string[];
   t: ReturnType<typeof useTranslations<"labelEval.workspace">>;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -931,6 +979,10 @@ function VerdictCard({
   }
 
   const isAiProposed = verdict.autoOrManual === "llm_proposed";
+  // A claim item is judged against the whole extracted claim list, so show
+  // every detected claim here instead of the single fragment an evaluator or
+  // LLM proposal happened to quote.
+  const showAllClaims = verdict.ruleType === "CLAIM_PHASE_ITEM" && detectedClaims.length > 0;
 
   return (
     <div className={cn("space-y-2 px-3 py-3", isAiProposed && "bg-state-info/5")}>
@@ -955,7 +1007,16 @@ function VerdictCard({
         </div>
       </div>
       {verdict.rationale ? <p className="text-xs text-ink-600">{verdict.rationale}</p> : null}
-      {verdict.evidenceText ? (
+      {showAllClaims ? (
+        <div className="rounded border border-line bg-surface-alt/40 px-2 py-1.5 text-xs text-ink-700">
+          <p className="font-medium">{t("evidenceLabel")}:</p>
+          <ul className="mt-1 list-disc space-y-0.5 ps-4">
+            {detectedClaims.map((claim, i) => (
+              <li key={`${i}-${claim}`}>{claim}</li>
+            ))}
+          </ul>
+        </div>
+      ) : verdict.evidenceText ? (
         <p className="rounded border border-line bg-surface-alt/40 px-2 py-1.5 text-xs text-ink-700">
           {t("evidenceLabel")}: {verdict.evidenceText}
         </p>
