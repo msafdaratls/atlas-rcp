@@ -338,7 +338,8 @@
       "drop": "Drop a file or click to upload",
       "remove": "Remove file",
       "downloadTemplate": "Download template",
-      "chooseTemplate": "Download the form for your technical regulation:"
+      "chooseTemplate": "Download the form for your technical regulation:",
+      "shareHint": "Prefer not to upload these yourself? Send these documents to Atlas by WhatsApp or email — we'll upload and handle everything on your behalf."
     },
     "step4": {
       "title": "Review & submit",

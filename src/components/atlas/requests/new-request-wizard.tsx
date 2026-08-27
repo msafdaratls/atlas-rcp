@@ -1281,6 +1281,14 @@ export function NewRequestWizard({
                 total: mandatoryTotal,
               })}
             </p>
+            {onBehalf ? (
+              <div className="flex items-start gap-3 rounded-lg border border-atlas-green/30 bg-atlas-green/5 px-4 py-3">
+                <span className="mt-0.5 text-lg" aria-hidden="true">
+                  💬
+                </span>
+                <p className="text-sm text-ink-800">{t("step3.shareHint")}</p>
+              </div>
+            ) : null}
             {items.map((item) => {
               const catalogueItem = catalogueItemById.get(item.serviceItemId);
               // Product name disambiguates the groups: several products of the
