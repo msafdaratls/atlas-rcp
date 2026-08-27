@@ -1867,7 +1867,7 @@
     "haveAccount": "لديك حساب بالفعل؟",
     "signInLink": "تسجيل الدخول",
     "sectionAccountType": "نوع الحساب",
-    "accountTypeCompany": "شركة",
+    "accountTypeCompany": "شركة/مؤسسة",
     "accountTypeIndividual": "فرد",
     "sectionCompany": "الشركة",
     "sectionContact": "بياناتك",
@@ -1980,7 +1980,7 @@
       },
       "startAiEvaluation": "تقييم بالذكاء الاصطناعي",
       "startManualEvaluation": "تقييم يدوي",
-      "chosenMethod": "المحدَّد عند الاستلام: {method}",
+      "chosenMethod": "المحدَّد: {method}",
       "method": {
         "AI": "ذكاء اصطناعي",
         "MANUAL": "يدوي"
@@ -2066,7 +2066,8 @@
         "test": "الاختبار",
         "reason": "السبب",
         "rule": "القاعدة"
-      }
+      },
+      "classificationSetBy": "حدَّد الفئة {name}"
     },
     "errors": {
       "VALIDATION": "بيانات غير صالحة.",
@@ -2107,7 +2108,8 @@
       "DOMAIN_MISMATCH": "هذا الإصدار ينتمي إلى مجال مختلف.",
       "WRONG_METHOD": "لا ينطبق هذا الإجراء على هذا النوع من التقييم.",
       "CATEGORY_REQUIRED": "اختر فئة المنتج أولًا.",
-      "UNRESOLVED_ITEMS": "ما زالت بعض بنود قائمة التحقق بلا حكم."
+      "UNRESOLVED_ITEMS": "ما زالت بعض بنود قائمة التحقق بلا حكم.",
+      "HAS_JUDGEMENTS": "يحتوي هذا التقييم على أحكام مسجّلة بالفعل — لا يمكن إلغاؤه."
     },
     "datasets": {
       "title": "قواعد البيانات",
@@ -2160,7 +2162,9 @@
       "blockedOnUnresolved": "ما زال {count} بندًا بحاجة إلى حكم.",
       "readyToComplete": "جميع البنود تحمل أحكامًا — هذا التقييم جاهز للإنهاء.",
       "completeButton": "إنهاء التقييم اليدوي",
-      "completed": "تم إنهاء التقييم اليدوي."
+      "completed": "تم إنهاء التقييم اليدوي.",
+      "abandonButton": "إلغاء هذا التقييم",
+      "abandoned": "تم إلغاء التقييم اليدوي."
     }
   },
   "assistant": {

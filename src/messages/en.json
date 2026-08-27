@@ -1867,7 +1867,7 @@
     "haveAccount": "Already have an account?",
     "signInLink": "Sign in",
     "sectionAccountType": "Account type",
-    "accountTypeCompany": "Company",
+    "accountTypeCompany": "Company/Establishment",
     "accountTypeIndividual": "Individual",
     "sectionCompany": "Company",
     "sectionContact": "Your details",
@@ -1980,7 +1980,7 @@
       },
       "startAiEvaluation": "AI evaluation",
       "startManualEvaluation": "Manual evaluation",
-      "chosenMethod": "Chosen at intake: {method}",
+      "chosenMethod": "Chosen: {method}",
       "method": {
         "AI": "AI",
         "MANUAL": "Manual"
@@ -2066,7 +2066,8 @@
         "test": "Test",
         "reason": "Reason",
         "rule": "Rule"
-      }
+      },
+      "classificationSetBy": "Category set by {name}"
     },
     "errors": {
       "VALIDATION": "Invalid input.",
@@ -2107,7 +2108,8 @@
       "DOMAIN_MISMATCH": "This version belongs to a different domain.",
       "WRONG_METHOD": "This action doesn't apply to this kind of assessment.",
       "CATEGORY_REQUIRED": "Choose a product category first.",
-      "UNRESOLVED_ITEMS": "Some checklist items still have no verdict."
+      "UNRESOLVED_ITEMS": "Some checklist items still have no verdict.",
+      "HAS_JUDGEMENTS": "This run already has verdicts recorded — it can't be discarded."
     },
     "datasets": {
       "title": "Datasets",
@@ -2160,7 +2162,9 @@
       "blockedOnUnresolved": "{count} item(s) still need a verdict.",
       "readyToComplete": "Every item has a verdict — this assessment is ready to complete.",
       "completeButton": "Complete manual assessment",
-      "completed": "Manual assessment completed."
+      "completed": "Manual assessment completed.",
+      "abandonButton": "Discard this run",
+      "abandoned": "Manual run discarded."
     }
   },
   "assistant": {
