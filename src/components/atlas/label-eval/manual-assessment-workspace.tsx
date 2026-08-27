@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
+  ReevaluateBar,
   RequiredTestsTable,
   SectionCard,
 } from "@/components/atlas/label-eval/assessment-workspace";
@@ -137,6 +138,17 @@ export function ManualAssessmentWorkspace({ detail }: Props) {
           </Button>
         </div>
       ) : null}
+
+      {/* Hidden while another reviewer holds the claim: a reset would discard
+          their hand-typed verdicts, so the take-over banner above comes first
+          (reevaluateAssessment refuses in that state too). */}
+      {claim && !claim.claimed ? null : <ReevaluateBar
+        assessmentId={detail.id}
+        method="MANUAL"
+        t={tWorkspace}
+        tErrors={tErrors}
+        router={router}
+      />}
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-state-warn/30 bg-state-warn/10 p-3 text-sm text-state-warn">
         <span className="inline-flex items-center gap-2">

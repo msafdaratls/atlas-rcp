@@ -18,6 +18,7 @@ import {
 } from "@/server/label-eval/queries";
 import {
   assertNoInFlightRun,
+  IN_FLIGHT_STATUSES,
   InFlightRunExistsError,
   applyVerdictOverride,
   VerdictConflictError,
@@ -267,6 +268,240 @@ export async function retryExtraction(
   }
 }
 
+const reevaluateSchema = z.object({ assessmentId: z.string().min(1) });
+
+/**
+ * Re-runs an assessment from scratch, from ANY stage it currently sits in —
+ * EXTRACTING, AWAITING_REVIEW, CLASSIFYING, MANUAL_IN_PROGRESS, ASSESSED,
+ * BLOCKED_NO_CATEGORY_MATCH or ERROR.
+ *
+ * Until now every re-run route was stage-specific and none covered the middle
+ * of a run: `retryExtraction` admits ERROR only, `reclassifyAssessment` admits
+ * a finished cosmetics run only, and starting a fresh run is refused outright
+ * while one is in flight (assertNoInFlightRun). A reviewer who noticed bad
+ * artwork half-way through, or who wanted the run redone against a newly
+ * activated dataset, had no way to do it.
+ *
+ * Resets in place rather than creating a second assessment: one live run per
+ * item is the invariant assertNoInFlightRun exists to protect, and a second
+ * row would leave two competing sets of verdicts over one official checklist.
+ *
+ * What the reset does and does not touch:
+ *  - Re-ingests the source documents, so a corrected artwork upload is picked
+ *    up and documentsFingerprint (which drives the "needs re-evaluation" queue
+ *    check) matches what this run actually used. The superseded LabelDocument
+ *    ROWS go; their storage objects are left alone, as everywhere else in this
+ *    feature (storage.ts — copy-on-ingest, never delete).
+ *  - Re-stamps kbVersionId from the currently ACTIVE dataset. The column is
+ *    documented immutable *for a run*; this starts a new run on the same row,
+ *    and stale rule ids would otherwise survive a dataset activation.
+ *  - Discards this run's fields, verdicts (including manual overrides),
+ *    classification and required tests — that is what re-evaluating means, and
+ *    the UI confirms it destructively before calling.
+ *  - Leaves the official checklist on the request exactly as it is until the
+ *    new run is promoted over it.
+ *
+ *  - Keeps LabelReport's snapshot but clears its promotion stamp, so the
+ *    corrected run can be promoted over the checklist the previous one wrote.
+ *  - Bumps `runSeq`, which is how the extraction worker and the rule engines
+ *    detect that the run they are part-way through was superseded and discard
+ *    their results instead of writing them onto the fresh run (withRunGuard).
+ *
+ * MANUAL runs come back as a freshly seeded MANUAL_IN_PROGRESS checklist
+ * (identical to startManualLabelAssessment); AI runs go back to EXTRACTING
+ * with a requeued job.
+ */
+export async function reevaluateAssessment(
+  input: z.infer<typeof reevaluateSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = reevaluateSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { assessmentId } = parsed.data;
+
+    const assessment = await prisma.labelAssessment.findUnique({
+      where: { id: assessmentId },
+      select: { id: true, domain: true, method: true, status: true, requestItemId: true, updatedAt: true },
+    });
+    if (!assessment) return { ok: false, error: "NOT_FOUND" };
+    // The link is severed only when a client hard-deleted the RequestItem
+    // (schema: SetNull). There is nothing left to re-read documents from.
+    if (!assessment.requestItemId) return { ok: false, error: "REQUEST_ITEM_UNLINKED" };
+    const { domain, method, requestItemId } = assessment;
+
+    // Same gate as starting a run: an item whose request has moved past the
+    // evaluation window must not be re-evaluated behind the reviewer's back.
+    try {
+      await assertRequestItemEvaluable(requestItemId, domain);
+    } catch (e) {
+      if (e instanceof EvaluationUnavailableError) {
+        return { ok: false, error: `NOT_EVALUABLE:${e.currentState}` };
+      }
+      if (e instanceof Error && e.message === "WRONG_DOMAIN") return { ok: false, error: "WRONG_DOMAIN" };
+      return { ok: false, error: "NOT_FOUND" };
+    }
+
+    // Superseded assessments stay reachable (the "Recent assessments" table
+    // links every row whatever its status), so without this a reviewer could
+    // re-evaluate an old finished run while a newer one is live and end up
+    // with two in-flight runs competing over one official checklist — the
+    // exact thing assertNoInFlightRun exists to prevent.
+    const otherLiveRun = await prisma.labelAssessment.findFirst({
+      where: {
+        requestItemId,
+        id: { not: assessmentId },
+        status: { in: [...IN_FLIGHT_STATUSES] },
+      },
+      select: { id: true, method: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (otherLiveRun) return { ok: false, error: `IN_FLIGHT:${otherLiveRun.id}:${otherLiveRun.method}` };
+
+    // A reset destroys work — including a colleague's hand-typed manual
+    // verdicts, which abandonManualAssessment refuses to discard. Taking the
+    // soft claim over is a deliberate, audited action (claimAssessment's
+    // `force`), so require it to have happened rather than silently stealing
+    // the claim here.
+    const claim = await prisma.labelAssessment.findUniqueOrThrow({
+      where: { id: assessmentId },
+      select: { claimedByUserId: true },
+    });
+    if (claim.claimedByUserId && claim.claimedByUserId !== session.id) {
+      return { ok: false, error: "ALREADY_CLAIMED" };
+    }
+
+    const activeKb = await prisma.labelKbVersion.findFirst({
+      where: { domain, status: "ACTIVE" },
+      orderBy: { activatedAt: "desc" },
+    });
+    if (!activeKb) return { ok: false, error: "NO_ACTIVE_DATASET" };
+
+    // Manual runs are seeded from the checklist up-front; AI runs get their
+    // verdicts from the rule engine after extraction, so they seed nothing.
+    const rules =
+      method === "MANUAL"
+        ? await prisma.labelKbRule.findMany({
+            where: { kbVersionId: activeKb.id, ...checklistRuleFilter(domain) },
+            select: { id: true },
+          })
+        : [];
+    if (method === "MANUAL" && rules.length === 0) return { ok: false, error: "NO_ACTIVE_DATASET" };
+
+    let ingested: Awaited<ReturnType<typeof ingestRequestItemDocuments>>;
+    try {
+      ingested = await ingestRequestItemDocuments(requestItemId, DOCUMENT_KIND_BY_REQUIRED_CODE[domain]);
+    } catch {
+      return { ok: false, error: "SOURCE_DOCUMENT_UNREADABLE" };
+    }
+    if (ingested.length === 0) return { ok: false, error: "NO_DOCUMENTS" };
+    const fingerprint = computeDocumentsFingerprint(ingested.map((d) => d.sha256));
+
+    // Everything in one transaction: a half-reset assessment — old verdicts
+    // against a new dataset's rules, or a cleared run with no job behind it —
+    // is worse than no reset at all.
+    const reset = await prisma.$transaction(async (tx) => {
+      // Guarded so two reviewers clicking re-evaluate together produce one
+      // reset, not two overlapping ones.
+      const claimed = await tx.labelAssessment.updateMany({
+        // updatedAt, not just status: a run being reset from EXTRACTING lands
+        // back on EXTRACTING, so a status-only predicate would let two
+        // reviewers clicking together both reset. The row's own version is
+        // the only value that always changes.
+        where: { id: assessmentId, status: assessment.status, updatedAt: assessment.updatedAt },
+        data: {
+          runSeq: { increment: 1 },
+          kbVersionId: activeKb.id,
+          documentsFingerprint: fingerprint,
+          status: method === "MANUAL" ? "MANUAL_IN_PROGRESS" : "EXTRACTING",
+          finalVerdict: null,
+          overallRate: null,
+          confirmedAt: null,
+          confirmedByUserId: null,
+          claimedByUserId: session.id,
+          claimedAt: new Date(),
+        },
+      });
+      if (claimed.count === 0) return false;
+
+      // Clears the promotion STAMP while keeping the snapshot: `promotedAt`
+      // is what the workspace reads to replace the Promote button with
+      // "Already promoted", so leaving it set would make the corrected run
+      // unpromotable — the checklist could never be fixed. The snapshot of
+      // what was written to the official checklist, and the checklist itself,
+      // are untouched until the new run is promoted over them.
+      await tx.labelReport.updateMany({
+        where: { assessmentId },
+        data: { promotedAt: null, promotedByUserId: null },
+      });
+
+      await tx.labelItemVerdict.deleteMany({ where: { assessmentId } });
+      await tx.labelExtractedField.deleteMany({ where: { assessmentId } });
+      await tx.labelRequiredTest.deleteMany({ where: { assessmentId } });
+      await tx.labelClassification.deleteMany({ where: { assessmentId } });
+      await tx.labelDocument.deleteMany({ where: { assessmentId } });
+      await tx.labelDocument.createMany({
+        data: ingested.map((d) => ({
+          assessmentId,
+          kind: d.kind,
+          sourceDocumentVersionId: d.sourceDocumentVersionId,
+          fileName: d.fileName,
+          mimeType: d.mimeType,
+          sizeBytes: d.sizeBytes,
+          storageKey: d.storageKey,
+          sha256: d.sha256,
+        })),
+      });
+
+      if (method === "MANUAL") {
+        await tx.labelItemVerdict.createMany({
+          data: rules.map((r) => ({
+            assessmentId,
+            kbRuleId: r.id,
+            verdict: "NEEDS_REVIEW" as const,
+            autoOrManual: "manual_pending",
+          })),
+        });
+        // An AI run that was reset earlier may have left a job row behind;
+        // a manual run must never have one (the worker would extract into it).
+        await tx.labelExtractionJob.deleteMany({ where: { assessmentId } });
+      } else {
+        // upsert for the same reason retryExtraction uses one: the job row is
+        // not guaranteed to exist (recovery.ts sends rows to ERROR when it is
+        // missing), and an `update` would throw after the reset had committed.
+        await tx.labelExtractionJob.upsert({
+          where: { assessmentId },
+          create: { assessmentId },
+          update: { status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: new Date() },
+        });
+      }
+      return true;
+    });
+    if (!reset) return { ok: false, error: "CONFLICT" };
+
+    await writeAuditLog({
+      session,
+      action: "label_eval.assessment.reevaluate",
+      entityType: "LabelAssessment",
+      entityId: assessmentId,
+      before: { status: assessment.status },
+      after: { status: method === "MANUAL" ? "MANUAL_IN_PROGRESS" : "EXTRACTING", kbVersionId: activeKb.id },
+    });
+
+    revalidatePath(workspacePath(method, domain, assessmentId), "page");
+    revalidatePath(
+      `/[locale]/admin/label-evaluator/${domain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics"}`,
+      "page",
+    );
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") return { ok: false, error: message };
+    return { ok: false, error: "REEVALUATE_FAILED" };
+  }
+}
+
 /** Lightweight poll target for the extraction-status UI (design doc §9). */
 export async function getLabelAssessmentStatus(
   assessmentId: string,
@@ -464,8 +699,16 @@ export async function confirmFieldsAndRunAssessment(
         // No claim needed: run-sfda only ever upserts verdicts keyed on
         // @@unique([assessmentId, kbRuleId]) and rebuilds nothing, so two
         // overlapping runs converge on the same rows. Wasteful, not unsafe.
-        await runSfdaRuleEngine(assessmentId);
-        await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { status: "ASSESSED" } });
+        const run = await runSfdaRuleEngine(assessmentId);
+        // null = the reviewer re-evaluated this assessment while the engine
+        // was working; the engine wrote nothing and the fresh run owns the
+        // row now, so marking it ASSESSED here would falsify its status.
+        if (run === null) return { ok: false, error: "SUPERSEDED" };
+        const finished = await prisma.labelAssessment.updateMany({
+          where: { id: assessmentId, status: "AWAITING_REVIEW" },
+          data: { status: "ASSESSED" },
+        });
+        if (finished.count === 0) return { ok: false, error: "SUPERSEDED" };
       } else {
         // Claim the transition instead of assuming it. `assessment.status`
         // was read at the top of this action, so two reviewers clicking
@@ -484,9 +727,12 @@ export async function confirmFieldsAndRunAssessment(
         // Lost the race — the run that won owns the assessment now. Return
         // without resetting anything, so the winner is left undisturbed.
         if (claimed.count === 0) return { ok: false, error: "INVALID_STATE" };
-        await runCosmeticsRuleEngine(assessmentId);
         // run-cosmetics.ts itself sets the final status (ASSESSED or
-        // BLOCKED_NO_CATEGORY_MATCH) — never overwritten here.
+        // BLOCKED_NO_CATEGORY_MATCH) — never overwritten here. null means a
+        // re-evaluation superseded this run mid-engine; it wrote nothing.
+        if ((await runCosmeticsRuleEngine(assessmentId)) === null) {
+          return { ok: false, error: "SUPERSEDED" };
+        }
       }
     } catch (error) {
       log.error("label-eval.assessment", "rule engine failed — returning assessment to AWAITING_REVIEW", {
@@ -495,8 +741,11 @@ export async function confirmFieldsAndRunAssessment(
         error: error instanceof Error ? error.message : "unknown",
       });
       try {
-        await prisma.labelAssessment.update({
-          where: { id: assessmentId },
+        // Guarded: if the reviewer re-evaluated while the engine was failing,
+        // the assessment is back on EXTRACTING for a fresh run and must not
+        // be dragged into this run's AWAITING_REVIEW.
+        await prisma.labelAssessment.updateMany({
+          where: { id: assessmentId, status: { in: ["AWAITING_REVIEW", "CLASSIFYING"] } },
           data: { status: "AWAITING_REVIEW" },
         });
       } catch (resetError) {

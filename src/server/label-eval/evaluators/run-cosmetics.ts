@@ -1,5 +1,7 @@
+import type { Prisma } from "@prisma/client";
 import { log } from "@/lib/logger";
 import { prisma } from "@/lib/db";
+import { withRunGuard } from "@/server/label-eval/concurrency";
 import { classify } from "@/server/label-eval/classification/classify";
 import { classifyWithLlm } from "@/server/label-eval/classification/classify-llm";
 import type { ClassificationResult } from "@/server/label-eval/classification/classify";
@@ -68,8 +70,12 @@ function scoreCosmeticsVerdicts(verdicts: { verdict: string }[]): {
  * in design doc §0.1, where a non-cosmetic was force-classified and fully
  * evaluated under the wrong standard. claim_phase_judgment items are only
  * evaluated once a category is confirmed, never against a guessed one.
+ *
+ * Returns null when a re-evaluation superseded this run while the engine was
+ * working: nothing was written, and the caller must not treat the assessment
+ * as finished (see withRunGuard).
  */
-export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunCosmeticsResult> {
+export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunCosmeticsResult | null> {
   registerCosmeticsEvaluators();
 
   const assessment = await prisma.labelAssessment.findUniqueOrThrow({
@@ -77,6 +83,7 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
     select: {
       id: true,
       kbVersionId: true,
+      runSeq: true,
       fields: { select: { fieldKey: true, valueEn: true, valueAr: true, confirmedAt: true } },
       classification: true,
     },
@@ -145,7 +152,13 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
   });
 
   if (!resolvedCategoryCode) {
-    await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { status: "BLOCKED_NO_CATEGORY_MATCH" } });
+    // Run-guarded like the main write-back below: classification can take an
+    // LLM call, and a re-evaluation during it must not have this run's hard
+    // stop land on top of the fresh one.
+    const stopped = await withRunGuard(assessmentId, assessment.runSeq, (tx) =>
+      tx.labelAssessment.update({ where: { id: assessmentId }, data: { status: "BLOCKED_NO_CATEGORY_MATCH" } }),
+    );
+    if (stopped === null) return null;
     return { blocked: true };
   }
 
@@ -199,10 +212,16 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
     }),
   }));
 
-  await prisma.$transaction(
-    results.map(({ rule, result }) => {
+  // One run-guarded transaction for the whole write-back — verdicts, required
+  // tests and the terminal status together. Everything above this point can
+  // take minutes of LLM time, during which the reviewer may have re-evaluated
+  // this assessment; the guard makes that reset and this write mutually
+  // exclusive, instead of letting old-dataset rule ids and a stale ASSESSED
+  // land on the new run.
+  const written = await withRunGuard(assessmentId, assessment.runSeq, async (tx) => {
+    for (const { rule, result } of results) {
       const proposal = llmProposals[rule.code];
-      return prisma.labelItemVerdict.upsert({
+      await tx.labelItemVerdict.upsert({
         where: { assessmentId_kbRuleId: { assessmentId, kbRuleId: rule.id } },
         create: {
           assessmentId,
@@ -230,20 +249,22 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
           llmPromptVersion: proposal?.promptVersion ?? null,
         },
       });
-    }),
-  );
+    }
 
-  // Required tests (design doc §6/§9) — deterministic, category+properties
-  // triggered, no LLM. Produces LabelRequiredTest rows, not verdicts.
-  await applyRequiredTests(assessmentId, assessment.kbVersionId, classification);
+    // Required tests (design doc §6/§9) — deterministic, category+properties
+    // triggered, no LLM. Produces LabelRequiredTest rows, not verdicts.
+    await applyRequiredTests(assessmentId, assessment.kbVersionId, classification, tx);
 
-  const score = scoreCosmeticsVerdicts(results.map((r) => r.result));
-  await prisma.labelAssessment.update({
-    where: { id: assessmentId },
-    data: { status: "ASSESSED", finalVerdict: score.finalVerdict },
+    const score = scoreCosmeticsVerdicts(results.map((r) => r.result));
+    await tx.labelAssessment.update({
+      where: { id: assessmentId },
+      data: { status: "ASSESSED", finalVerdict: score.finalVerdict },
+    });
+    return score;
   });
+  if (written === null) return null;
 
-  return { blocked: false, ...score };
+  return { blocked: false, ...written };
 }
 
 /**
@@ -273,11 +294,13 @@ export async function applyRequiredTests(
   assessmentId: string,
   kbVersionId: string,
   classification: { categoryCode: string; properties: string[] },
+  /** Defaults to the plain client; the rule engine passes its run-guarded transaction. */
+  db: Prisma.TransactionClient = prisma,
 ): Promise<void> {
-  const testRules = await prisma.labelKbRule.findMany({
+  const testRules = await db.labelKbRule.findMany({
     where: { kbVersionId, ruleType: "REQUIRED_TEST_RULE" },
   });
-  await prisma.labelRequiredTest.deleteMany({ where: { assessmentId, addedManually: false } });
+  await db.labelRequiredTest.deleteMany({ where: { assessmentId, addedManually: false } });
   const triggered = testRules.filter((r) => {
     const p = r.payload as { triggerCategoryCode?: string; triggerProperty?: string };
     if (p.triggerCategoryCode && p.triggerCategoryCode === classification.categoryCode) return true;
@@ -295,7 +318,7 @@ export async function applyRequiredTests(
     return false;
   });
   if (triggered.length > 0) {
-    await prisma.labelRequiredTest.createMany({
+    await db.labelRequiredTest.createMany({
       data: triggered.map((r) => {
         const p = r.payload as { testCode?: string; mandatory?: boolean; reasonEn?: string; reasonAr?: string; triggerSource?: string };
         return {

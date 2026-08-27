@@ -2068,7 +2068,14 @@
         "reason": "Reason",
         "rule": "Rule"
       },
-      "classificationSetBy": "Category set by {name}"
+      "classificationSetBy": "Category set by {name}",
+      "reevaluate": "Re-evaluate",
+      "reevaluateStarted": "Re-evaluation started.",
+      "reevaluateConfirmTitle": "Re-evaluate this item?",
+      "reevaluateConfirmAi": "The latest artwork and ingredient list will be read again and the assessment re-run from extraction, against the currently active dataset.",
+      "reevaluateConfirmManual": "The latest artwork and ingredient list will be read again and the checklist reset to unjudged, against the currently active dataset.",
+      "reevaluateConfirmWarning": "Everything on this run — extracted data, verdicts and your manual overrides — will be discarded. Any checklist already promoted to the request stays as it is until you promote the new run.",
+      "reevaluateConfirmButton": "Confirm & re-evaluate"
     },
     "errors": {
       "VALIDATION": "Invalid input.",
@@ -2110,7 +2117,9 @@
       "WRONG_METHOD": "This action doesn't apply to this kind of assessment.",
       "CATEGORY_REQUIRED": "Choose a product category first.",
       "UNRESOLVED_ITEMS": "Some checklist items still have no verdict.",
-      "HAS_JUDGEMENTS": "This run already has verdicts recorded — it can't be discarded."
+      "HAS_JUDGEMENTS": "This run already has verdicts recorded — it can't be discarded.",
+      "REEVALUATE_FAILED": "Could not re-evaluate. Try again.",
+      "SUPERSEDED": "This run was re-evaluated while it was being assessed — the new run is now in progress."
     },
     "datasets": {
       "title": "Datasets",

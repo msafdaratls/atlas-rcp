@@ -1340,6 +1340,12 @@ model LabelAssessment {
   /// Soft claim so two reviewers don't unknowingly duplicate work.
   claimedByUserId   String?
   claimedAt         DateTime?
+  /// Bumped every time the assessment is reset by `reevaluateAssessment`.
+  /// Long-running machine writers (the extraction worker, the rule engines)
+  /// capture it before they start and guard their write-back on it, so a run
+  /// that was re-evaluated underneath them can never have the superseded
+  /// run's fields, verdicts or terminal status land on top of the new one.
+  runSeq            Int                   @default(0)
 
   kbVersion      LabelKbVersion        @relation(fields: [kbVersionId], references: [id])
   requestItem    RequestItem?          @relation(fields: [requestItemId], references: [id], onDelete: SetNull)

@@ -9,6 +9,7 @@ import {
   FileQuestion,
   FlaskConical,
   Loader2,
+  RotateCcw,
   Sparkles,
   XCircle,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import {
   previewPromotion,
   promoteToOfficialChecklist,
   reclassifyAssessment,
+  reevaluateAssessment,
   retryExtraction,
   updateExtractedField,
 } from "@/server/label-eval/actions";
@@ -123,6 +125,24 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
       </div>
     ) : null;
 
+  // Available at every stage, above whichever stage panel renders below —
+  // except while someone else holds the claim: re-evaluating discards their
+  // work, so the take-over above has to come first (reevaluateAssessment
+  // refuses in that state too).
+  const topBar = (
+    <>
+      {claimBanner}
+      {claim && !claim.claimed ? null : <ReevaluateBar
+        assessmentId={detail.id}
+        method={detail.method}
+        className="mb-4"
+        t={t}
+        tErrors={tErrors}
+        router={router}
+      />}
+    </>
+  );
+
   // Poll while extraction/classification is still running async (design doc §5 — never block on it).
   const statusRef = useRef(detail.status);
   statusRef.current = detail.status;
@@ -138,7 +158,7 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
   if (detail.status === "EXTRACTING") {
     return (
       <>
-        {claimBanner}
+        {topBar}
         <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-alt/40 p-6">
           <Loader2 className="size-5 animate-spin text-atlas-green" />
           <div>
@@ -153,7 +173,7 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
   if (detail.status === "CLASSIFYING") {
     return (
       <>
-        {claimBanner}
+        {topBar}
         <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-alt/40 p-6">
           <Loader2 className="size-5 animate-spin text-atlas-green" />
           <div>
@@ -168,7 +188,7 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
   if (detail.status === "ERROR") {
     return (
       <>
-        {claimBanner}
+        {topBar}
         <ExtractionErrorPanel detail={detail} t={t} tErrors={tErrors} router={router} />
       </>
     );
@@ -177,7 +197,7 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
   if (detail.status === "AWAITING_REVIEW") {
     return (
       <>
-        {claimBanner}
+        {topBar}
         <VerificationGate detail={detail} domain={domain} t={t} tErrors={tErrors} isAr={isAr} router={router} />
       </>
     );
@@ -186,7 +206,7 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
   if (detail.status === "BLOCKED_NO_CATEGORY_MATCH") {
     return (
       <>
-        {claimBanner}
+        {topBar}
         <BlockedNoCategoryMatch detail={detail} t={t} tErrors={tErrors} isAr={isAr} router={router} />
       </>
     );
@@ -194,13 +214,91 @@ export function AssessmentWorkspace({ detail, domain }: Props) {
 
   return (
     <>
-      {claimBanner}
+      {topBar}
       <AssessedView detail={detail} domain={domain} t={t} tErrors={tErrors} isAr={isAr} router={router} />
     </>
   );
 }
 
 // ─── Step: extraction dead-lettered — offer a retry, not just a red box ────
+
+/**
+ * Re-evaluate, available at every stage of a run (the reset itself is
+ * `reevaluateAssessment`). Rendered as a header row above whichever
+ * stage panel the workspace is showing, so a reviewer who spots the wrong
+ * artwork mid-extraction, or wants the run redone against a newly activated
+ * dataset, never has to reach the end of the run first.
+ *
+ * Always confirms: the reset discards this run's extracted fields, verdicts
+ * and manual overrides. Reused by the manual workspace, which resets to a
+ * fresh MANUAL_IN_PROGRESS checklist instead of re-extracting.
+ */
+export function ReevaluateBar({
+  assessmentId,
+  method,
+  className,
+  t,
+  tErrors,
+  router,
+}: {
+  assessmentId: string;
+  method: "AI" | "MANUAL";
+  /** Spacing is the caller's: the AI workspace stacks it manually, the manual one sits in a space-y list. */
+  className?: string;
+  t: ReturnType<typeof useTranslations<"labelEval.workspace">>;
+  tErrors: ReturnType<typeof useTranslations<"labelEval.errors">>;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function reevaluate() {
+    startTransition(async () => {
+      const result = await reevaluateAssessment({ assessmentId });
+      if (!result.ok) {
+        toast.error(tErrors(result.error.split(":")[0] as "REEVALUATE_FAILED"));
+        return;
+      }
+      setOpen(false);
+      toast.success(t("reevaluateStarted"));
+      // AI runs land back on EXTRACTING, where the existing poll takes over;
+      // manual runs land on a freshly seeded checklist.
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className={cn("flex items-center justify-end", className)}>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <RotateCcw className="size-4" />
+        {t("reevaluate")}
+      </Button>
+
+      <Dialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("reevaluateConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {method === "MANUAL" ? t("reevaluateConfirmManual") : t("reevaluateConfirmAi")}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="rounded-lg border border-state-warn/30 bg-state-warn/10 p-3 text-sm text-state-warn">
+            {t("reevaluateConfirmWarning")}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>
+              {t("promoteConfirmCancel")}
+            </Button>
+            <Button disabled={pending} onClick={reevaluate}>
+              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {t("reevaluateConfirmButton")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
 
 /**
  * ERROR used to be a terminal state in the UI: a red panel and nothing to

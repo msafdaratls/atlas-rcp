@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db";
+import { log } from "@/lib/logger";
+import { withRunGuard } from "@/server/label-eval/concurrency";
 import { getExtractionProvider } from "@/server/label-eval/extraction/provider";
 
 /**
@@ -65,15 +67,29 @@ export async function processExtractionJobBatch(limit = 10): Promise<number> {
         select: {
           id: true,
           domain: true,
+          runSeq: true,
           documents: { select: { kind: true, storageKey: true, mimeType: true } },
         },
       });
 
       const results = await provider.extract(assessment.domain, assessment.documents);
 
-      await prisma.$transaction([
-        ...results.map((r) =>
-          prisma.labelExtractedField.upsert({
+      // Guarded write-back: a reviewer can re-evaluate at any stage, including
+      // while this job is inside provider.extract(). Without the guard the
+      // superseded run would upsert fields read from documents the reset has
+      // already deleted, flip the fresh run to AWAITING_REVIEW, and mark the
+      // requeued job SENT so the new extraction never ran at all.
+      const applied = await withRunGuard(assessment.id, assessment.runSeq, async (tx) => {
+        // Also still ours to finish: the stuck-job sweep above can requeue a
+        // PROCESSING job it judged stalled while this one is still running.
+        const stillClaimed = await tx.labelExtractionJob.updateMany({
+          where: { id: job.id, status: "PROCESSING" },
+          data: { status: "SENT", lastError: null, attempts: { increment: 1 } },
+        });
+        if (stillClaimed.count === 0) return false;
+
+        for (const r of results) {
+          await tx.labelExtractedField.upsert({
             where: { assessmentId_fieldKey: { assessmentId: assessment.id, fieldKey: r.fieldKey } },
             create: {
               assessmentId: assessment.id,
@@ -91,38 +107,60 @@ export async function processExtractionJobBatch(limit = 10): Promise<number> {
               confidence: r.confidence,
               needsReview: r.needsReview,
             },
-          }),
-        ),
-        prisma.labelAssessment.update({
+          });
+        }
+
+        await tx.labelAssessment.update({
           where: { id: assessment.id },
           data: { status: "AWAITING_REVIEW" },
-        }),
-        prisma.labelExtractionJob.update({
-          where: { id: job.id },
-          data: { status: "SENT", lastError: null, attempts: { increment: 1 } },
-        }),
-      ]);
-      processed += 1;
+        });
+        return true;
+      });
+
+      if (applied) {
+        processed += 1;
+      } else {
+        log.warn("label-eval.extraction", "discarded a superseded extraction result", {
+          assessmentId: assessment.id,
+          jobId: job.id,
+        });
+      }
     } catch (error) {
       const attempts = job.attempts + 1;
       const message = error instanceof Error ? error.message : "EXTRACTION_FAILED";
       const dead = attempts >= BACKOFF_MS.length;
       const delay = BACKOFF_MS[Math.min(attempts - 1, BACKOFF_MS.length - 1)]!;
 
-      await prisma.$transaction([
-        prisma.labelExtractionJob.update({
-          where: { id: job.id },
+      // Guarded on PROCESSING for the same reason the success path is: if a
+      // re-evaluation requeued this job (status PENDING, attempts 0) while
+      // the failing attempt was still running, recording that failure would
+      // burn an attempt on — and possibly dead-letter into ERROR — a fresh
+      // run that has not been tried once.
+      await prisma.$transaction(async (tx) => {
+        const stillClaimed = await tx.labelExtractionJob.updateMany({
+          where: { id: job.id, status: "PROCESSING" },
           data: {
             status: dead ? "FAILED" : "PENDING",
             attempts,
             lastError: message.slice(0, 500),
             nextAttemptAt: dead ? new Date() : new Date(Date.now() + delay),
           },
-        }),
-        ...(dead
-          ? [prisma.labelAssessment.update({ where: { id: job.assessmentId }, data: { status: "ERROR" } })]
-          : []),
-      ]);
+        });
+        if (stillClaimed.count === 0) {
+          log.warn("label-eval.extraction", "discarded a superseded extraction failure", {
+            assessmentId: job.assessmentId,
+            jobId: job.id,
+            error: message.slice(0, 200),
+          });
+          return;
+        }
+        if (dead) {
+          await tx.labelAssessment.updateMany({
+            where: { id: job.assessmentId, status: "EXTRACTING" },
+            data: { status: "ERROR" },
+          });
+        }
+      });
     }
   }
 

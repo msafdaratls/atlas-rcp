@@ -1,4 +1,4 @@
-import type { AssessmentMethod, LabelVerdict } from "@prisma/client";
+import type { AssessmentMethod, LabelVerdict, Prisma } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import type { SessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -116,6 +116,38 @@ export async function assertNoInFlightRun(requestItemId: string): Promise<void> 
   if (existing) {
     throw new InFlightRunExistsError(existing.id, existing.method);
   }
+}
+
+/**
+ * Runs `fn` only if the assessment is still on the run generation the caller
+ * captured before it started, and holds the assessment row for the whole
+ * write so a concurrent `reevaluateAssessment` cannot interleave with it.
+ *
+ * The extraction worker and the rule engines do minutes of I/O (OCR, LLM
+ * calls) between reading an assessment and writing back to it. Re-evaluation
+ * is offered at every stage, including mid-extraction and mid-classification,
+ * so without this a superseded run could finish afterwards and write its
+ * fields, its verdicts (carrying the OLD dataset's rule ids) and its terminal
+ * status on top of the fresh run.
+ *
+ * The guarded `updateMany` is what makes it safe rather than merely likely:
+ * it takes the row lock, so a reset either commits first (this returns null
+ * and nothing is written) or waits until this write commits and then clears
+ * what it wrote. Returns null when the run was superseded.
+ */
+export async function withRunGuard<T>(
+  assessmentId: string,
+  runSeq: number,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T | null> {
+  return prisma.$transaction(async (tx) => {
+    const still = await tx.labelAssessment.updateMany({
+      where: { id: assessmentId, runSeq },
+      data: { runSeq },
+    });
+    if (still.count === 0) return null;
+    return fn(tx);
+  });
 }
 
 export class VerdictConflictError extends Error {

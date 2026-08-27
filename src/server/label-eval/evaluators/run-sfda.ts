@@ -1,5 +1,6 @@
 import { recommendDecision } from "@/lib/assessment";
 import { prisma } from "@/lib/db";
+import { withRunGuard } from "@/server/label-eval/concurrency";
 import { registerSfdaEvaluators } from "@/server/label-eval/evaluators/sfda";
 import { runEvaluator, type ConfirmedFields } from "@/server/label-eval/evaluators/registry";
 import { getJudgmentProposals } from "@/server/label-eval/llm/judgment-proposals";
@@ -82,8 +83,12 @@ function scoreSfdaVerdicts(verdicts: string[]): {
  * (design doc §1 Principle 3 — unconfirmed fields are never read here), then
  * scores via the exact existing formula (src/lib/assessment.ts, already live
  * for the manual checklist) rather than reimplementing it.
+ *
+ * Returns null when a re-evaluation superseded this run while the engine was
+ * working: nothing was written, and the caller must not treat the assessment
+ * as finished (see withRunGuard).
  */
-export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult> {
+export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult | null> {
   registerSfdaEvaluators();
 
   const assessment = await prisma.labelAssessment.findUniqueOrThrow({
@@ -91,6 +96,7 @@ export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult
     select: {
       id: true,
       kbVersionId: true,
+      runSeq: true,
       fields: { select: { fieldKey: true, valueEn: true, valueAr: true, confirmedAt: true } },
     },
   });
@@ -130,10 +136,14 @@ export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult
     }),
   }));
 
-  await prisma.$transaction(
-    results.map(({ rule, result }) => {
+  // Run-guarded write-back: getJudgmentProposals above is an LLM call, and a
+  // reviewer can re-evaluate at any stage — including while it is in flight.
+  // The guard makes the reset and this write mutually exclusive so a
+  // superseded run's verdicts and score can never land on the fresh run.
+  const written = await withRunGuard(assessmentId, assessment.runSeq, async (tx) => {
+    for (const { rule, result } of results) {
       const proposal = llmProposals[rule.code];
-      return prisma.labelItemVerdict.upsert({
+      await tx.labelItemVerdict.upsert({
         where: { assessmentId_kbRuleId: { assessmentId, kbRuleId: rule.id } },
         create: {
           assessmentId,
@@ -161,14 +171,17 @@ export async function runSfdaRuleEngine(assessmentId: string): Promise<RunResult
           llmPromptVersion: proposal?.promptVersion ?? null,
         },
       });
-    }),
-  );
+    }
 
-  const score = scoreSfdaVerdicts(results.map((r) => r.result.verdict));
-  await prisma.labelAssessment.update({
-    where: { id: assessmentId },
-    data: { overallRate: score.rate, finalVerdict: score.finalVerdict },
+    const score = scoreSfdaVerdicts(results.map((r) => r.result.verdict));
+    await tx.labelAssessment.update({
+      where: { id: assessmentId },
+      data: { overallRate: score.rate, finalVerdict: score.finalVerdict },
+    });
+    return score;
   });
+  if (written === null) return null;
+  const score = written;
 
   return {
     overallRate: score.rate,
