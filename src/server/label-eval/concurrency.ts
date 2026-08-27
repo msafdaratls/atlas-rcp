@@ -1,4 +1,4 @@
-import type { LabelVerdict } from "@prisma/client";
+import type { AssessmentMethod, LabelVerdict } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import type { SessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -18,7 +18,12 @@ import { prisma } from "@/lib/db";
  * decision — see STALL_RECOVERY in recovery.ts, which is keyed on this type
  * so the two cannot drift apart.
  */
-export const IN_FLIGHT_STATUSES = ["EXTRACTING", "AWAITING_REVIEW", "CLASSIFYING"] as const;
+export const IN_FLIGHT_STATUSES = [
+  "EXTRACTING",
+  "AWAITING_REVIEW",
+  "CLASSIFYING",
+  "MANUAL_IN_PROGRESS",
+] as const;
 
 export type InFlightStatus = (typeof IN_FLIGHT_STATUSES)[number];
 
@@ -30,7 +35,10 @@ export class AlreadyClaimedError extends Error {
 }
 
 export class InFlightRunExistsError extends Error {
-  constructor(public readonly existingAssessmentId: string) {
+  constructor(
+    public readonly existingAssessmentId: string,
+    public readonly existingMethod: AssessmentMethod,
+  ) {
     super(`An in-flight run already exists for this item: ${existingAssessmentId}`);
     this.name = "InFlightRunExistsError";
   }
@@ -84,11 +92,17 @@ export async function claimAssessment(
 }
 
 /**
- * Blocks starting a second concurrent extraction run on the same
- * RequestItem while one is still in flight (EXTRACTING / AWAITING_REVIEW /
- * CLASSIFYING) — the reviewer resumes the existing run instead of creating a
- * duplicate. Assessments that already reached ASSESSED /
+ * Blocks starting a second concurrent run on the same RequestItem while one
+ * is still in flight (EXTRACTING / AWAITING_REVIEW / CLASSIFYING /
+ * MANUAL_IN_PROGRESS) — the reviewer resumes the existing run instead of
+ * creating a duplicate. Assessments that already reached ASSESSED /
  * BLOCKED_NO_CATEGORY_MATCH / ERROR don't count; a new run is allowed.
+ *
+ * Deliberately not scoped by method: an AI run and a manual run on the same
+ * item would produce two competing sets of verdicts over one official
+ * checklist, so starting either while the other is live resumes that one
+ * instead. The error carries the live run's method so the caller can route to
+ * the right workspace.
  */
 export async function assertNoInFlightRun(requestItemId: string): Promise<void> {
   const existing = await prisma.labelAssessment.findFirst({
@@ -96,11 +110,11 @@ export async function assertNoInFlightRun(requestItemId: string): Promise<void> 
       requestItemId,
       status: { in: [...IN_FLIGHT_STATUSES] },
     },
-    select: { id: true },
+    select: { id: true, method: true },
     orderBy: { createdAt: "desc" },
   });
   if (existing) {
-    throw new InFlightRunExistsError(existing.id);
+    throw new InFlightRunExistsError(existing.id, existing.method);
   }
 }
 

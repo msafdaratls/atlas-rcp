@@ -56,6 +56,11 @@ export const STALL_RECOVERY = {
   EXTRACTING: "ERROR",
   // Fields are confirmed and intact; hand the item back to be re-run.
   CLASSIFYING: "AWAITING_REVIEW",
+  // A hand-worked run. There is no background step to stall: the evaluator is
+  // the only thing that moves it, and a run legitimately sits here across
+  // days while they gather evidence. Sweeping it would destroy work in
+  // progress, so it is left alone by design.
+  MANUAL_IN_PROGRESS: "reviewer-actionable",
   // `as const` keeps each value's literal type so it can be handed straight
   // to Prisma; `satisfies` still fails the build if a status is missing.
 } as const satisfies Record<InFlightStatus, "reviewer-actionable" | LabelAssessmentStatus>;

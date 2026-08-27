@@ -437,6 +437,8 @@ function VerificationGate({
                 needsReview={f?.needsReview ?? false}
                 confirmed={!!f?.confirmedAt}
                 sourceEngine={f?.sourceEngine ?? "manual"}
+                originalMachineValue={f?.originalMachineValue ?? null}
+                confirmedByName={f?.confirmedByName ?? null}
                 isAr={isAr}
                 saving={savingKey === def.key}
                 onSave={(en, ar) => saveField(def.key, en, ar)}
@@ -468,6 +470,8 @@ function FieldRow({
   needsReview,
   confirmed,
   sourceEngine,
+  originalMachineValue,
+  confirmedByName,
   isAr,
   saving,
   onSave,
@@ -483,6 +487,8 @@ function FieldRow({
   needsReview: boolean;
   confirmed: boolean;
   sourceEngine: string;
+  originalMachineValue: { valueEn: string | null; valueAr: string | null } | null;
+  confirmedByName: string | null;
   isAr: boolean;
   saving: boolean;
   onSave: (en: string, ar: string) => void;
@@ -509,6 +515,17 @@ function FieldRow({
           <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-state-ok/40 bg-state-ok/10 px-1.5 py-0.5 text-[10px] font-medium text-state-ok">
             {t("confirmed")} · {sourceEngine}
           </span>
+        ) : null}
+        {originalMachineValue ? (
+          <p className="mt-1 text-[11px] text-ink-500">
+            {bilingual && (originalMachineValue.valueEn || originalMachineValue.valueAr)
+              ? t("originalAiValueBoth", {
+                  en: originalMachineValue.valueEn ?? "",
+                  ar: originalMachineValue.valueAr ?? "",
+                })
+              : t("originalAiValueEn", { value: originalMachineValue.valueEn ?? "" })}
+            {confirmedByName ? <> · {t("changedByField", { name: confirmedByName })}</> : null}
+          </p>
         ) : null}
       </div>
       <div className="flex flex-1 flex-col gap-2 sm:flex-row">
@@ -700,6 +717,9 @@ function ClassificationBlock({
   const c = detail.classification;
   const activeCode = c?.overrideCategoryCode ?? c?.detectedCategoryCode ?? null;
   const category = detail.availableCategories.find((cat) => cat.code === activeCode);
+  const detectedCategory = c?.overrideCategoryCode
+    ? detail.availableCategories.find((cat) => cat.code === c.detectedCategoryCode)
+    : null;
 
   return (
     <div className="rounded-lg border border-line bg-surface p-4">
@@ -710,17 +730,37 @@ function ClassificationBlock({
             {category ? (isAr ? category.nameAr : category.nameEn) : t("noCategoriesAvailable")}
             {c?.overrideCategoryCode ? <span className="ms-2 text-xs text-state-warn">{t("manuallyOverridden")}</span> : null}
           </p>
+          {c?.overrideCategoryCode && c.overriddenByName ? (
+            <p className="mt-1 text-[11px] text-ink-500">
+              {t("classificationOverriddenBy", {
+                name: c.overriddenByName,
+                detected: detectedCategory
+                  ? isAr
+                    ? detectedCategory.nameAr
+                    : detectedCategory.nameEn
+                  : (c.detectedCategoryCode ?? "—"),
+              })}
+            </p>
+          ) : null}
           {c?.rationale ? <p className="mt-1 text-xs text-ink-500">{c.rationale}</p> : null}
         </div>
       </div>
-      <div className="mt-3">
-        <ReclassifyPicker detail={detail} t={t} tErrors={tErrors} isAr={isAr} router={router} />
-      </div>
+      {/*
+        Re-classifying re-runs the whole cosmetics rule engine, which would
+        overwrite every hand-typed verdict on a manual run. Manual assessments
+        set their category through setManualCategory instead (and only while
+        still in progress), so the picker is deliberately absent here.
+      */}
+      {detail.method === "AI" ? (
+        <div className="mt-3">
+          <ReclassifyPicker detail={detail} t={t} tErrors={tErrors} isAr={isAr} router={router} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function RequiredTestsTable({
+export function RequiredTestsTable({
   detail,
   t,
   isAr,
@@ -760,7 +800,13 @@ function RequiredTestsTable({
   );
 }
 
-function SectionCard({
+/**
+ * Exported for the manual workspace (manual-assessment-workspace.tsx), which
+ * renders the identical rule checklist — same cards, same verdict picker,
+ * same override action. Manual entry is not a second checklist UI; it is the
+ * same one with nothing pre-filled.
+ */
+export function SectionCard({
   section,
   verdicts,
   isAr,
@@ -907,7 +953,14 @@ function VerdictCard({
         <p className="text-[10px] text-ink-500">{t("aiProposalConfirmed")}</p>
       ) : null}
       {verdict.autoOrManual === "manual_override" ? (
-        <p className="text-[10px] text-ink-500">{t("manuallyOverridden")}</p>
+        <p className="text-[10px] text-ink-500">
+          {verdict.overriddenByName && verdict.previousVerdict
+            ? t("manuallyOverriddenByFrom", {
+                name: verdict.overriddenByName,
+                previous: t(`verdict.${verdict.previousVerdict}` as "verdict.COMPLIANT"),
+              })
+            : t("manuallyOverridden")}
+        </p>
       ) : null}
 
       {overriding ? (

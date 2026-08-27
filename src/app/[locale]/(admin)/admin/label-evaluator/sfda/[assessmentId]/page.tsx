@@ -21,7 +21,10 @@ export default async function SfdaAssessmentPage({ params }: Props) {
   requirePagePermission(session, "requests:admin", locale);
 
   const detail = await getAssessmentDetail(assessmentId);
-  if (!detail || detail.domain !== "SFDA_SUPPLEMENTS") notFound();
+  // Manual runs live on their own route (label-evaluator/manual/[assessmentId])
+  // and must not be rendered through the AI workspace, whose Reclassify action
+  // would re-run the rule engine over hand-typed verdicts.
+  if (!detail || detail.domain !== "SFDA_SUPPLEMENTS" || detail.method !== "AI") notFound();
 
   const t = await getTranslations("labelEval.workspace");
   const tNav = await getTranslations("nav.admin");

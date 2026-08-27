@@ -28,6 +28,7 @@ import {
 } from "@/server/admin/queries";
 import { checkTransitionGuards } from "@/server/admin/transition-guards";
 import { appendReversingEntry } from "@/server/finance/ledger";
+import { IN_FLIGHT_STATUSES } from "@/server/label-eval/concurrency";
 
 /**
  * Request-lifecycle server actions: the state-machine transition, its
@@ -538,6 +539,14 @@ export async function transitionAdminRequest(
 
 const completeApplicationReviewSchema = z.object({
   requestId: z.string().min(1),
+  /**
+   * How the Evaluator should assess this request's Label-Evaluator-covered
+   * items: "AI" (extraction + rule engine) or "MANUAL" (hand-worked
+   * checklist). Optional — omitted leaves every item unassigned, and both
+   * routes stay offered downstream, which is exactly the pre-existing
+   * behaviour.
+   */
+  assessmentMethod: z.enum(["AI", "MANUAL"]).optional(),
 });
 
 /**
@@ -556,7 +565,7 @@ export async function completeApplicationReview(
     requirePermission(session, "requests:admin");
     const parsed = completeApplicationReviewSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
-    const { requestId } = parsed.data;
+    const { requestId, assessmentMethod } = parsed.data;
 
     const request = await prisma.request.findUnique({
       where: { id: requestId },
@@ -606,6 +615,27 @@ export async function completeApplicationReview(
         throw new Error("CONFLICT");
       }
 
+      // Record the Intake Officer's chosen route. Scoped to items the Label
+      // Evaluator actually covers — an unmapped service has no AI route, so
+      // stamping one on it would be a meaningless claim. The Evaluator can
+      // still change it later (setItemAssessmentMethod).
+      if (assessmentMethod) {
+        const mapped = await tx.labelEvalServiceMapping.findMany({
+          where: { serviceItemId: { in: request.items.map((i) => i.serviceItemId) } },
+          select: { serviceItemId: true },
+        });
+        const mappedIds = new Set(mapped.map((m) => m.serviceItemId));
+        const targetItemIds = request.items
+          .filter((i) => mappedIds.has(i.serviceItemId))
+          .map((i) => i.id);
+        if (targetItemIds.length > 0) {
+          await tx.requestItem.updateMany({
+            where: { id: { in: targetItemIds } },
+            data: { assessmentMethod },
+          });
+        }
+      }
+
       const chain: Array<[RequestState, RequestState]> = [
         ["UNDER_INTAKE_REVIEW", "ACCEPTED"],
         ["ACCEPTED", "ASSESSMENT_QUEUED"],
@@ -638,7 +668,7 @@ export async function completeApplicationReview(
           entityType: "Request",
           entityId: requestId,
           before: { state: request.state, assignedToUserId: request.assignedToUserId },
-          after: { state: "ASSESSMENT_RUNNING", assignedToUserId: evaluatorId },
+          after: { state: "ASSESSMENT_RUNNING", assignedToUserId: evaluatorId, assessmentMethod: assessmentMethod ?? null },
         },
       });
 
@@ -3209,6 +3239,91 @@ export async function markAdminRequestCommentsRead(
     revalidatePath(`/[locale]/admin/requests/${request.id}`, "page");
     revalidatePath("/[locale]/admin/requests", "page");
     return { ok: true, data: { ok: true } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const setItemAssessmentMethodSchema = z.object({
+  requestItemId: z.string().min(1),
+  method: z.enum(["AI", "MANUAL"]),
+});
+
+/**
+ * Lets the Evaluator change a single item's evaluation route after intake
+ * already set one (or set one where intake left it blank). The route is a
+ * routing preference, not a lock: it decides which workspace the Evaluator is
+ * sent to and which action the queue offers first, and both routes remain
+ * reachable.
+ *
+ * Refuses while a run of the *other* method is still in flight. Switching
+ * under a live run would leave the evaluator staring at a queue offering the
+ * newly-chosen route while `assertNoInFlightRun` keeps bouncing them into the
+ * other one — finish or abandon the live run first.
+ */
+export async function setItemAssessmentMethod(
+  input: z.infer<typeof setItemAssessmentMethodSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = setItemAssessmentMethodSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { requestItemId, method } = parsed.data;
+
+    const item = await prisma.requestItem.findUnique({
+      where: { id: requestItemId },
+      select: {
+        id: true,
+        serviceItemId: true,
+        assessmentMethod: true,
+        request: { select: { id: true, state: true, organisationId: true } },
+      },
+    });
+    if (!item) return { ok: false, error: "NOT_FOUND" };
+    if (item.request.state !== "ASSESSMENT_RUNNING") {
+      return { ok: false, error: "INVALID_TRANSITION" };
+    }
+
+    const mapping = await prisma.labelEvalServiceMapping.findUnique({
+      where: { serviceItemId: item.serviceItemId },
+      select: { serviceItemId: true },
+    });
+    if (!mapping) return { ok: false, error: "VALIDATION" };
+
+    const inFlight = await prisma.labelAssessment.findFirst({
+      where: {
+        requestItemId,
+        status: { in: [...IN_FLIGHT_STATUSES] },
+        method: { not: method },
+      },
+      select: { id: true },
+    });
+    if (inFlight) return { ok: false, error: "RUN_IN_FLIGHT" };
+
+    await prisma.requestItem.update({
+      where: { id: requestItemId },
+      data: { assessmentMethod: method },
+    });
+
+    await writeAuditLog({
+      session,
+      action: "request.setItemAssessmentMethod",
+      entityType: "RequestItem",
+      entityId: requestItemId,
+      organisationId: item.request.organisationId,
+      before: { assessmentMethod: item.assessmentMethod },
+      after: { assessmentMethod: method },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${item.request.id}`, "page");
+    revalidatePath("/[locale]/admin/label-evaluator/sfda", "page");
+    revalidatePath("/[locale]/admin/label-evaluator/cosmetics", "page");
+    return { ok: true, data: undefined };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {

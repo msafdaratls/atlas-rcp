@@ -1,4 +1,4 @@
-import type { LabelAssessmentStatus, LabelEvalDomain, LabelKbStatus, RequestState } from "@prisma/client";
+import type { AssessmentMethod, LabelAssessmentStatus, LabelEvalDomain, LabelKbStatus, RequestState } from "@prisma/client";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac";
@@ -35,6 +35,11 @@ export type NeedsEvaluationRow = {
   isResubmission: boolean;
   /** Stamped onto the LabelAssessment this run creates. */
   documentsFingerprint: string;
+  /**
+   * The route chosen for this item (at intake acceptance, or later by the
+   * Evaluator). null = nobody has chosen, so the queue offers both.
+   */
+  assessmentMethod: AssessmentMethod | null;
 };
 
 /** The only real "ready for a human to act" resting state (design doc §0.3). */
@@ -67,6 +72,7 @@ export async function listNeedsEvaluation(
         id: true,
         productNameEn: true,
         productNameAr: true,
+        assessmentMethod: true,
         serviceItem: { select: { code: true, nameEn: true, nameAr: true } },
         request: {
           select: {
@@ -133,6 +139,7 @@ export async function listNeedsEvaluation(
         slaDueAt: c.item.request.slaDueAt?.toISOString() ?? null,
         isResubmission: c.item.request.submissionNo > 1,
         documentsFingerprint: c.fingerprint,
+        assessmentMethod: c.item.assessmentMethod,
       }));
 
     rows.sort((a, b) => {
@@ -149,6 +156,7 @@ export async function listNeedsEvaluation(
 
 export type RecentAssessmentRow = {
   id: string;
+  method: AssessmentMethod;
   status: LabelAssessmentStatus;
   requestNo: string;
   organisationName: string;
@@ -184,6 +192,7 @@ export async function listRecentAssessments(
       where: { domain },
       select: {
         id: true,
+        method: true,
         status: true,
         requestNo: true,
         organisationName: true,
@@ -198,6 +207,7 @@ export async function listRecentAssessments(
 
     return rows.map((r) => ({
       id: r.id,
+      method: r.method,
       status: r.status,
       requestNo: r.requestNo,
       organisationName: r.organisationName,
@@ -292,6 +302,9 @@ export type AssessmentDetailField = {
   confidence: number | null;
   needsReview: boolean;
   confirmedAt: string | null;
+  /** Pre-edit value captured on first confirm — null if never overridden by a human. */
+  originalMachineValue: { valueEn: string | null; valueAr: string | null } | null;
+  confirmedByName: string | null;
 };
 
 export type AssessmentDetailVerdict = {
@@ -306,6 +319,10 @@ export type AssessmentDetailVerdict = {
   autoOrManual: string;
   evidenceText: string | null;
   rationale: string | null;
+  /** The verdict immediately before the last manual override — null if never overridden. */
+  previousVerdict: string | null;
+  overriddenByName: string | null;
+  overriddenAt: string | null;
 };
 
 export type AssessmentDetailClassification = {
@@ -314,6 +331,8 @@ export type AssessmentDetailClassification = {
   overrideCategoryCode: string | null;
   rationale: string | null;
   notApplicable: boolean;
+  overriddenByName: string | null;
+  overriddenAt: string | null;
 };
 
 export type AssessmentDetailRequiredTest = {
@@ -330,6 +349,8 @@ export type AssessmentDetailCategory = { code: string; nameEn: string; nameAr: s
 export type AssessmentDetail = {
   id: string;
   domain: LabelEvalDomain;
+  /** AI (rule engine) or MANUAL (hand-worked) — decides which workspace renders it. */
+  method: AssessmentMethod;
   status: string;
   requestNo: string;
   organisationName: string;
@@ -348,6 +369,12 @@ export type AssessmentDetail = {
   requiredTests: AssessmentDetailRequiredTest[];
   /** Cosmetics only — the active KB version's category taxonomy, for the Reclassify picker. */
   availableCategories: AssessmentDetailCategory[];
+  /**
+   * The evaluator-owned copies of the source documents this run was started
+   * from (never the client's live files — design doc §3). The manual
+   * workspace links them so the evaluator can read the artwork while judging.
+   */
+  documents: Array<{ kind: string; fileName: string; storageKey: string }>;
 };
 
 export async function getAssessmentDetail(assessmentId: string): Promise<AssessmentDetail | null> {
@@ -360,6 +387,7 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
       select: {
         id: true,
         domain: true,
+        method: true,
         status: true,
         requestNo: true,
         organisationName: true,
@@ -379,6 +407,8 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
             confidence: true,
             needsReview: true,
             confirmedAt: true,
+            originalMachineValue: true,
+            confirmedByUserId: true,
           },
         },
         verdicts: {
@@ -388,6 +418,9 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
             autoOrManual: true,
             evidenceText: true,
             rationale: true,
+            previousVerdict: true,
+            overriddenByUserId: true,
+            overriddenAt: true,
             kbRule: { select: { code: true, section: true, titleEn: true, titleAr: true, priority: true, payload: true } },
           },
           // Stable order by rule code — an override must not visibly reshuffle
@@ -397,10 +430,22 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
         },
         report: { select: { promotedAt: true } },
         classification: {
-          select: { detectedCategoryCode: true, detectedConfidence: true, overrideCategoryCode: true, rationale: true, notApplicable: true },
+          select: {
+            detectedCategoryCode: true,
+            detectedConfidence: true,
+            overrideCategoryCode: true,
+            rationale: true,
+            notApplicable: true,
+            overriddenByUserId: true,
+            overriddenAt: true,
+          },
         },
         requiredTests: {
           select: { testCode: true, mandatory: true, ruleCode: true, reasonEn: true, reasonAr: true, triggerSource: true },
+        },
+        documents: {
+          select: { kind: true, fileName: true, storageKey: true },
+          orderBy: { copiedAt: "asc" },
         },
       },
     });
@@ -409,6 +454,17 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
     const claimedByName = a.claimedByUserId
       ? (await prisma.user.findUnique({ where: { id: a.claimedByUserId }, select: { fullNameEn: true } }))?.fullNameEn ?? null
       : null;
+
+    // Resolve every field/verdict/classification "who changed this" id in one
+    // batch rather than N+1 queries — same pattern as claimedByName above.
+    const changerIds = new Set<string>();
+    for (const f of a.fields) if (f.confirmedByUserId) changerIds.add(f.confirmedByUserId);
+    for (const v of a.verdicts) if (v.overriddenByUserId) changerIds.add(v.overriddenByUserId);
+    if (a.classification?.overriddenByUserId) changerIds.add(a.classification.overriddenByUserId);
+    const changers = changerIds.size
+      ? await prisma.user.findMany({ where: { id: { in: [...changerIds] } }, select: { id: true, fullNameEn: true } })
+      : [];
+    const changerNameById = new Map(changers.map((u) => [u.id, u.fullNameEn]));
 
     const availableCategories =
       a.domain === "COSMETICS"
@@ -422,6 +478,7 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
     return {
       id: a.id,
       domain: a.domain,
+      method: a.method,
       status: a.status,
       requestNo: a.requestNo,
       organisationName: a.organisationName,
@@ -440,6 +497,10 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
             overrideCategoryCode: a.classification.overrideCategoryCode,
             rationale: a.classification.rationale,
             notApplicable: a.classification.notApplicable,
+            overriddenByName: a.classification.overriddenByUserId
+              ? changerNameById.get(a.classification.overriddenByUserId) ?? null
+              : null,
+            overriddenAt: a.classification.overriddenAt?.toISOString() ?? null,
           }
         : null,
       requiredTests: a.requiredTests.map((rt) => ({
@@ -451,6 +512,11 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
         triggerSource: rt.triggerSource,
       })),
       availableCategories,
+      documents: a.documents.map((d) => ({
+        kind: d.kind,
+        fileName: d.fileName,
+        storageKey: d.storageKey,
+      })),
       fields: a.fields.map((f) => ({
         fieldKey: f.fieldKey,
         valueEn: f.valueEn,
@@ -459,6 +525,8 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
         confidence: f.confidence,
         needsReview: f.needsReview,
         confirmedAt: f.confirmedAt?.toISOString() ?? null,
+        originalMachineValue: f.originalMachineValue as { valueEn: string | null; valueAr: string | null } | null,
+        confirmedByName: f.confirmedByUserId ? changerNameById.get(f.confirmedByUserId) ?? null : null,
       })),
       verdicts: a.verdicts.map((v) => ({
         kbRuleId: v.kbRuleId,
@@ -472,6 +540,9 @@ export async function getAssessmentDetail(assessmentId: string): Promise<Assessm
         autoOrManual: v.autoOrManual,
         evidenceText: v.evidenceText,
         rationale: v.rationale,
+        previousVerdict: v.previousVerdict,
+        overriddenByName: v.overriddenByUserId ? changerNameById.get(v.overriddenByUserId) ?? null : null,
+        overriddenAt: v.overriddenAt?.toISOString() ?? null,
       })),
       promotedAt: a.report?.promotedAt?.toISOString() ?? null,
     };

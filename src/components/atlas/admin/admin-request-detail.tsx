@@ -40,15 +40,23 @@ import {
   decideReopenRequest,
   markAdminRequestCommentsRead,
   reopenRequestByAdmin,
+  setItemAssessmentMethod,
   transitionAdminRequest,
 } from "@/server/admin/actions";
 import { hasCheckItems } from "@/lib/assessment";
+import { cn } from "@/lib/utils";
 import { isLabTestingOnlyRequest, isScocOnlyRequest } from "@/lib/scoc-services";
 import type {
   AdminRequestDetail,
   AssignableStaffUser,
 } from "@/server/admin/queries";
-import type { FaultAttribution, RequestState, ReturnReasonCode, Role } from "@prisma/client";
+import type {
+  AssessmentMethod,
+  FaultAttribution,
+  RequestState,
+  ReturnReasonCode,
+  Role,
+} from "@prisma/client";
 import { format } from "date-fns";
 import { arSA, enGB } from "date-fns/locale";
 
@@ -122,7 +130,9 @@ import {
   MessageSquarePlus,
   Paperclip,
   PauseCircle,
+  PencilLine,
   RotateCcw,
+  Sparkles,
   Send,
   Unlock,
   UserRoundCog,
@@ -131,6 +141,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -438,13 +449,26 @@ export function AdminRequestDetailPanel({
     });
   }
 
-  function handleCompleteApplicationReview() {
+  /**
+   * Items the Label Evaluator covers. Only these have an AI route at all, so
+   * the acceptance dialog only asks about the method when at least one
+   * exists — an unmapped request accepts in one click exactly as before.
+   */
+  const evaluatorItems = data.items.filter((i) => i.labelEvalDomain !== null);
+  const [methodDialogOpen, setMethodDialogOpen] = useState(false);
+  const [acceptMethod, setAcceptMethod] = useState<AssessmentMethod>("AI");
+
+  function handleCompleteApplicationReview(assessmentMethod?: AssessmentMethod) {
     startTransition(async () => {
-      const result = await completeApplicationReview({ requestId: data.id });
+      const result = await completeApplicationReview({
+        requestId: data.id,
+        assessmentMethod,
+      });
       if (!result.ok) {
         toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
         return;
       }
+      setMethodDialogOpen(false);
       toast.success(t("success"));
       router.refresh();
     });
@@ -778,7 +802,11 @@ export function AdminRequestDetailPanel({
                 type="button"
                 size="sm"
                 disabled={pending}
-                onClick={handleCompleteApplicationReview}
+                onClick={() =>
+                  evaluatorItems.length > 0
+                    ? setMethodDialogOpen(true)
+                    : handleCompleteApplicationReview()
+                }
               >
                 {pending ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -1371,6 +1399,70 @@ export function AdminRequestDetailPanel({
         </Dialog>
       ) : null}
 
+      {/*
+        Acceptance is where the evaluation route gets decided: AI sends the
+        Evaluator to the Label Evaluator workspace, Manual opens the manual
+        evaluation page. Neither choice removes the other route — it decides
+        where the work starts and what the queue offers first.
+      */}
+      <Dialog open={methodDialogOpen} onOpenChange={setMethodDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("assessmentMethod.dialogTitle")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-ink-600">{t("assessmentMethod.dialogDescription")}</p>
+          <div className="space-y-2">
+            {(["AI", "MANUAL"] as const).map((method) => (
+              <button
+                key={method}
+                type="button"
+                onClick={() => setAcceptMethod(method)}
+                className={cn(
+                  "w-full rounded-lg border p-3 text-start transition-colors",
+                  acceptMethod === method
+                    ? "border-atlas-green bg-atlas-green/5"
+                    : "border-line hover:bg-surface-alt",
+                )}
+              >
+                <span className="flex items-center gap-2 text-sm font-medium text-ink-900">
+                  {method === "AI" ? (
+                    <Sparkles className="size-4" />
+                  ) : (
+                    <PencilLine className="size-4" />
+                  )}
+                  {t(`assessmentMethod.option.${method}` as "assessmentMethod.option.AI")}
+                </span>
+                <span className="mt-1 block text-xs text-ink-500">
+                  {t(`assessmentMethod.optionHint.${method}` as "assessmentMethod.optionHint.AI")}
+                </span>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setMethodDialogOpen(false)}
+            >
+              {t("assessmentMethod.cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending}
+              onClick={() => handleCompleteApplicationReview(acceptMethod)}
+            >
+              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {t("assessmentMethod.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {data.state === "ASSESSMENT_RUNNING" && evaluatorItems.length > 0 ? (
+        <AssessmentMethodPanel items={evaluatorItems} locale={locale} />
+      ) : null}
+
       {!isScocOnly &&
       !isLabTestingOnly &&
       ["TECHNICAL_REVIEW", "DECISION", "REPORT_ISSUED", "CLOSED"].includes(
@@ -1708,5 +1800,95 @@ export function AdminRequestDetailPanel({
         </div>
       </section>
     </div>
+  );
+}
+
+/**
+ * Lets the Evaluator see and change each item's evaluation route while the
+ * request is in assessment, and jump straight to whichever workspace is
+ * holding that item's run. Both routes stay reachable regardless of the
+ * choice — this is where the work starts, not a lock on how it may be done.
+ */
+function AssessmentMethodPanel({
+  items,
+  locale,
+}: {
+  items: AdminRequestDetail["items"];
+  locale: string;
+}) {
+  const t = useTranslations("adminOps.requestDetail.assessmentMethod");
+  const tErrors = useTranslations("adminOps.requestDetail.errors");
+  const router = useRouter();
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  function choose(requestItemId: string, method: AssessmentMethod) {
+    setPendingItemId(requestItemId);
+    startTransition(async () => {
+      const result = await setItemAssessmentMethod({ requestItemId, method });
+      setPendingItemId(null);
+      if (!result.ok) {
+        toast.error(tErrors(result.error as "SAVE_FAILED"));
+        return;
+      }
+      toast.success(t("saved"));
+      router.refresh();
+    });
+  }
+
+  return (
+    <section className="space-y-3 rounded-lg border border-line bg-surface p-4">
+      <div>
+        <h2 className="text-sm font-semibold text-ink-900">{t("panelTitle")}</h2>
+        <p className="text-xs text-ink-500">{t("panelSubtitle")}</p>
+      </div>
+      {items.map((item) => {
+        const run = item.latestLabelAssessment;
+        const workspaceHref = run
+          ? run.method === "MANUAL"
+            ? `/${locale}/admin/label-evaluator/manual/${run.id}`
+            : `/${locale}/admin/label-evaluator/${item.labelEvalDomain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics"}/${run.id}`
+          : `/${locale}/admin/label-evaluator/${item.labelEvalDomain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics"}`;
+        return (
+          <div
+            key={item.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line p-3"
+          >
+            <div>
+              <p className="text-sm font-medium text-ink-900">
+                {locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn}
+              </p>
+              <p className="text-xs text-ink-500">
+                {item.assessmentMethod
+                  ? t(`option.${item.assessmentMethod}` as "option.AI")
+                  : t("notChosen")}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(["AI", "MANUAL"] as const).map((method) => (
+                <Button
+                  key={method}
+                  type="button"
+                  size="sm"
+                  variant={item.assessmentMethod === method ? "default" : "outline"}
+                  disabled={pendingItemId === item.id}
+                  onClick={() => choose(item.id, method)}
+                >
+                  {method === "AI" ? (
+                    <Sparkles className="size-4" />
+                  ) : (
+                    <PencilLine className="size-4" />
+                  )}
+                  {t(`option.${method}` as "option.AI")}
+                </Button>
+              ))}
+              <Button type="button" size="sm" variant="ghost" asChild>
+                <Link href={workspaceHref}>{run ? t("openRun") : t("openQueue")}</Link>
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </section>
   );
 }

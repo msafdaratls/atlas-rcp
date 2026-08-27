@@ -16,12 +16,15 @@ const IN_FLIGHT: Record<string, boolean> = {
   EXTRACTING: true,
   CLASSIFYING: true,
   AWAITING_REVIEW: true,
+  // Waiting on the evaluator, not on a background job — no spinner.
+  MANUAL_IN_PROGRESS: false,
 };
 
 const STATUS_TONE: Record<string, string> = {
   EXTRACTING: "border-line bg-surface-alt text-ink-600",
   CLASSIFYING: "border-line bg-surface-alt text-ink-600",
   AWAITING_REVIEW: "border-state-warn/40 bg-state-warn/10 text-state-warn",
+  MANUAL_IN_PROGRESS: "border-state-warn/40 bg-state-warn/10 text-state-warn",
   ASSESSED: "border-state-ok/40 bg-state-ok/10 text-state-ok",
   ERROR: "border-state-bad/40 bg-state-bad/10 text-state-bad",
   BLOCKED_NO_CATEGORY_MATCH: "border-state-warn/40 bg-state-warn/10 text-state-warn",
@@ -40,6 +43,7 @@ export async function RecentAssessmentsTable({ rows, domain, locale }: Props) {
             <tr>
               <th className="px-3 py-2 text-start font-medium">{t("columns.request")}</th>
               <th className="px-3 py-2 text-start font-medium">{t("columns.client")}</th>
+              <th className="px-3 py-2 text-start font-medium">{t("columns.method")}</th>
               <th className="px-3 py-2 text-start font-medium">{t("columns.status")}</th>
               <th className="px-3 py-2 text-start font-medium">{t("columns.updated")}</th>
               <th className="px-3 py-2 text-end font-medium">{t("columns.action")}</th>
@@ -52,6 +56,11 @@ export async function RecentAssessmentsTable({ rows, domain, locale }: Props) {
                   <RequestNumber value={row.requestNo} />
                 </td>
                 <td className="px-3 py-2 text-ink-700">{row.organisationName}</td>
+                <td className="px-3 py-2">
+                  <span className="inline-flex items-center rounded-full border border-line bg-surface-alt px-2 py-0.5 text-xs font-medium text-ink-600">
+                    {t(`method.${row.method}` as "method.AI")}
+                  </span>
+                </td>
                 <td className="px-3 py-2">
                   <span
                     className={cn(
@@ -71,7 +80,11 @@ export async function RecentAssessmentsTable({ rows, domain, locale }: Props) {
                 </td>
                 <td className="px-3 py-2 text-end">
                   <Link
-                    href={`/${locale}/admin/label-evaluator/${basePath}/${row.id}`}
+                    href={
+                      row.method === "MANUAL"
+                        ? `/${locale}/admin/label-evaluator/manual/${row.id}`
+                        : `/${locale}/admin/label-evaluator/${basePath}/${row.id}`
+                    }
                     className="text-xs font-medium text-atlas-green hover:underline"
                   >
                     {t("open")}

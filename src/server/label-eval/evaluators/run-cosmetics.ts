@@ -229,8 +229,47 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
 
   // Required tests (design doc §6/§9) — deterministic, category+properties
   // triggered, no LLM. Produces LabelRequiredTest rows, not verdicts.
+  await applyRequiredTests(assessmentId, assessment.kbVersionId, classification);
+
+  const score = scoreCosmeticsVerdicts(results.map((r) => r.result));
+  await prisma.labelAssessment.update({
+    where: { id: assessmentId },
+    data: { status: "ASSESSED", finalVerdict: score.finalVerdict },
+  });
+
+  return { blocked: false, ...score };
+}
+
+/**
+ * Recomputes and stores LabelAssessment.finalVerdict from whatever
+ * LabelItemVerdict rows exist right now, without re-running the classifier
+ * or evaluators. Mirrors recomputeSfdaScore (run-sfda.ts) — call after
+ * applyVerdictOverride so the summary bar doesn't go stale (see that
+ * function's comment for the confirmed live bug this fixes).
+ */
+export async function recomputeCosmeticsScore(assessmentId: string): Promise<void> {
+  const verdicts = await prisma.labelItemVerdict.findMany({
+    where: { assessmentId },
+    select: { verdict: true },
+  });
+  const { finalVerdict } = scoreCosmeticsVerdicts(verdicts);
+  await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { finalVerdict } });
+}
+
+/**
+ * Rebuilds an assessment's auto-triggered LabelRequiredTest rows from the KB's
+ * REQUIRED_TEST_RULEs for a given classification. Deterministic — no LLM, no
+ * evaluators — which is why the manual route (which runs no rule engine at
+ * all) calls it too rather than reimplementing the trigger logic.
+ * Manually-added tests (`addedManually`) are never touched.
+ */
+export async function applyRequiredTests(
+  assessmentId: string,
+  kbVersionId: string,
+  classification: { categoryCode: string; properties: string[] },
+): Promise<void> {
   const testRules = await prisma.labelKbRule.findMany({
-    where: { kbVersionId: assessment.kbVersionId, ruleType: "REQUIRED_TEST_RULE" },
+    where: { kbVersionId, ruleType: "REQUIRED_TEST_RULE" },
   });
   await prisma.labelRequiredTest.deleteMany({ where: { assessmentId, addedManually: false } });
   const triggered = testRules.filter((r) => {
@@ -265,28 +304,4 @@ export async function runCosmeticsRuleEngine(assessmentId: string): Promise<RunC
       }),
     });
   }
-
-  const score = scoreCosmeticsVerdicts(results.map((r) => r.result));
-  await prisma.labelAssessment.update({
-    where: { id: assessmentId },
-    data: { status: "ASSESSED", finalVerdict: score.finalVerdict },
-  });
-
-  return { blocked: false, ...score };
-}
-
-/**
- * Recomputes and stores LabelAssessment.finalVerdict from whatever
- * LabelItemVerdict rows exist right now, without re-running the classifier
- * or evaluators. Mirrors recomputeSfdaScore (run-sfda.ts) — call after
- * applyVerdictOverride so the summary bar doesn't go stale (see that
- * function's comment for the confirmed live bug this fixes).
- */
-export async function recomputeCosmeticsScore(assessmentId: string): Promise<void> {
-  const verdicts = await prisma.labelItemVerdict.findMany({
-    where: { assessmentId },
-    select: { verdict: true },
-  });
-  const { finalVerdict } = scoreCosmeticsVerdicts(verdicts);
-  await prisma.labelAssessment.update({ where: { id: assessmentId }, data: { finalVerdict } });
 }

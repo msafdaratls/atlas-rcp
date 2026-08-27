@@ -1,6 +1,6 @@
 "use server";
 
-import type { LabelEvalDomain } from "@prisma/client";
+import type { LabelEvalDomain, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
@@ -26,7 +26,7 @@ import {
 } from "@/server/label-eval/concurrency";
 import { mandatoryFieldKeys } from "@/server/label-eval/fields";
 import { runSfdaRuleEngine, recomputeSfdaScore } from "@/server/label-eval/evaluators/run-sfda";
-import { runCosmeticsRuleEngine, recomputeCosmeticsScore } from "@/server/label-eval/evaluators/run-cosmetics";
+import { runCosmeticsRuleEngine, recomputeCosmeticsScore, applyRequiredTests } from "@/server/label-eval/evaluators/run-cosmetics";
 import { saveAssessment } from "@/server/admin/actions";
 import { parseAssessment, parseCheckSets } from "@/lib/assessment";
 import { isPromotableVerdict } from "@/server/label-eval/promotion-eligibility";
@@ -34,6 +34,18 @@ import { isPromotableVerdict } from "@/server/label-eval/promotion-eligibility";
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
   | { ok: false; error: string };
+
+/**
+ * Where an assessment's workspace lives. AI runs keep their per-domain
+ * routes; manual runs share one route because their page is domain-generic.
+ * Every revalidatePath in this file goes through here so a new route can
+ * never be added in one place and forgotten in another.
+ */
+function workspacePath(method: "AI" | "MANUAL", domain: LabelEvalDomain, assessmentId: string): string {
+  if (method === "MANUAL") return `/[locale]/admin/label-evaluator/manual/${assessmentId}`;
+  const basePath = domain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics";
+  return `/[locale]/admin/label-evaluator/${basePath}/${assessmentId}`;
+}
 
 const startAssessmentSchema = z.object({
   requestItemId: z.string().min(1),
@@ -76,7 +88,7 @@ export async function startLabelAssessment(
       await assertNoInFlightRun(requestItemId);
     } catch (e) {
       if (e instanceof InFlightRunExistsError) {
-        return { ok: false, error: `IN_FLIGHT:${e.existingAssessmentId}` };
+        return { ok: false, error: `IN_FLIGHT:${e.existingAssessmentId}:${e.existingMethod}` };
       }
       throw e;
     }
@@ -139,6 +151,12 @@ export async function startLabelAssessment(
         })),
       });
       await tx.labelExtractionJob.create({ data: { assessmentId: created.id } });
+      // Record the route on the item, so the request page and the queue agree
+      // with what actually happened even if nobody chose beforehand.
+      await tx.requestItem.update({
+        where: { id: evaluable.requestItemId },
+        data: { assessmentMethod: "AI" },
+      });
       return created;
     });
 
@@ -352,6 +370,17 @@ export async function updateExtractedField(
       },
     });
 
+    if (existing && (existing.valueEn !== parsed.data.valueEn || existing.valueAr !== parsed.data.valueAr)) {
+      await writeAuditLog({
+        session,
+        action: "label_eval.field.update",
+        entityType: "LabelExtractedField",
+        entityId: `${parsed.data.assessmentId}:${parsed.data.fieldKey}`,
+        before: { valueEn: existing.valueEn, valueAr: existing.valueAr },
+        after: { valueEn: parsed.data.valueEn, valueAr: parsed.data.valueAr },
+      });
+    }
+
     revalidatePath(`/[locale]/admin/label-evaluator/sfda/${parsed.data.assessmentId}`, "page");
     return { ok: true, data: undefined };
   } catch (error) {
@@ -513,7 +542,7 @@ export async function overrideItemVerdict(
 
     const assessment = await prisma.labelAssessment.findUnique({
       where: { id: parsed.data.assessmentId },
-      select: { domain: true },
+      select: { domain: true, method: true },
     });
     if (!assessment) return { ok: false, error: "NOT_FOUND" };
 
@@ -536,8 +565,7 @@ export async function overrideItemVerdict(
       await recomputeCosmeticsScore(parsed.data.assessmentId);
     }
 
-    const basePath = assessment.domain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics";
-    revalidatePath(`/[locale]/admin/label-evaluator/${basePath}/${parsed.data.assessmentId}`, "page");
+    revalidatePath(workspacePath(assessment.method, assessment.domain, parsed.data.assessmentId), "page");
     return { ok: true, data: undefined };
   } catch (error) {
     if (error instanceof VerdictConflictError) return { ok: false, error: "CONFLICT" };
@@ -851,10 +879,13 @@ export async function reclassifyAssessment(
 
     const assessment = await prisma.labelAssessment.findUnique({
       where: { id: parsed.data.assessmentId },
-      select: { id: true, domain: true, status: true },
+      select: { id: true, domain: true, method: true, status: true },
     });
     if (!assessment) return { ok: false, error: "NOT_FOUND" };
     if (assessment.domain !== "COSMETICS") return { ok: false, error: "WRONG_DOMAIN" };
+    // Re-running the rule engine on a manual assessment would overwrite every
+    // hand-typed verdict on it. setManualCategory is the manual counterpart.
+    if (assessment.method !== "AI") return { ok: false, error: "WRONG_METHOD" };
     if (assessment.status !== "ASSESSED" && assessment.status !== "BLOCKED_NO_CATEGORY_MATCH") {
       return { ok: false, error: "INVALID_STATE" };
     }
@@ -890,5 +921,342 @@ export async function reclassifyAssessment(
     const message = error instanceof Error ? error.message : "UNKNOWN";
     if (message === "UNAUTHORIZED" || message === "FORBIDDEN") return { ok: false, error: message };
     return { ok: false, error: "RUN_FAILED" };
+  }
+}
+
+// ─── Manual route ───────────────────────────────────────────────────────────
+
+/**
+ * The KB rules a run covers, per domain — the single definition the manual
+ * route seeds its checklist from, kept identical to what each rule engine
+ * evaluates so a manual run and an AI run cover exactly the same items.
+ * SFDA evaluates every rule in the version (run-sfda.ts); cosmetics evaluates
+ * the two item rule types and handles REQUIRED_TEST_RULEs separately
+ * (run-cosmetics.ts).
+ */
+function checklistRuleFilter(domain: LabelEvalDomain): Prisma.LabelKbRuleWhereInput {
+  return domain === "SFDA_SUPPLEMENTS"
+    ? {}
+    : { ruleType: { in: ["LABEL_REQUIREMENT_ITEM", "CLAIM_PHASE_ITEM"] } };
+}
+
+/**
+ * Starts a MANUAL run: the same item, the same active KB, the same source
+ * documents copied into evaluator storage — but no extraction job, no
+ * classifier and no rule engine. Every rule in the checklist is seeded
+ * NEEDS_REVIEW so the evaluator's own verdicts are the only thing that can
+ * ever resolve one.
+ *
+ * `autoOrManual: "manual_pending"` on the seeded rows is deliberately NOT
+ * "manual_override": nobody has judged them yet, and NEEDS_REVIEW is
+ * unpromotable by value anyway (promotion-eligibility.ts), so a half-finished
+ * manual run can never leak an unjudged verdict into the official checklist.
+ * Setting a verdict goes through overrideItemVerdict like any other human
+ * judgment, which stamps "manual_override" and the reviewer's id.
+ */
+export async function startManualLabelAssessment(
+  input: z.infer<typeof startAssessmentSchema>,
+): Promise<ActionResult<{ assessmentId: string }>> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = startAssessmentSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { requestItemId, domain } = parsed.data;
+
+    let evaluable: Awaited<ReturnType<typeof assertRequestItemEvaluable>>;
+    try {
+      evaluable = await assertRequestItemEvaluable(requestItemId, domain);
+    } catch (e) {
+      if (e instanceof EvaluationUnavailableError) {
+        return { ok: false, error: `NOT_EVALUABLE:${e.currentState}` };
+      }
+      if (e instanceof Error && e.message === "WRONG_DOMAIN") {
+        return { ok: false, error: "WRONG_DOMAIN" };
+      }
+      return { ok: false, error: "NOT_FOUND" };
+    }
+
+    try {
+      await assertNoInFlightRun(requestItemId);
+    } catch (e) {
+      if (e instanceof InFlightRunExistsError) {
+        return { ok: false, error: `IN_FLIGHT:${e.existingAssessmentId}:${e.existingMethod}` };
+      }
+      throw e;
+    }
+
+    const activeKb = await prisma.labelKbVersion.findFirst({
+      where: { domain, status: "ACTIVE" },
+      orderBy: { activatedAt: "desc" },
+    });
+    if (!activeKb) return { ok: false, error: "NO_ACTIVE_DATASET" };
+
+    const rules = await prisma.labelKbRule.findMany({
+      where: { kbVersionId: activeKb.id, ...checklistRuleFilter(domain) },
+      select: { id: true },
+    });
+    if (rules.length === 0) return { ok: false, error: "NO_ACTIVE_DATASET" };
+
+    const item = await prisma.requestItem.findUniqueOrThrow({
+      where: { id: evaluable.requestItemId },
+      select: {
+        request: {
+          select: { requestNo: true, organisation: { select: { id: true, nameEn: true } } },
+        },
+        serviceItem: { select: { code: true } },
+      },
+    });
+
+    // Same ingest as the AI route, for two reasons: the evaluator needs the
+    // artwork in front of them to judge anything, and documentsFingerprint —
+    // which drives the "needs (re-)evaluation" queue check — is computed from
+    // exactly these files. A manual run that skipped it would leave the item
+    // sitting in the queue forever.
+    let ingested: Awaited<ReturnType<typeof ingestRequestItemDocuments>>;
+    try {
+      ingested = await ingestRequestItemDocuments(
+        requestItemId,
+        DOCUMENT_KIND_BY_REQUIRED_CODE[domain],
+      );
+    } catch {
+      return { ok: false, error: "SOURCE_DOCUMENT_UNREADABLE" };
+    }
+    if (ingested.length === 0) return { ok: false, error: "NO_DOCUMENTS" };
+
+    const fingerprint = computeDocumentsFingerprint(ingested.map((d) => d.sha256));
+
+    const assessment = await prisma.$transaction(async (tx) => {
+      const created = await tx.labelAssessment.create({
+        data: {
+          domain,
+          method: "MANUAL",
+          status: "MANUAL_IN_PROGRESS",
+          kbVersionId: activeKb.id,
+          requestItemId: evaluable.requestItemId,
+          requestNo: item.request.requestNo,
+          organisationId: item.request.organisation.id,
+          organisationName: item.request.organisation.nameEn,
+          serviceItemCode: item.serviceItem.code,
+          documentsFingerprint: fingerprint,
+          createdByUserId: session.id,
+          claimedByUserId: session.id,
+          claimedAt: new Date(),
+        },
+      });
+      await tx.labelDocument.createMany({
+        data: ingested.map((d) => ({
+          assessmentId: created.id,
+          kind: d.kind,
+          sourceDocumentVersionId: d.sourceDocumentVersionId,
+          fileName: d.fileName,
+          mimeType: d.mimeType,
+          sizeBytes: d.sizeBytes,
+          storageKey: d.storageKey,
+          sha256: d.sha256,
+        })),
+      });
+      await tx.labelItemVerdict.createMany({
+        data: rules.map((r) => ({
+          assessmentId: created.id,
+          kbRuleId: r.id,
+          verdict: "NEEDS_REVIEW" as const,
+          autoOrManual: "manual_pending",
+        })),
+      });
+      // Record the route on the item too, so the request page and the queue
+      // agree with what actually happened even if nobody chose beforehand.
+      await tx.requestItem.update({
+        where: { id: evaluable.requestItemId },
+        data: { assessmentMethod: "MANUAL" },
+      });
+      return created;
+    });
+
+    await writeAuditLog({
+      session,
+      action: "label_eval.assessment.start_manual",
+      entityType: "LabelAssessment",
+      entityId: assessment.id,
+      organisationId: item.request.organisation.id,
+      after: { domain, requestItemId, kbVersionId: activeKb.id, method: "MANUAL" },
+    });
+
+    revalidatePath(
+      `/[locale]/admin/label-evaluator/${domain === "SFDA_SUPPLEMENTS" ? "sfda" : "cosmetics"}`,
+      "page",
+    );
+    return { ok: true, data: { assessmentId: assessment.id } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "START_FAILED" };
+  }
+}
+
+const manualCategorySchema = z.object({
+  assessmentId: z.string().min(1),
+  categoryCode: z.string().min(1),
+});
+
+/**
+ * Cosmetics manual runs: the evaluator states the product category
+ * themselves. Deliberately NOT `reclassifyAssessment` — that action re-runs
+ * the whole cosmetics rule engine (classifier + LLM judgments), which would
+ * overwrite every hand-typed verdict on this assessment. This writes the
+ * category and re-derives only the deterministic required-tests table from it.
+ */
+export async function setManualCategory(
+  input: z.infer<typeof manualCategorySchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = manualCategorySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const assessment = await prisma.labelAssessment.findUnique({
+      where: { id: parsed.data.assessmentId },
+      select: { id: true, domain: true, method: true, status: true, kbVersionId: true },
+    });
+    if (!assessment) return { ok: false, error: "NOT_FOUND" };
+    if (assessment.domain !== "COSMETICS") return { ok: false, error: "WRONG_DOMAIN" };
+    if (assessment.method !== "MANUAL") return { ok: false, error: "WRONG_METHOD" };
+    if (assessment.status !== "MANUAL_IN_PROGRESS") return { ok: false, error: "INVALID_STATE" };
+
+    const category = await prisma.labelKbCategory.findUnique({
+      where: { kbVersionId_code: { kbVersionId: assessment.kbVersionId, code: parsed.data.categoryCode } },
+      select: { code: true, properties: true },
+    });
+    if (!category) return { ok: false, error: "VALIDATION" };
+
+    await prisma.labelClassification.upsert({
+      where: { assessmentId: assessment.id },
+      create: {
+        assessmentId: assessment.id,
+        overrideCategoryCode: category.code,
+        overriddenByUserId: session.id,
+        overriddenAt: new Date(),
+      },
+      update: {
+        overrideCategoryCode: category.code,
+        overriddenByUserId: session.id,
+        overriddenAt: new Date(),
+      },
+    });
+
+    await applyRequiredTests(assessment.id, assessment.kbVersionId, {
+      categoryCode: category.code,
+      properties: (category.properties as string[] | null) ?? [],
+    });
+
+    await writeAuditLog({
+      session,
+      action: "label_eval.classification.manual_set",
+      entityType: "LabelAssessment",
+      entityId: assessment.id,
+      after: { categoryCode: category.code },
+    });
+
+    revalidatePath(workspacePath("MANUAL", assessment.domain, assessment.id), "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") return { ok: false, error: message };
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const completeManualSchema = z.object({ assessmentId: z.string().min(1) });
+
+/**
+ * Closes a manual run: scores it with the same formula the corresponding rule
+ * engine uses (recomputeSfdaScore / recomputeCosmeticsScore — never a second
+ * scoring implementation) and moves it to ASSESSED, from which the existing
+ * promote-to-official-checklist path works identically to an AI run.
+ *
+ * Refuses while any item is still unjudged. NEEDS_REVIEW / REQUIRES_ADDITIONAL_DATA
+ * are unpromotable, so completing with them left over would produce a run that
+ * silently drops items at promotion time; blocking here makes that visible
+ * while the evaluator can still act on it.
+ */
+export async function completeManualAssessment(
+  input: z.infer<typeof completeManualSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = completeManualSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+    const { assessmentId } = parsed.data;
+
+    const assessment = await prisma.labelAssessment.findUnique({
+      where: { id: assessmentId },
+      select: {
+        id: true,
+        domain: true,
+        method: true,
+        status: true,
+        requestItemId: true,
+        documentsFingerprint: true,
+        classification: { select: { overrideCategoryCode: true } },
+      },
+    });
+    if (!assessment) return { ok: false, error: "NOT_FOUND" };
+    if (assessment.method !== "MANUAL") return { ok: false, error: "WRONG_METHOD" };
+    if (assessment.status !== "MANUAL_IN_PROGRESS") return { ok: false, error: "INVALID_STATE" };
+
+    // Same race guard the AI route applies before scoring (design doc §13.5):
+    // if the client replaced the artwork while the evaluator was working, the
+    // verdicts below were judged against a superseded file.
+    if (assessment.requestItemId) {
+      const liveFingerprint = await computeLiveFingerprint(assessment.requestItemId, assessment.domain);
+      if (liveFingerprint && liveFingerprint !== assessment.documentsFingerprint) {
+        return { ok: false, error: "DOCUMENTS_CHANGED" };
+      }
+    }
+
+    if (assessment.domain === "COSMETICS" && !assessment.classification?.overrideCategoryCode) {
+      return { ok: false, error: "CATEGORY_REQUIRED" };
+    }
+
+    const unresolved = await prisma.labelItemVerdict.count({
+      where: {
+        assessmentId,
+        verdict: { in: ["NEEDS_REVIEW", "REQUIRES_ADDITIONAL_DATA"] },
+      },
+    });
+    if (unresolved > 0) return { ok: false, error: `UNRESOLVED_ITEMS:${unresolved}` };
+
+    // Claim the transition rather than trusting the status read above, the
+    // same guard confirmFieldsAndRunAssessment uses — two evaluators on one
+    // assessment must not both complete it.
+    const claimed = await prisma.labelAssessment.updateMany({
+      where: { id: assessmentId, status: "MANUAL_IN_PROGRESS" },
+      data: { status: "ASSESSED", confirmedAt: new Date(), confirmedByUserId: session.id },
+    });
+    if (claimed.count === 0) return { ok: false, error: "INVALID_STATE" };
+
+    if (assessment.domain === "SFDA_SUPPLEMENTS") {
+      await recomputeSfdaScore(assessmentId);
+    } else {
+      await recomputeCosmeticsScore(assessmentId);
+    }
+
+    await writeAuditLog({
+      session,
+      action: "label_eval.assessment.complete_manual",
+      entityType: "LabelAssessment",
+      entityId: assessmentId,
+    });
+
+    revalidatePath(workspacePath("MANUAL", assessment.domain, assessmentId), "page");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") return { ok: false, error: message };
+    return { ok: false, error: "SAVE_FAILED" };
   }
 }

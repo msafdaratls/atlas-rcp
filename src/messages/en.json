@@ -814,7 +814,8 @@
         "TARGET_STATE_REQUIRED": "Choose a stage to resume this request at.",
         "REJECT_NOTE_REQUIRED": "Explain why the reopen request is being rejected.",
         "INVALID_TARGET_STATE": "That stage is not a valid reopen destination.",
-        "PENDING_REQUEST_EXISTS": "There is already a pending reopen request to decide."
+        "PENDING_REQUEST_EXISTS": "There is already a pending reopen request to decide.",
+        "RUN_IN_FLIGHT": "An evaluation is already in progress for this item using the other method. Finish it before switching."
       },
       "assessment": {
         "title": "Technical assessment",
@@ -1018,6 +1019,26 @@
           "UNAUTHORIZED": "Sign in again to continue.",
           "SAVE_FAILED": "Could not save. Try again."
         }
+      },
+      "assessmentMethod": {
+        "dialogTitle": "How should this request be assessed?",
+        "dialogDescription": "Accepting the request starts the evaluation. Choose the route the Evaluator should begin with — this can be changed later.",
+        "option": {
+          "AI": "AI assessment",
+          "MANUAL": "Manual assessment"
+        },
+        "optionHint": {
+          "AI": "Opens the Label Evaluator: the system reads the artwork and proposes a verdict per checklist item for the Evaluator to review.",
+          "MANUAL": "Opens the manual evaluation page: the Evaluator judges every checklist item themselves, with nothing pre-filled."
+        },
+        "cancel": "Cancel",
+        "confirm": "Accept and start evaluation",
+        "panelTitle": "Assessment method",
+        "panelSubtitle": "Which route this item's compliance assessment is worked through. Changing it re-routes where the work starts; both routes stay available.",
+        "notChosen": "No method chosen yet",
+        "saved": "Assessment method updated.",
+        "openRun": "Open assessment",
+        "openQueue": "Open evaluator queue"
       }
     },
     "clients": {
@@ -1932,7 +1953,6 @@
         "firstSubmission": "First submission",
         "resubmission": "Resubmission"
       },
-      "startEvaluation": "Start evaluation",
       "recent": {
         "title": "Recent evaluations",
         "columns": {
@@ -1940,7 +1960,8 @@
           "client": "Client",
           "status": "Status",
           "updated": "Updated",
-          "action": "Action"
+          "action": "Action",
+          "method": "Method"
         },
         "status": {
           "EXTRACTING": "Extracting",
@@ -1948,10 +1969,22 @@
           "AWAITING_REVIEW": "Awaiting review",
           "ASSESSED": "Assessed",
           "BLOCKED_NO_CATEGORY_MATCH": "Blocked",
-          "ERROR": "Error"
+          "ERROR": "Error",
+          "MANUAL_IN_PROGRESS": "Manual — in progress"
         },
         "promoted": "(promoted)",
-        "open": "Open"
+        "open": "Open",
+        "method": {
+          "AI": "AI",
+          "MANUAL": "Manual"
+        }
+      },
+      "startAiEvaluation": "AI evaluation",
+      "startManualEvaluation": "Manual evaluation",
+      "chosenMethod": "Chosen at intake: {method}",
+      "method": {
+        "AI": "AI",
+        "MANUAL": "Manual"
       }
     },
     "workspace": {
@@ -1972,6 +2005,9 @@
       "confirmAndContinue": "Data confirmed — continue assessment",
       "needsReview": "Needs review",
       "confirmed": "Confirmed",
+      "originalAiValueEn": "AI originally extracted: \"{value}\"",
+      "originalAiValueBoth": "AI originally extracted: \"{en}\" / \"{ar}\"",
+      "changedByField": "Changed by {name}",
       "englishPlaceholder": "English",
       "arabicPlaceholder": "Arabic",
       "save": "Save",
@@ -2008,6 +2044,7 @@
       },
       "evidenceLabel": "On the label",
       "manuallyOverridden": "Manually overridden by a reviewer.",
+      "manuallyOverriddenByFrom": "Changed by {name} — was: {previous}",
       "aiProposedBadge": "AI-proposed",
       "aiProposedNotice": "This verdict was proposed by AI and has not been confirmed yet — it will not be included when promoting to the official checklist until a reviewer confirms or changes it.",
       "aiProposalConfirmed": "AI proposal reviewed and confirmed by a reviewer.",
@@ -2024,6 +2061,7 @@
       "reclassify": "Reclassify",
       "reclassifyHint": "Select the correct category for this product:",
       "classificationTitle": "Automatic product classification",
+      "classificationOverriddenBy": "Reclassified by {name} — AI detected: {detected}",
       "requiredTestsTitle": "Required tests ({count})",
       "requiredTestsColumns": {
         "test": "Test",
@@ -2067,7 +2105,10 @@
       "INFECTED_FILE": "This file failed a security scan.",
       "UPLOAD_FAILED": "Upload failed. Try again.",
       "ACTIVATE_FAILED": "Could not activate this dataset version.",
-      "DOMAIN_MISMATCH": "This version belongs to a different domain."
+      "DOMAIN_MISMATCH": "This version belongs to a different domain.",
+      "WRONG_METHOD": "This action doesn't apply to this kind of assessment.",
+      "CATEGORY_REQUIRED": "Choose a product category first.",
+      "UNRESOLVED_ITEMS": "Some checklist items still have no verdict."
     },
     "datasets": {
       "title": "Datasets",
@@ -2104,6 +2145,23 @@
       },
       "rollback": "Reactivate",
       "counts": "{rules} rule(s) · {lookups} lookup record(s)"
+    },
+    "manual": {
+      "pageDescription": "Manual assessment",
+      "banner": "Manual assessment — every item is judged by you. No automated extraction or rule engine has run on this request.",
+      "progress": "{judged} of {total} items judged",
+      "documentsTitle": "Source documents",
+      "documentsSubtitle": "The artwork and ingredient list this assessment was started from.",
+      "categoryTitle": "Product category",
+      "categorySubtitle": "Choose the cosmetics category this product falls under. It determines the required tests below.",
+      "categoryPlaceholder": "Select a category",
+      "saveCategory": "Save category",
+      "categorySaved": "Product category saved.",
+      "blockedOnCategory": "Choose a product category before completing.",
+      "blockedOnUnresolved": "{count} item(s) still need a verdict.",
+      "readyToComplete": "Every item has a verdict — this assessment is ready to complete.",
+      "completeButton": "Complete manual assessment",
+      "completed": "Manual assessment completed."
     }
   },
   "assistant": {

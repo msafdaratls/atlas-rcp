@@ -527,6 +527,11 @@ model RequestItem {
   /// only — not a hard validation gate, since a number can also be entered
   /// manually if it originated outside this system.
   sourceRequestItemId  String?
+  /// Chosen evaluation route for this item — AI (Label Evaluator) or MANUAL
+  /// (manual evaluation page). Set at intake acceptance and changeable by the
+  /// Evaluator; null means nobody has chosen yet, in which case both routes
+  /// stay offered.
+  assessmentMethod     AssessmentMethod?
 
   request              Request                   @relation(fields: [requestId], references: [id], onDelete: Cascade)
   serviceItem          ServiceItem               @relation(fields: [serviceItemId], references: [id])
@@ -1154,6 +1159,16 @@ enum LabelEvalDomain {
   COSMETICS
 }
 
+/// How a request item's compliance assessment is produced. AI = the Label
+/// Evaluator's extraction + rule engine; MANUAL = an evaluator works the same
+/// KB checklist by hand on the manual evaluation page. Stored on RequestItem
+/// as the chosen route, and stamped on each LabelAssessment as the route that
+/// actually produced it.
+enum AssessmentMethod {
+  AI
+  MANUAL
+}
+
 enum LabelKbStatus {
   DRAFT
   ACTIVE
@@ -1176,6 +1191,10 @@ enum LabelAssessmentStatus {
   EXTRACTING
   AWAITING_REVIEW
   CLASSIFYING // cosmetics only
+  /// A MANUAL-method run the evaluator is still filling in by hand. In-flight
+  /// (blocks a second run on the same item) but reviewer-actionable — it only
+  /// leaves this status when the evaluator completes it.
+  MANUAL_IN_PROGRESS
   ASSESSED
   BLOCKED_NO_CATEGORY_MATCH // cosmetics only — explicit refusal state, never a guessed category
   ERROR
@@ -1307,6 +1326,9 @@ model LabelAssessment {
   documentsFingerprint String
 
   createdByUserId   String
+  /// Which route produced this run. MANUAL runs never touch extraction, the
+  /// rule engine, or the classifier — every verdict on them is typed by a human.
+  method            AssessmentMethod      @default(AI)
   status            LabelAssessmentStatus @default(EXTRACTING)
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt

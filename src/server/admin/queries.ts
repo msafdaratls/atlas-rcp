@@ -1,4 +1,5 @@
 import type {
+  AssessmentMethod,
   CommentDirection,
   CouponAppliesTo,
   CouponClientScope,
@@ -7,6 +8,8 @@ import type {
   EvaluationActivityStatus,
   EvaluationActivityType,
   FaultAttribution,
+  LabelAssessmentStatus,
+  LabelEvalDomain,
   OrganisationStatus,
   Role,
   RequestState,
@@ -444,6 +447,16 @@ export async function listAdminRequests(input: {
 
 export type AdminRequestDetailItem = {
   id: string;
+  /** Non-null only when a Label Evaluator dataset covers this item's service. */
+  labelEvalDomain: LabelEvalDomain | null;
+  /** Chosen evaluation route; null = not chosen yet, both routes offered. */
+  assessmentMethod: AssessmentMethod | null;
+  /** Most recent Label Evaluator run on this item, for a direct link. */
+  latestLabelAssessment: {
+    id: string;
+    method: AssessmentMethod;
+    status: LabelAssessmentStatus;
+  } | null;
   productNameEn: string;
   productNameAr: string;
   brand: string | null;
@@ -711,6 +724,14 @@ export async function getAdminRequestDetail(
               },
               orderBy: { createdAt: "asc" },
             },
+            // Most recent Label Evaluator run, so the request page can link
+            // straight to whichever workspace is actually holding this item's
+            // evaluation instead of making the evaluator hunt for it.
+            labelAssessments: {
+              select: { id: true, method: true, status: true, domain: true },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
           },
         },
         createdBy: {
@@ -747,6 +768,16 @@ export async function getAdminRequestDetail(
     if (!request) return null;
 
     const pendingReopenRequest = request.reopenRequests[0] ?? null;
+
+    // Which items the Label Evaluator covers at all. An item with no mapping
+    // has no AI route, so the request page offers it no choice to make.
+    const evalMappings = await prisma.labelEvalServiceMapping.findMany({
+      where: { serviceItemId: { in: request.items.map((i) => i.serviceItemId) } },
+      select: { serviceItemId: true, domain: true },
+    });
+    const evalDomainByServiceItemId = new Map(
+      evalMappings.map((m) => [m.serviceItemId, m.domain]),
+    );
     const technicalReviewChecklistDefinition =
       await prisma.technicalReviewChecklist.findUnique({
         where: { id: "singleton" },
@@ -790,6 +821,15 @@ export async function getAdminRequestDetail(
       organisation: request.organisation,
       items: request.items.map((item) => ({
         id: item.id,
+        labelEvalDomain: evalDomainByServiceItemId.get(item.serviceItemId) ?? null,
+        assessmentMethod: item.assessmentMethod,
+        latestLabelAssessment: item.labelAssessments[0]
+          ? {
+              id: item.labelAssessments[0].id,
+              method: item.labelAssessments[0].method,
+              status: item.labelAssessments[0].status,
+            }
+          : null,
         productNameEn: item.productNameEn,
         productNameAr: item.productNameAr,
         brand: item.brand,
