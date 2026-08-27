@@ -1,3 +1,4 @@
+import { formatStamp } from "@/lib/format";
 import { getTranslations } from "next-intl/server";
 import type { SystemHealthView } from "@/server/admin/system-health-queries";
 
@@ -18,7 +19,7 @@ function StatCard({ label, value, warn }: { label: string; value: number; warn: 
 }
 
 function formatWhen(iso: string) {
-  return iso.slice(0, 16).replace("T", " ");
+  return formatStamp(iso);
 }
 
 export async function AdminSystemHealthView({ data }: Props) {

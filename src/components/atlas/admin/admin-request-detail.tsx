@@ -1,5 +1,6 @@
 "use client";
 
+import { formatStamp } from "@/lib/format";
 import { AssessmentPanel } from "@/components/atlas/admin/assessment-panel";
 import { EvaluationActivitiesPanel } from "@/components/atlas/admin/evaluation-activities-panel";
 import { EvaluationReportPanel } from "@/components/atlas/admin/evaluation-report-panel";
@@ -721,7 +722,7 @@ export function AdminRequestDetailPanel({
                         {locale === "ar" ? c.authorNameAr : c.authorNameEn}
                       </p>
                       <time className="font-data text-xs text-ink-500" dir="ltr">
-                        {c.createdAt.slice(0, 16).replace("T", " ")}
+                        {formatStamp(c.createdAt)}
                       </time>
                     </div>
                     <p className="mt-2 text-sm text-ink-800">
@@ -1525,7 +1526,7 @@ export function AdminRequestDetailPanel({
                     {locale === "ar" ? c.authorNameAr : c.authorNameEn}
                   </p>
                   <time className="font-data text-xs text-ink-500" dir="ltr">
-                    {c.createdAt.slice(0, 16).replace("T", " ")}
+                    {formatStamp(c.createdAt)}
                   </time>
                 </div>
                 <p className="mt-2 text-sm text-ink-800">
@@ -1620,7 +1621,7 @@ export function AdminRequestDetailPanel({
                     {locale === "ar" ? c.authorNameAr : c.authorNameEn}
                   </p>
                   <time className="font-data text-xs text-ink-500" dir="ltr">
-                    {c.createdAt.slice(0, 16).replace("T", " ")}
+                    {formatStamp(c.createdAt)}
                   </time>
                 </div>
                 <p className="mt-2 text-sm text-ink-800">

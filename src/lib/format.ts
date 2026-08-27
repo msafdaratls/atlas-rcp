@@ -50,3 +50,24 @@ export function formatDateTime(value: Date | string, locale: string) {
     timeStyle: "short",
   });
 }
+
+/**
+ * Fixed-width `YYYY-MM-DD HH:mm` stamp in Saudi local time, for data tables
+ * and timelines. Slicing the raw ISO string instead would render the stored
+ * UTC instant, which reads three hours behind the wall clock users see.
+ */
+export function formatStamp(value: Date | string) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: APP_TIME_ZONE,
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}`;
+}

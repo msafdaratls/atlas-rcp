@@ -1,3 +1,4 @@
+import { formatStamp } from "@/lib/format";
 import type { QualityView } from "@/server/admin/queries";
 import { getLocale, getTranslations } from "next-intl/server";
 
@@ -74,7 +75,7 @@ export async function AdminQualityView({ data }: Props) {
                   return (
                     <tr key={entry.id} className="border-b border-line last:border-b-0">
                       <td className="px-3 py-2 font-data text-xs text-ink-500" dir="ltr">
-                        {entry.createdAt.slice(0, 16).replace("T", " ")}
+                        {formatStamp(entry.createdAt)}
                       </td>
                       <td className="max-w-[10rem] truncate px-3 py-2 text-ink-800">
                         {actorName}

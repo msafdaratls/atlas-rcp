@@ -1,3 +1,4 @@
+import { formatStamp } from "@/lib/format";
 import { MoneyValue } from "@/components/atlas/money-value";
 import { StateBadge } from "@/components/atlas/state-badge";
 import { Button } from "@/components/ui/button";
@@ -228,7 +229,7 @@ export async function ClientDashboard({ data, locale }: Props) {
                   dateTime={ev.createdAt}
                   dir="ltr"
                 >
-                  {ev.createdAt.slice(0, 16).replace("T", " ")}
+                  {formatStamp(ev.createdAt)}
                 </time>
               </li>
             ))}

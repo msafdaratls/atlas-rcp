@@ -1,5 +1,6 @@
 "use client";
 
+import { formatStamp } from "@/lib/format";
 import { DocumentCard, type DocumentVersionView } from "@/components/atlas/document-card";
 import { MoneyValue } from "@/components/atlas/money-value";
 import { SlaMeter } from "@/components/atlas/sla-meter";
@@ -327,7 +328,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
                         {locale === "ar" ? c.authorNameAr : c.authorNameEn}
                       </p>
                       <time className="font-data text-xs text-ink-500" dir="ltr">
-                        {c.createdAt.slice(0, 16).replace("T", " ")}
+                        {formatStamp(c.createdAt)}
                       </time>
                     </div>
                     <p className="mt-2 text-sm text-ink-800">
@@ -844,7 +845,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
                     className="font-data text-xs text-ink-500"
                     dir="ltr"
                   >
-                    {c.createdAt.slice(0, 16).replace("T", " ")}
+                    {formatStamp(c.createdAt)}
                   </time>
                 </div>
                 <p className="mt-2 text-sm text-ink-800">

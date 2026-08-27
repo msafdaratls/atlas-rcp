@@ -1,5 +1,6 @@
 "use client";
 
+import { formatStamp } from "@/lib/format";
 import { DataTable } from "@/components/atlas/data-table";
 import { MessageSquare } from "lucide-react";
 import { RequestNumber } from "@/components/atlas/request-number";
@@ -149,7 +150,7 @@ export function AdminRequestsTable({
                   : "font-data text-xs text-ink-500"
               }
             >
-              {due.slice(0, 16).replace("T", " ")}
+              {formatStamp(due)}
             </time>
           );
         },
@@ -159,7 +160,7 @@ export function AdminRequestsTable({
         header: t("columns.updated"),
         cell: ({ row }) => (
           <time className="font-data text-xs text-ink-500" dir="ltr">
-            {row.original.updatedAt.slice(0, 16).replace("T", " ")}
+            {formatStamp(row.original.updatedAt)}
           </time>
         ),
       },

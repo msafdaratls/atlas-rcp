@@ -1,5 +1,6 @@
 "use client";
 
+import { formatStamp } from "@/lib/format";
 import { DataTable } from "@/components/atlas/data-table";
 import { RequestNumber } from "@/components/atlas/request-number";
 import { StateBadge } from "@/components/atlas/state-badge";
@@ -123,7 +124,7 @@ export function ClientRequestsTable({
         header: t("columns.updated"),
         cell: ({ row }) => (
           <time className="font-data text-xs text-ink-500" dir="ltr">
-            {row.original.updatedAt.slice(0, 16).replace("T", " ")}
+            {formatStamp(row.original.updatedAt)}
           </time>
         ),
       },
