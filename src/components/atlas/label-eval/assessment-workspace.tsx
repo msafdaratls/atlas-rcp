@@ -730,16 +730,25 @@ function ClassificationBlock({
             {category ? (isAr ? category.nameAr : category.nameEn) : t("noCategoriesAvailable")}
             {c?.overrideCategoryCode ? <span className="ms-2 text-xs text-state-warn">{t("manuallyOverridden")}</span> : null}
           </p>
+          {/*
+            On a MANUAL run there is no AI-detected category to have overridden
+            — setManualCategory writes overrideCategoryCode with
+            detectedCategoryCode left null — so the "Reclassified by X, AI
+            detected: —" line would describe a classification that never
+            happened. Say who set it instead.
+          */}
           {c?.overrideCategoryCode && c.overriddenByName ? (
             <p className="mt-1 text-[11px] text-ink-500">
-              {t("classificationOverriddenBy", {
-                name: c.overriddenByName,
-                detected: detectedCategory
-                  ? isAr
-                    ? detectedCategory.nameAr
-                    : detectedCategory.nameEn
-                  : (c.detectedCategoryCode ?? "—"),
-              })}
+              {detail.method === "MANUAL"
+                ? t("classificationSetBy", { name: c.overriddenByName })
+                : t("classificationOverriddenBy", {
+                    name: c.overriddenByName,
+                    detected: detectedCategory
+                      ? isAr
+                        ? detectedCategory.nameAr
+                        : detectedCategory.nameEn
+                      : (c.detectedCategoryCode ?? "—"),
+                  })}
             </p>
           ) : null}
           {c?.rationale ? <p className="mt-1 text-xs text-ink-500">{c.rationale}</p> : null}

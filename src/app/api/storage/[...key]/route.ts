@@ -165,24 +165,46 @@ export async function GET(_request: NextRequest, { params }: Params) {
           downloadName =
             docTemplate?.templateFileName ?? variantTemplate?.fileName ?? downloadName;
         } else {
-          const org = await prisma.organisation.findFirst({
-            where: { logoKey: key },
-            select: { id: true },
+          // Evaluator-owned copies of label artwork / ingredient lists
+          // (LabelDocument — src/server/label-eval/storage.ts writes these
+          // under label-eval/documents with fresh keys that appear in no
+          // other table). Without this branch every source-document link on
+          // an evaluator workspace fell through to the logo lookup and 404'd.
+          // Atlas-staff-only and gated on requests:admin, matching the
+          // permission every Label Evaluator query and action already
+          // requires — a client never sees these copies, only their own
+          // originals through the DocumentVersion branch above.
+          const labelDoc = await prisma.labelDocument.findFirst({
+            where: { storageKey: key },
+            select: { fileName: true },
           });
-          if (!org) {
-            return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-          }
-          if (isClient) {
-            assertClientOwns(session, org.id, "company:read");
-          } else if (isAtlas) {
-            if (
-              !checkPermission(session, "settings:admin") &&
-              !checkPermission(session, "staff:manage")
-            ) {
+
+          if (labelDoc) {
+            if (!isAtlas) {
               throw new Error("FORBIDDEN");
             }
+            requirePermission(session, "requests:admin");
+            downloadName = labelDoc.fileName;
           } else {
-            throw new Error("FORBIDDEN");
+            const org = await prisma.organisation.findFirst({
+              where: { logoKey: key },
+              select: { id: true },
+            });
+            if (!org) {
+              return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+            }
+            if (isClient) {
+              assertClientOwns(session, org.id, "company:read");
+            } else if (isAtlas) {
+              if (
+                !checkPermission(session, "settings:admin") &&
+                !checkPermission(session, "staff:manage")
+              ) {
+                throw new Error("FORBIDDEN");
+              }
+            } else {
+              throw new Error("FORBIDDEN");
+            }
           }
         }
       }

@@ -1,7 +1,10 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { AssessmentWorkspace } from "@/components/atlas/label-eval/assessment-workspace";
-import { ManualAssessmentWorkspace } from "@/components/atlas/label-eval/manual-assessment-workspace";
+import {
+  ManualAssessmentWorkspace,
+  ManualCategoryCard,
+} from "@/components/atlas/label-eval/manual-assessment-workspace";
 import { PageHeader } from "@/components/atlas/page-header";
 import { requireSession } from "@/lib/auth/session";
 import { isLocale, type Locale } from "@/lib/i18n/config";
@@ -56,7 +59,17 @@ export default async function ManualAssessmentPage({ params }: Props) {
       {detail.status === "MANUAL_IN_PROGRESS" ? (
         <ManualAssessmentWorkspace detail={detail} />
       ) : (
-        <AssessmentWorkspace detail={detail} domain={detail.domain} />
+        <div className="space-y-4">
+          {/*
+            Kept above the shared workspace after completion: the shared
+            ClassificationBlock only offers the AI Reclassify action, which is
+            hidden for manual runs because it would re-run the rule engine over
+            hand-typed verdicts. Without this a wrong category — which decides
+            the required-tests table — would be uncorrectable.
+          */}
+          {detail.domain === "COSMETICS" ? <ManualCategoryCard detail={detail} /> : null}
+          <AssessmentWorkspace detail={detail} domain={detail.domain} />
+        </div>
       )}
     </div>
   );
