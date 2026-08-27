@@ -174,9 +174,6 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
               <Label htmlFor="isInternational" className="cursor-pointer">
                 {t("internationalLabel")}
               </Label>
-              <p className="text-xs text-[var(--ink-500)]">
-                {t("internationalHint")}
-              </p>
             </div>
           </div>
 
