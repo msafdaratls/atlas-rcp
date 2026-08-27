@@ -1,6 +1,7 @@
 "use client";
 
 import { Download } from "lucide-react";
+import { useState } from "react";
 import {
   resolveTemplateChoice,
   type TemplateSlot,
@@ -30,6 +31,7 @@ export function DocumentTemplateLinks({
   ...slot
 }: Props) {
   const choice = resolveTemplateChoice(slot, productAttrs);
+  const [pickedVariantKey, setPickedVariantKey] = useState<string>("");
 
   if (choice.kind === "none") return null;
 
@@ -47,20 +49,30 @@ export function DocumentTemplateLinks({
     );
   }
 
+  const picked = choice.variants.find((v) => v.variantKey === pickedVariantKey);
+
   return (
-    <div className="mt-1">
+    <div className="mt-1 flex flex-col gap-1.5">
       <p className="text-xs text-ink-500">{chooseLabel}</p>
-      <ul className="mt-1 flex flex-col gap-0.5">
+      <select
+        value={pickedVariantKey}
+        onChange={(e) => setPickedVariantKey(e.target.value)}
+        className="w-full max-w-xs rounded-md border border-ink-200 bg-white px-2 py-1.5 text-xs text-ink-700"
+      >
+        <option value="">—</option>
         {choice.variants.map((v: TemplateVariant) => (
-          <li key={v.variantKey}>
-            <TemplateLink
-              href={v.url}
-              fileName={v.fileName}
-              label={variantLabel(v.variantKey)}
-            />
-          </li>
+          <option key={v.variantKey} value={v.variantKey}>
+            {variantLabel(v.variantKey)}
+          </option>
         ))}
-      </ul>
+      </select>
+      {picked && (
+        <TemplateLink
+          href={picked.url}
+          fileName={picked.fileName}
+          label={`${downloadLabel} — ${variantLabel(picked.variantKey)}`}
+        />
+      )}
     </div>
   );
 }
