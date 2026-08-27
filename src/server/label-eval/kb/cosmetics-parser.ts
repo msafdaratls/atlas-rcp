@@ -168,7 +168,9 @@ const TEST_NAME_TO_CATEGORY: Record<string, string> = {
 
 /**
  * GSO 1943 clause -> label-field mapping (design doc §7.2 audit — hand
- * reviewed against all 34 real rows, not inferred). Rows that check
+ * reviewed against all 34 real rows, not inferred). Only the clause 5
+ * labelling rows plus 4.2-01 are mapped — clauses 1, 4 and 6 are otherwise
+ * excluded from the checklist, see EXCLUDED_GSO_1943_CLAUSES. Rows that check
  * something the label artwork alone can't answer (formulation composition,
  * lab data, packaging-format-conditional exemptions) are deliberately routed
  * to `requires_additional_data` rather than force-fit onto a field — a false
@@ -183,11 +185,7 @@ type GsoMapping =
   | { kind: "requires_additional_data"; explanation: string };
 
 const GSO_1943_MAPPING: Record<string, GsoMapping> = {
-  "RULE-GSO1943-1.0-01": { kind: "requires_additional_data", explanation: "Cosmetics-scope determination — handled by product classification, not a per-item label check." },
-  "RULE-GSO1943-4.1-01": { kind: "requires_additional_data", explanation: "General safety requires a signed safety assessment / technical dossier, not derivable from label artwork." },
   "RULE-GSO1943-4.2-01": { kind: "ingredient_lookup" },
-  "RULE-GSO1943-4.3-01": { kind: "requires_additional_data", explanation: "Microbiological limits require lab test data." },
-  "RULE-GSO1943-4.4-01": { kind: "requires_additional_data", explanation: "Heavy-metal impurity limits require lab test data." },
   "RULE-GSO1943-5.1-01": { kind: "presence", fieldKey: ["product_name", "brand"], matchMode: "all" },
   "RULE-GSO1943-5.2-01": { kind: "presence", fieldKey: "manufacturer_name_address" },
   "RULE-GSO1943-5.3-01": { kind: "presence", fieldKey: "country_of_origin" },
@@ -196,7 +194,6 @@ const GSO_1943_MAPPING: Record<string, GsoMapping> = {
   "RULE-GSO1943-5.6-01": { kind: "presence", fieldKey: "batch_number" },
   "RULE-GSO1943-5.7-01": { kind: "presence", fieldKey: "warnings" },
   "RULE-GSO1943-5.8-01": { kind: "presence", fieldKey: ["product_function", "directions"], matchMode: "all" },
-  "RULE-GSO1943-6.0-01": { kind: "requires_additional_data", explanation: "Packaging-material safety (chemical compatibility with contents) requires spec/lab data." },
   "RULE-GSO1943-5.5-01A": { kind: "presence", fieldKey: "mfg_date" },
   // 01B and 01C are mutually exclusive by the product's actual shelf life
   // (≤30 months requires expiry date; >30 months requires PAO instead) —
@@ -223,25 +220,44 @@ const GSO_1943_MAPPING: Record<string, GsoMapping> = {
   "RULE-GSO1943-5.9-01E": { kind: "requires_additional_data", explanation: "CI-nomenclature correctness for colorants needs per-ingredient formulation review." },
   "RULE-GSO1943-5.9-01F": { kind: "requires_additional_data", explanation: "INCI-nomenclature correctness needs per-ingredient validation against the INCI dictionary." },
   "RULE-GSO1943-5.9-01G": { kind: "requires_additional_data", explanation: "Small-package leaflet exception applies only when package size makes label printing impractical — needs a reviewer to confirm applicability." },
-  "RULE-GSO1943-6.1-01A": { kind: "requires_additional_data", explanation: "Applies only to unpackaged toilet soap — needs a reviewer to confirm product form before checking presence." },
-  "RULE-GSO1943-6.2-01A": { kind: "requires_additional_data", explanation: "Applies only to hotel-amenity-sized packaging — needs a reviewer to confirm applicability." },
-  "RULE-GSO1943-6.3-01A": { kind: "requires_additional_data", explanation: "Applies only to multi-pack bundles — needs a reviewer to confirm packaging format." },
-  "RULE-GSO1943-6.4-01A": { kind: "requires_additional_data", explanation: "Applies only to glass ampule/vial formats — needs a reviewer to confirm packaging format." },
 };
 
+/**
+ * Clauses excluded from the label checklist. Clause 1 (scope) is settled by
+ * product classification, clause 4 (safety: composition, microbial limits,
+ * heavy metals) by the safety dossier and lab data, and clause 6 (packaging
+ * & presentation) by packaging specs — none of the three is a check on the
+ * label artwork, which is all this assessment covers. Rows are dropped at
+ * parse time, so a re-import of the same workbook produces the same reduced
+ * rule set.
+ *
+ * 4.2-01 is the one deliberate exception: it screens the printed INCI list
+ * against COSING Annex II/III, which IS a label-artwork check and the only
+ * auto-verifiable rule outside clause 5.
+ */
+const EXCLUDED_GSO_1943_CLAUSES = new Set(["1", "4", "6"]);
+
+/** Rules kept despite their clause being excluded above. */
+const KEPT_GSO_1943_RULE_IDS = new Set(["RULE-GSO1943-4.2-01"]);
+
+/** GSO 1943 rows in the workbook, before the clause exclusion above. */
 const EXPECTED_GSO_1943_COUNT = 34;
+
+/** How many of those survive the exclusion and become checklist rules. */
+const EXPECTED_GSO_1943_KEPT_COUNT = 25;
+
+/** Leading clause number of a rule id, e.g. "RULE-GSO1943-5.9-01A" -> "5". */
+function gso1943Clause(ruleId: string): string | null {
+  return /^RULE-GSO1943-(\d+)\./.exec(ruleId)?.[1] ?? null;
+}
 
 function arabicFallback(ruleId: string, titleEn: string, arabicByCode: Record<string, string>): string {
   return arabicByCode[ruleId] ?? titleEn;
 }
 
-/** Hand-translated titles for the 34 GSO 1943 rows — the source's own Arabic Translation column is empty for every row in this workbook. */
+/** Hand-translated titles for the kept GSO 1943 rows — the source's own Arabic Translation column is empty for every row in this workbook. */
 const GSO_1943_TITLE_AR: Record<string, string> = {
-  "RULE-GSO1943-1.0-01": "نطاق التطبيق",
-  "RULE-GSO1943-4.1-01": "متطلبات السلامة العامة",
   "RULE-GSO1943-4.2-01": "متطلبات السلامة - المكونات",
-  "RULE-GSO1943-4.3-01": "متطلبات السلامة - الحدود الميكروبية",
-  "RULE-GSO1943-4.4-01": "متطلبات السلامة - المعادن الثقيلة",
   "RULE-GSO1943-5.1-01": "بطاقة البيان - اسم المنتج والعلامة التجارية",
   "RULE-GSO1943-5.2-01": "بطاقة البيان - اسم وعنوان الصانع/الموزع",
   "RULE-GSO1943-5.3-01": "بطاقة البيان - بلد المنشأ",
@@ -250,7 +266,6 @@ const GSO_1943_TITLE_AR: Record<string, string> = {
   "RULE-GSO1943-5.6-01": "بطاقة البيان - رقم التشغيلة",
   "RULE-GSO1943-5.7-01": "بطاقة البيان - الاحتياطات والتحذيرات الخاصة",
   "RULE-GSO1943-5.8-01": "بطاقة البيان - الوظيفة وطريقة الاستخدام",
-  "RULE-GSO1943-6.0-01": "التعبئة والتغليف والعرض",
   "RULE-GSO1943-5.5-01A": "تتبع تاريخ التصنيع وحساب مدة الصلاحية الأساسية",
   "RULE-GSO1943-5.5-01B": "تاريخ انتهاء الصلاحية الإلزامي (مدة صلاحية ≤ 30 شهرًا)",
   "RULE-GSO1943-5.5-01C": "رمز الفترة بعد الفتح الإلزامي (مدة صلاحية > 30 شهرًا)",
@@ -267,14 +282,11 @@ const GSO_1943_TITLE_AR: Record<string, string> = {
   "RULE-GSO1943-5.9-01E": "قواعد إدراج الملونات (تسمية CI)",
   "RULE-GSO1943-5.9-01F": "الاستخدام الإلزامي لتسمية INCI",
   "RULE-GSO1943-5.9-01G": "استثناء نشرة العبوات الصغيرة",
-  "RULE-GSO1943-6.1-01A": "قواعد خاصة بصابون التواليت غير المعبأ",
-  "RULE-GSO1943-6.2-01A": "أحكام عبوات ونشرات مستلزمات الفنادق",
-  "RULE-GSO1943-6.3-01A": "متطلبات بيان المكونات للعبوات المتعددة",
-  "RULE-GSO1943-6.4-01A": "تحذيرات إلزامية للأمبولات والقوارير الزجاجية",
 };
 
 function parseGso1943(ws: ExcelJS.Worksheet, warnings: string[]): ParsedKbRule[] {
   const rules: ParsedKbRule[] = [];
+  let sourceRows = 0;
   const lastRow = ws.rowCount;
   for (let r = 2; r <= lastRow; r++) {
     const row = ws.getRow(r);
@@ -285,6 +297,15 @@ function parseGso1943(ws: ExcelJS.Worksheet, warnings: string[]): ParsedKbRule[]
       warnings.push(`Regulatory KB row ${r}: GSO 1943 row with no Rule ID — skipped.`);
       continue;
     }
+    sourceRows++;
+
+    const clause = gso1943Clause(ruleId);
+    if (clause === null) {
+      warnings.push(`Regulatory KB row ${r}: GSO 1943 rule "${ruleId}" has no recognisable clause number — skipped.`);
+      continue;
+    }
+    if (EXCLUDED_GSO_1943_CLAUSES.has(clause) && !KEPT_GSO_1943_RULE_IDS.has(ruleId)) continue;
+
     const mapping = GSO_1943_MAPPING[ruleId];
     if (!mapping) {
       warnings.push(`Regulatory KB row ${r}: GSO 1943 rule "${ruleId}" has no field mapping in the parser — imported as requires_additional_data (needs a reviewer to classify).`);
@@ -342,9 +363,14 @@ function parseGso1943(ws: ExcelJS.Worksheet, warnings: string[]): ParsedKbRule[]
     });
   }
 
-  if (rules.length !== EXPECTED_GSO_1943_COUNT) {
+  if (sourceRows !== EXPECTED_GSO_1943_COUNT) {
     throw new SchemaContractError(
-      `Parsed ${rules.length} GSO 1943 label-requirement rows, expected exactly ${EXPECTED_GSO_1943_COUNT}. Refusing to import a partial dataset.`,
+      `Found ${sourceRows} GSO 1943 rows, expected exactly ${EXPECTED_GSO_1943_COUNT}. Refusing to import a partial dataset.`,
+    );
+  }
+  if (rules.length !== EXPECTED_GSO_1943_KEPT_COUNT) {
+    throw new SchemaContractError(
+      `Kept ${rules.length} GSO 1943 label-requirement rules after excluding clauses ${[...EXCLUDED_GSO_1943_CLAUSES].join(", ")}, expected exactly ${EXPECTED_GSO_1943_KEPT_COUNT}. Refusing to import a partial dataset.`,
     );
   }
   return rules;

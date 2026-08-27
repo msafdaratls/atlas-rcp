@@ -952,11 +952,7 @@ async function main() {
         titleEn: "GSO 1943 — Cosmetic labelling",
         titleAr: "GSO 1943 — بطاقة مستحضرات التجميل",
         items: [
-        { code: "RULE-GSO1943-1.0-01", titleEn: "Scope", titleAr: "نطاق التطبيق", priority: "Critical" },
-        { code: "RULE-GSO1943-4.1-01", titleEn: "Safety Requirements - General", titleAr: "متطلبات السلامة العامة", priority: "Critical" },
         { code: "RULE-GSO1943-4.2-01", titleEn: "Safety Requirements - Ingredients", titleAr: "متطلبات السلامة - المكونات", priority: "Critical" },
-        { code: "RULE-GSO1943-4.3-01", titleEn: "Safety Requirements - Microbial Limits", titleAr: "متطلبات السلامة - الحدود الميكروبية", priority: "Critical" },
-        { code: "RULE-GSO1943-4.4-01", titleEn: "Safety Requirements - Heavy Metals", titleAr: "متطلبات السلامة - المعادن الثقيلة", priority: "Critical" },
         { code: "RULE-GSO1943-5.1-01", titleEn: "Labeling - Product Name & Trademark", titleAr: "بطاقة البيان - اسم المنتج والعلامة التجارية", priority: "Major" },
         { code: "RULE-GSO1943-5.2-01", titleEn: "Labeling - Manufacturer / Distributor Name & Address", titleAr: "بطاقة البيان - اسم وعنوان الصانع/الموزع", priority: "Critical" },
         { code: "RULE-GSO1943-5.3-01", titleEn: "Labeling - Country of Origin", titleAr: "بطاقة البيان - بلد المنشأ", priority: "Major" },
@@ -981,11 +977,6 @@ async function main() {
         { code: "RULE-GSO1943-5.9-01E", titleEn: "Colorant listing rules, CI nomenclature, and 'may contain' exception.", titleAr: "قواعد إدراج الملونات (تسمية CI)", priority: undefined },
         { code: "RULE-GSO1943-5.9-01F", titleEn: "Mandatory use of INCI nomenclature for ingredient names.", titleAr: "الاستخدام الإلزامي لتسمية INCI", priority: undefined },
         { code: "RULE-GSO1943-5.9-01G", titleEn: "Small package ingredient leaflet exception.", titleAr: "استثناء نشرة العبوات الصغيرة", priority: undefined },
-        { code: "RULE-GSO1943-6.0-01", titleEn: "Packaging & Presentation", titleAr: "التعبئة والتغليف والعرض", priority: "Major" },
-        { code: "RULE-GSO1943-6.1-01A", titleEn: "Specific labeling rules for unpackaged toilet soaps.", titleAr: "قواعد خاصة بصابون التواليت غير المعبأ", priority: undefined },
-        { code: "RULE-GSO1943-6.2-01A", titleEn: "Hotel amenities packaging and leaflet provisions.", titleAr: "أحكام عبوات ونشرات مستلزمات الفنادق", priority: undefined },
-        { code: "RULE-GSO1943-6.3-01A", titleEn: "Multi-pack ingredient labeling requirements.", titleAr: "متطلبات بيان المكونات للعبوات المتعددة", priority: undefined },
-        { code: "RULE-GSO1943-6.4-01A", titleEn: "Mandatory warnings for glass ampules and vials in Arabic and English.", titleAr: "تحذيرات إلزامية للأمبولات والقوارير الزجاجية باللغتين العربية والإنجليزية", priority: undefined },
         ],
       },
       // Claims KB rows past GEN-3-1 carry only Arabic text in the source's
