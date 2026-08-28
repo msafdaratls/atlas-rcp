@@ -66,7 +66,7 @@
       "clients": "Clients",
       "catalogue": "Catalogue",
       "laboratories": "Laboratories",
-      "evalCatalog": "Evaluation catalog",
+      "evalCatalog": "Technical regulations",
       "engagements": "Engagements",
       "labelEvalSfda": "SFDA Supplement Evaluator",
       "labelEvalCosmetics": "Cosmetics Evaluator",
@@ -1431,7 +1431,7 @@
         "SFDA-COS-002": "Cosmetics SCOC"
       },
       "noRegulationsTitle": "No technical regulations yet",
-      "noRegulationsDescription": "Add one to start building this service's tariff-driven evaluation catalog.",
+      "noRegulationsDescription": "Add one to start building this service's tariff-driven technical regulations.",
       "tariffItemCount": "{count, plural, one {# tariff item} other {# tariff items}}",
       "generalChecklist": "General checklist",
       "generalChecklistSubtitle": "Applies to every product under this regulation, referenced by the regulation itself (edit gated to the Quality team).",
@@ -1475,7 +1475,7 @@
       "import": {
         "pageTitle": "Regulation workbooks",
         "pageDescription": "Update a technical regulation — or add a new one — from an Excel workbook. Every upload is checked and previewed before anything changes.",
-        "backToCatalog": "Back to the evaluation catalog",
+        "backToCatalog": "Back to Technical regulations",
         "startTitle": "Get a workbook to edit",
         "startSubtitle": "Export an existing regulation to edit it, or start a new one from the blank template. Both produce a file this page accepts back verbatim.",
         "exportExisting": "Export an existing regulation",
