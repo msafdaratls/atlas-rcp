@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  combineAssessments,
   computeAssessment,
   parseAssessment,
   parseCheckSets,
@@ -150,5 +151,76 @@ describe("parseCheckSets", () => {
   it("returns [] for non-arrays", () => {
     assert.deepEqual(parseCheckSets(null), []);
     assert.deepEqual(parseCheckSets({}), []);
+  });
+});
+
+describe("combineAssessments — tariff evaluation's three independent sections", () => {
+  const general = set("GENERAL", ["G1", "G2"]);
+  const labeling = set("LABEL", ["L1"]);
+
+  it("sums totals and answers across sections", () => {
+    const summary = combineAssessments([
+      computeAssessment([general], { verdicts: { G1: "COMPLIANT", G2: "COMPLIANT" } }),
+      computeAssessment([labeling], { verdicts: { L1: "COMPLIANT" } }),
+    ]);
+    assert.equal(summary.total, 3);
+    assert.equal(summary.assessed, 3);
+    assert.equal(summary.complete, true);
+    assert.equal(summary.recommendation, "ACCEPTED");
+  });
+
+  it("does NOT let one section's answer satisfy the same code in another section", () => {
+    // The same item code legitimately appears in two sections. Scoring a
+    // merged verdict map would count this as 2-of-2 answered; scoring the
+    // sections independently correctly reports it as 1-of-2.
+    const shared = set("SPECIFIC", ["G1"]);
+    const summary = combineAssessments([
+      computeAssessment([general], { verdicts: { G1: "COMPLIANT", G2: "COMPLIANT" } }),
+      computeAssessment([shared], { verdicts: {} }),
+    ]);
+    assert.equal(summary.total, 3);
+    assert.equal(summary.assessed, 2);
+    assert.equal(summary.complete, false);
+    assert.equal(summary.recommendation, "INCOMPLETE");
+  });
+
+  it("treats a zero-item evaluation as complete, not permanently blocked", () => {
+    // Every template still empty: there is nothing to answer, so the
+    // evaluation must remain completable rather than deadlocking the request.
+    const summary = combineAssessments([
+      computeAssessment([], { verdicts: {} }),
+      computeAssessment([], { verdicts: {} }),
+    ]);
+    assert.equal(summary.total, 0);
+    assert.equal(summary.complete, true);
+    assert.equal(summary.recommendation, "ACCEPTED");
+  });
+
+  it("is incomplete while any section has an unanswered item", () => {
+    const summary = combineAssessments([
+      computeAssessment([general], { verdicts: { G1: "COMPLIANT" } }),
+      computeAssessment([labeling], { verdicts: { L1: "COMPLIANT" } }),
+    ]);
+    assert.equal(summary.complete, false);
+    assert.equal(summary.recommendation, "INCOMPLETE");
+  });
+
+  it("carries a non-compliant item in any section into the overall decision", () => {
+    const summary = combineAssessments([
+      computeAssessment([general], { verdicts: { G1: "COMPLIANT", G2: "COMPLIANT" } }),
+      computeAssessment([labeling], { verdicts: { L1: "NON_COMPLIANT" } }),
+    ]);
+    assert.equal(summary.complete, true);
+    // 2 of 3 compliant = 66% — below the 80% remarks threshold.
+    assert.equal(summary.recommendation, "REJECTED");
+  });
+
+  it("N/A items never drag the decision down", () => {
+    const summary = combineAssessments([
+      computeAssessment([general], { verdicts: { G1: "COMPLIANT", G2: "NA" } }),
+      computeAssessment([labeling], { verdicts: { L1: "NA" } }),
+    ]);
+    assert.equal(summary.complete, true);
+    assert.equal(summary.recommendation, "ACCEPTED");
   });
 });

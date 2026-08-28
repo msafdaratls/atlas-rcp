@@ -4,6 +4,7 @@ import { formatStamp } from "@/lib/format";
 import { AssessmentPanel } from "@/components/atlas/admin/assessment-panel";
 import { EvaluationActivitiesPanel } from "@/components/atlas/admin/evaluation-activities-panel";
 import { EvaluationReportPanel } from "@/components/atlas/admin/evaluation-report-panel";
+import { TariffEvaluationPanel } from "@/components/atlas/admin/tariff-evaluation-panel";
 import { ExternalDeliverablePanel } from "@/components/atlas/admin/external-deliverable-panel";
 import { MentionTextarea } from "@/components/atlas/admin/mention-textarea";
 import { TechnicalReviewChecklistPanel } from "@/components/atlas/admin/technical-review-checklist-panel";
@@ -46,6 +47,7 @@ import {
 import { hasCheckItems } from "@/lib/assessment";
 import { cn } from "@/lib/utils";
 import { isLabTestingOnlyRequest, isScocOnlyRequest } from "@/lib/scoc-services";
+import { isTariffEvalServiceCode } from "@/lib/tariff-evaluation-services";
 import type {
   AdminRequestDetail,
   AssignableStaffUser,
@@ -1494,18 +1496,33 @@ export function AdminRequestDetailPanel({
         : null}
 
       {!isLabTestingOnly && ASSESSMENT_SHOW_STATES.includes(data.state)
-        ? data.items.map((item) => (
-            <EvaluationReportPanel
-              key={item.id}
-              requestItemId={item.id}
-              serviceCode={item.serviceItem.code}
-              title={
-                locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
-              }
-              documents={item.documents}
-              editable={data.state === "ASSESSMENT_RUNNING"}
-            />
-          ))
+        ? data.items.map((item) =>
+            isTariffEvalServiceCode(item.serviceItem.code) ? (
+              <TariffEvaluationPanel
+                key={item.id}
+                requestItemId={item.id}
+                serviceCode={item.serviceItem.code}
+                title={
+                  locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
+                }
+                regulations={item.tariffRegulations}
+                tariffEvaluation={item.tariffEvaluation}
+                documents={item.documents}
+                editable={data.state === "ASSESSMENT_RUNNING"}
+              />
+            ) : (
+              <EvaluationReportPanel
+                key={item.id}
+                requestItemId={item.id}
+                serviceCode={item.serviceItem.code}
+                title={
+                  locale === "ar" ? item.serviceItem.nameAr : item.serviceItem.nameEn
+                }
+                documents={item.documents}
+                editable={data.state === "ASSESSMENT_RUNNING"}
+              />
+            ),
+          )
         : null}
 
       {ASSESSMENT_SHOW_STATES.includes(data.state)

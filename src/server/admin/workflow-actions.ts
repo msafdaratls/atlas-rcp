@@ -16,6 +16,11 @@ import { prisma } from "@/lib/db";
 import { evaluationReportLabelsFor } from "@/lib/evaluation-report-labels";
 import { log } from "@/lib/logger";
 import { canTransitionRequest, requirePermission } from "@/lib/rbac";
+import {
+  isTariffEvalServiceCode,
+  parseSnapshot,
+  snapshotItemCount,
+} from "@/lib/tariff-evaluation-services";
 import { resumeSlaDueAt } from "@/lib/sla";
 import {
   allowedTransitionsFor,
@@ -1050,6 +1055,25 @@ async function assertReopenTargetSatisfiesGates(
  * request there with a fresh SLA clock; rejection requires an explanation and
  * leaves the request untouched.
  */
+/**
+ * A request reopened back into evaluation must not carry a stale decision.
+ * `finalDecision` is what the completion gate checks, so leaving it set would
+ * let the request advance again on answers the evaluator is now editing.
+ * Clearing it (and completedAt) puts the evaluation back in progress with its
+ * answers and pinned template intact.
+ */
+async function clearTariffEvaluationCompletion(
+  tx: Prisma.TransactionClient,
+  requestId: string,
+  targetState: RequestState,
+): Promise<void> {
+  if (targetState !== "ASSESSMENT_RUNNING") return;
+  await tx.tariffEvaluation.updateMany({
+    where: { requestItem: { requestId } },
+    data: { finalDecision: null, completedAt: null },
+  });
+}
+
 export async function decideReopenRequest(
   input: z.infer<typeof decideReopenRequestSchema>,
 ): Promise<ActionResult> {
@@ -1152,6 +1176,8 @@ export async function decideReopenRequest(
             decidedAt: now,
           },
         });
+
+        await clearTariffEvaluationCompletion(tx, request.id, targetState!);
       }
 
       await tx.auditLog.create({
@@ -1295,6 +1321,8 @@ export async function reopenRequestByAdmin(
           metadata: { reopenRequestId: reopenRequest.id, adminInitiated: true },
         },
       });
+
+      await clearTariffEvaluationCompletion(tx, requestId, targetState);
 
       await tx.auditLog.create({
         data: {
@@ -2607,23 +2635,92 @@ export async function uploadActivityReport(formData: FormData): Promise<
 const EVALUATION_REPORT_ACCEPTED = ["application/pdf", "image/png", "image/jpeg"];
 const EVALUATION_REPORT_MAX_MB = 50;
 
-/** Every RequestItem on the request has all of its required Evaluation Report documents uploaded. */
+/**
+ * Every RequestItem on the request has satisfied its Evaluation step: the
+ * required Evaluation Report document(s) uploaded (all services, unchanged),
+ * plus — for SAB-001/SFDA-COS-002, see isTariffEvalServiceCode — a completed
+ * tariff evaluation via TariffEvaluationPanel.
+ *
+ * The tariff-evaluation requirement is conditional on the service actually
+ * having a USABLE catalog — at least one active regulation that has checklist
+ * items to answer. Without that condition a service with an empty catalog
+ * (SFDA-COS-002 ships with none) could never satisfy the gate: there is
+ * nothing to select or nothing to answer, so finalDecision can never be set
+ * and every request would be stuck in ASSESSMENT_RUNNING for good. Once
+ * Quality populates that service's catalog, the requirement starts applying
+ * on its own.
+ */
 async function hasEvaluationReportForAllItems(requestId: string): Promise<boolean> {
   const items = await prisma.requestItem.findMany({
     where: { requestId },
     select: {
+      serviceItemId: true,
       serviceItem: { select: { code: true } },
       documents: {
         where: { currentVersionId: { not: null } },
         select: { label: true },
       },
+      tariffEvaluation: { select: { finalDecision: true, templateSnapshot: true } },
     },
   });
   if (items.length === 0) return false;
+
+  const tariffServiceItemIds = items
+    .filter((i) => isTariffEvalServiceCode(i.serviceItem.code))
+    .map((i) => i.serviceItemId);
+
+  const regulations =
+    tariffServiceItemIds.length > 0
+      ? await prisma.technicalRegulation.findMany({
+          where: { serviceItemId: { in: tariffServiceItemIds }, active: true },
+          select: {
+            serviceItemId: true,
+            generalChecklist: true,
+            labelingChecklist: true,
+            documentsChecklist: true,
+            standards: { where: { active: true }, select: { checklist: true } },
+          },
+        })
+      : [];
+
+  const configured = new Set(
+    regulations
+      .filter((regulation) => {
+        const count = (raw: Prisma.JsonValue) =>
+          parseCheckSets(raw).reduce((n, set) => n + set.items.length, 0);
+        return (
+          count(regulation.generalChecklist) +
+            count(regulation.labelingChecklist) +
+            count(regulation.documentsChecklist) +
+            regulation.standards.reduce((n, s) => n + count(s.checklist), 0) >
+          0
+        );
+      })
+      .map((regulation) => regulation.serviceItemId),
+  );
+
   return items.every((item) => {
     const required = evaluationReportLabelsFor(item.serviceItem.code);
     const uploadedLabels = new Set(item.documents.map((d) => d.label));
-    return required.every((label) => uploadedLabels.has(label));
+    if (!required.every((label) => uploadedLabels.has(label))) return false;
+
+    if (!isTariffEvalServiceCode(item.serviceItem.code)) return true;
+
+    // Once an evaluation exists, its own pinned snapshot decides whether there
+    // was anything to assess — not whether some OTHER regulation under the same
+    // service happens to be configured. Asking the service-wide question would
+    // demand a decision that completeTariffEvaluation refuses to produce
+    // (NO_CHECKLIST_ITEMS), leaving the request unable to advance.
+    const evaluation = item.tariffEvaluation;
+    if (evaluation) {
+      const snapshot = parseSnapshot(evaluation.templateSnapshot);
+      if (snapshot && snapshotItemCount(snapshot) === 0) return true;
+      return evaluation.finalDecision != null;
+    }
+
+    // Nothing selected yet: fall back to the catalog, so a service with no
+    // configured regulation at all never blocks the request.
+    return !configured.has(item.serviceItemId);
   });
 }
 

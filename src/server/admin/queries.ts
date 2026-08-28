@@ -1,4 +1,5 @@
 import type {
+  AssessmentDecisionDb,
   AssessmentMethod,
   CommentDirection,
   CouponAppliesTo,
@@ -27,6 +28,14 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { toNumber } from "@/lib/pricing";
 import { canTransitionRequest, requirePermission, checkPermission } from "@/lib/rbac";
+import {
+  isTariffEvalServiceCode,
+  parseSectionVerdicts,
+  parseSnapshot,
+  TARIFF_EVAL_SERVICE_CODES,
+  type SectionVerdicts,
+  type TariffEvaluationSnapshot,
+} from "@/lib/tariff-evaluation-services";
 import { getOrganisationBalance, getOrganisationBalances } from "@/server/finance/ledger";
 
 /**
@@ -548,6 +557,23 @@ export type AdminRequestDetailItem = {
     customLabel: string | null;
     notes: string | null;
   }>;
+  /** TariffEvaluationPanel's regulation dropdown options (SAB-001/SFDA-COS-002 only, else empty). */
+  tariffRegulations: Array<{ id: string; code: string; titleEn: string; titleAr: string }>;
+  /**
+   * The tariff evaluation run for this item, once a regulation + tariff item
+   * has been selected. Everything renderable comes from `snapshot`, pinned at
+   * selection — the live catalog is deliberately not read here, so a workbook
+   * import can never alter an evaluation already under way.
+   */
+  tariffEvaluation: {
+    id: string;
+    technicalRegulationId: string;
+    tariffItemId: string;
+    snapshot: TariffEvaluationSnapshot;
+    sectionVerdicts: SectionVerdicts;
+    finalDecision: AssessmentDecisionDb | null;
+    completedAt: string | null;
+  } | null;
 };
 
 export type AdminRequestDetail = {
@@ -644,6 +670,37 @@ export function parseCommentAttachments(raw: unknown): CommentAttachment[] {
   return out;
 }
 
+/**
+ * Shapes a stored evaluation for the panel. An evaluation whose snapshot fails
+ * to parse is reported as absent rather than rendered from the live catalog —
+ * showing a checklist the evaluation was never judged against would be worse
+ * than showing none.
+ */
+function toTariffEvaluationView(
+  row: {
+    id: string;
+    technicalRegulationId: string;
+    tariffItemId: string;
+    templateSnapshot: Prisma.JsonValue;
+    sectionVerdicts: Prisma.JsonValue;
+    finalDecision: AssessmentDecisionDb | null;
+    completedAt: Date | null;
+  } | null,
+): AdminRequestDetailItem["tariffEvaluation"] {
+  if (!row) return null;
+  const snapshot = parseSnapshot(row.templateSnapshot);
+  if (!snapshot) return null;
+  return {
+    id: row.id,
+    technicalRegulationId: row.technicalRegulationId,
+    tariffItemId: row.tariffItemId,
+    snapshot,
+    sectionVerdicts: parseSectionVerdicts(row.sectionVerdicts),
+    finalDecision: row.finalDecision,
+    completedAt: row.completedAt?.toISOString() ?? null,
+  };
+}
+
 export async function getAdminRequestDetail(
   id: string,
 ): Promise<AdminRequestDetail | null> {
@@ -732,6 +789,12 @@ export async function getAdminRequestDetail(
               orderBy: { createdAt: "desc" },
               take: 1,
             },
+            // Tariff-driven evaluation run (SAB-001/SFDA-COS-002 only, see
+            // isTariffEvalServiceCode). No catalog joins: everything the panel
+            // renders lives in `templateSnapshot`, pinned when the tariff item
+            // was selected. The tariff-item CATALOG (up to 1,527 rows per
+            // regulation) is fetched on demand via listTariffItemsForRegulation.
+            tariffEvaluation: true,
           },
         },
         createdBy: {
@@ -782,6 +845,21 @@ export async function getAdminRequestDetail(
       await prisma.technicalReviewChecklist.findUnique({
         where: { id: "singleton" },
       });
+
+    // Regulation options for TariffEvaluationPanel's first dropdown, keyed
+    // by service item — lightweight (no tariffItems/standards), only for
+    // SAB-001/SFDA-COS-002 items actually present on this request.
+    const tariffServiceItemIds = request.items
+      .filter((i) => isTariffEvalServiceCode(i.serviceItem.code))
+      .map((i) => i.serviceItemId);
+    const tariffRegulations =
+      tariffServiceItemIds.length > 0
+        ? await prisma.technicalRegulation.findMany({
+            where: { serviceItemId: { in: tariffServiceItemIds }, active: true },
+            select: { id: true, serviceItemId: true, code: true, titleEn: true, titleAr: true },
+            orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+          })
+        : [];
 
     return {
       id: request.id,
@@ -935,6 +1013,10 @@ export async function getAdminRequestDetail(
           customLabel: rt.customLabel,
           notes: rt.notes,
         })),
+        tariffRegulations: tariffRegulations
+          .filter((r) => r.serviceItemId === item.serviceItemId)
+          .map((r) => ({ id: r.id, code: r.code, titleEn: r.titleEn, titleAr: r.titleAr })),
+        tariffEvaluation: toTariffEvaluationView(item.tariffEvaluation),
       })),
       technicalReviewChecklist: {
         checkSets: parseCheckSets(technicalReviewChecklistDefinition?.checkSets),
@@ -1839,6 +1921,192 @@ export async function getTechnicalReviewChecklistItems(): Promise<
     return checkSets.flatMap((s) =>
       s.items.map((i) => ({ code: i.code, titleEn: i.titleEn, titleAr: i.titleAr })),
     );
+  } catch {
+    return null;
+  }
+}
+
+// ─── Eval catalog (tariff-driven evaluation templates, PCOC/SCOC) ──────────
+
+export type EvalCatalogChecklistItem = {
+  code: string;
+  titleEn: string;
+  titleAr: string;
+  applicability?: string;
+  priority?: string;
+};
+
+export type EvalCatalogRegulation = {
+  id: string;
+  serviceItemId: string;
+  serviceCode: string;
+  code: string;
+  titleEn: string;
+  titleAr: string;
+  tariffItemCount: number;
+  generalItems: EvalCatalogChecklistItem[];
+  labelingItems: EvalCatalogChecklistItem[];
+  documentsItems: EvalCatalogChecklistItem[];
+  standards: Array<{
+    id: string;
+    code: string;
+    titleEn: string;
+    titleAr: string;
+    kind: "GENERAL" | "SPECIFIC";
+    active: boolean;
+    items: EvalCatalogChecklistItem[];
+    itemCount: number;
+  }>;
+};
+
+/**
+ * Regulations (with flattened checklist templates) for the eval-catalog
+ * admin page — SAB-001/SFDA-COS-002 only. Viewable by either eval-catalog
+ * permission (Quality manages general/labeling + general standards;
+ * Evaluator/CoC manages specific standards only) — the page itself derives
+ * per-section edit booleans from each permission separately.
+ */
+export async function getEvalCatalogRegulations(): Promise<EvalCatalogRegulation[] | null> {
+  try {
+    const session = await requireSession();
+    if (!checkPermission(session, "eval-catalog:manage") && !checkPermission(session, "eval-catalog:specific-standard")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const regulations = await prisma.technicalRegulation.findMany({
+      where: { serviceItem: { code: { in: [...TARIFF_EVAL_SERVICE_CODES] } } },
+      include: {
+        serviceItem: { select: { id: true, code: true } },
+        standards: { orderBy: { code: "asc" } },
+        _count: { select: { tariffItems: true } },
+      },
+      // `code` breaks the tie so the list order is stable between loads —
+      // every seeded regulation shares sortOrder 0.
+      orderBy: [{ serviceItemId: "asc" }, { sortOrder: "asc" }, { code: "asc" }],
+    });
+
+    // Flatten across ALL check sets, not just the first: the editor saves back
+    // exactly what it was given as a single set, so reading only [0] would
+    // silently destroy every later set the moment anyone pressed Save.
+    const flatten = (raw: unknown): EvalCatalogChecklistItem[] =>
+      parseCheckSets(raw).flatMap((s) =>
+        s.items.map((i) => ({
+          code: i.code,
+          titleEn: i.titleEn,
+          titleAr: i.titleAr,
+          ...(i.applicability ? { applicability: i.applicability } : {}),
+          ...(i.priority ? { priority: i.priority } : {}),
+        })),
+      );
+
+    return regulations.map((r) => {
+      return {
+        id: r.id,
+        serviceItemId: r.serviceItemId,
+        serviceCode: r.serviceItem.code,
+        code: r.code,
+        titleEn: r.titleEn,
+        titleAr: r.titleAr,
+        tariffItemCount: r._count.tariffItems,
+        generalItems: flatten(r.generalChecklist),
+        labelingItems: flatten(r.labelingChecklist),
+        documentsItems: flatten(r.documentsChecklist),
+        standards: r.standards.map((s) => {
+          const items = flatten(s.checklist);
+          return {
+            id: s.id,
+            code: s.code,
+            titleEn: s.titleEn,
+            titleAr: s.titleAr,
+            kind: s.kind,
+            active: s.active,
+            items,
+            itemCount: items.length,
+          };
+        }),
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+export type RegulationImportPageData = {
+  regulations: Array<{ id: string; code: string; titleEn: string; titleAr: string; serviceCode: string }>;
+  history: Array<{
+    id: string;
+    regulationCode: string;
+    sourceFilename: string;
+    status: "PENDING" | "APPLIED" | "DISCARDED";
+    uploadedAt: string;
+    uploadedBy: string;
+    appliedAt: string | null;
+  }>;
+};
+
+/** Everything the regulation-workbook import page renders. */
+export async function getRegulationImportPageData(): Promise<RegulationImportPageData | null> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "eval-catalog:manage");
+
+    const [regulations, imports] = await Promise.all([
+      prisma.technicalRegulation.findMany({
+        where: { serviceItem: { code: { in: [...TARIFF_EVAL_SERVICE_CODES] } } },
+        select: {
+          id: true,
+          code: true,
+          titleEn: true,
+          titleAr: true,
+          serviceItem: { select: { code: true } },
+        },
+        orderBy: [{ serviceItemId: "asc" }, { code: "asc" }],
+      }),
+      prisma.regulationImport.findMany({
+        orderBy: { uploadedAt: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          regulationCode: true,
+          sourceFilename: true,
+          status: true,
+          uploadedAt: true,
+          appliedAt: true,
+          uploadedByUserId: true,
+        },
+      }),
+    ]);
+
+    // Uploader names are resolved separately rather than through a relation:
+    // RegulationImport intentionally has no User FK, so a staff account can be
+    // removed without erasing the catalog's change history.
+    const uploaderIds = [...new Set(imports.map((i) => i.uploadedByUserId))];
+    const uploaders = uploaderIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: uploaderIds } },
+          select: { id: true, fullNameEn: true },
+        })
+      : [];
+    const nameById = new Map(uploaders.map((u) => [u.id, u.fullNameEn]));
+
+    return {
+      regulations: regulations.map((r) => ({
+        id: r.id,
+        code: r.code,
+        titleEn: r.titleEn,
+        titleAr: r.titleAr,
+        serviceCode: r.serviceItem.code,
+      })),
+      history: imports.map((i) => ({
+        id: i.id,
+        regulationCode: i.regulationCode,
+        sourceFilename: i.sourceFilename,
+        status: i.status,
+        uploadedAt: i.uploadedAt.toISOString().slice(0, 16).replace("T", " "),
+        uploadedBy: nameById.get(i.uploadedByUserId) ?? "—",
+        appliedAt: i.appliedAt?.toISOString() ?? null,
+      })),
+    };
   } catch {
     return null;
   }

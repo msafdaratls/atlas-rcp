@@ -6,6 +6,7 @@ import {
   Building2,
   ClipboardCheck,
   ClipboardList,
+  ClipboardType,
   FilePlus2,
   Files,
   FileSearch,
@@ -124,6 +125,12 @@ const ADMIN_NAV: NavItem[] = [
     href: "/laboratories",
     icon: FlaskConical,
     roles: ["CATALOGUE_MANAGER", "SYSTEM_ADMIN"],
+  },
+  {
+    key: "evalCatalog",
+    href: "/eval-catalog",
+    icon: ClipboardType,
+    roles: ["QUALITY_MANAGER", "EVALUATOR", "SYSTEM_ADMIN"],
   },
   {
     key: "engagements",

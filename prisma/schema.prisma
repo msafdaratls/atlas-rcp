@@ -363,11 +363,13 @@ model ServiceItem {
   sortOrder                  Int             @default(0)
   active                     Boolean         @default(true)
 
-  subCategory       SubCategory        @relation(fields: [subCategoryId], references: [id])
-  defaultEvaluator  User?              @relation("ServiceItemDefaultEvaluator", fields: [defaultEvaluatorId], references: [id])
-  requiredDocuments RequiredDocument[]
-  requestItems      RequestItem[]
-  engagements       Engagement[]
+  subCategory          SubCategory           @relation(fields: [subCategoryId], references: [id])
+  defaultEvaluator     User?                 @relation("ServiceItemDefaultEvaluator", fields: [defaultEvaluatorId], references: [id])
+  requiredDocuments    RequiredDocument[]
+  requestItems         RequestItem[]
+  engagements          Engagement[]
+  technicalRegulations TechnicalRegulation[]
+  regulationImports    RegulationImport[]
 
   @@unique([subCategoryId, code])
   @@index([subCategoryId, active, sortOrder])
@@ -388,35 +390,230 @@ model TechnicalReviewChecklist {
   updatedByUserId String?
 }
 
+enum StandardKind {
+  GENERAL
+  SPECIFIC
+}
+
+enum AssessmentDecisionDb {
+  ACCEPTED
+  ACCEPTED_WITH_REMARKS
+  REJECTED
+  INCOMPLETE
+}
+
+/// One technical regulation (e.g. a SABER product-safety regulation) under
+/// which a set of customs tariff items (HS codes) is evaluated. Scoped to a
+/// single ServiceItem (SAB-001 PCOC or SFDA-COS-002 Cosmetics SCOC today).
+/// generalChecklist/labelingChecklist are CheckSet[] JSON templates (same
+/// shape/engine as TechnicalReviewChecklist, src/lib/assessment.ts) defined
+/// once here and reused — answered fresh — by every request under this
+/// regulation, rather than duplicated per request.
+model TechnicalRegulation {
+  id                 String   @id @default(cuid())
+  serviceItemId      String
+  code               String
+  titleEn            String
+  titleAr            String
+  generalChecklist   Json     @default("[]")
+  labelingChecklist  Json     @default("[]")
+  /// Required-documents verification checklist (CheckSet[]), answered
+  /// Compliant/Non-compliant/N-A by the evaluator during the evaluation.
+  /// Deliberately NOT the same thing as ServiceItem.requiredDocuments, which
+  /// are the client-facing upload slots collected at intake: this list is
+  /// "the evaluator confirms document X is present and valid", the upload
+  /// slots are "the client must attach file X".
+  documentsChecklist Json     @default("[]")
+  active             Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  updatedAt          DateTime @updatedAt
+  updatedByUserId    String?
+
+  serviceItem ServiceItem        @relation(fields: [serviceItemId], references: [id])
+  tariffItems TariffItem[]
+  standards   Standard[]
+  evaluations TariffEvaluation[]
+  imports     RegulationImport[]
+
+  @@unique([serviceItemId, code])
+  @@index([serviceItemId, active])
+}
+
+/// A general or specific standard under a TechnicalRegulation. checklist is
+/// a CheckSet[] JSON template — for SPECIFIC standards this starts empty
+/// ("[]") and is filled in by the Certificate of Conformity team once they
+/// adopt the standard's actual test content.
+model Standard {
+  id                    String       @id @default(cuid())
+  technicalRegulationId String
+  code                  String
+  titleEn               String
+  titleAr               String
+  kind                  StandardKind
+  checklist             Json         @default("[]")
+  /// Soft-retirement. Workbook imports never delete rows (an incomplete
+  /// sheet must not be able to wipe the catalog), so withdrawing a standard
+  /// is done by flipping this instead.
+  active                Boolean      @default(true)
+  updatedAt             DateTime     @updatedAt
+  updatedByUserId       String?
+
+  technicalRegulation TechnicalRegulation  @relation(fields: [technicalRegulationId], references: [id])
+  tariffItemLinks     TariffItemStandard[]
+
+  @@unique([technicalRegulationId, code])
+  @@index([technicalRegulationId, kind])
+}
+
+/// A single customs tariff item (12-digit HS code) under a
+/// TechnicalRegulation, resolving to its specific standard(s), required
+/// certificates, and a conformity assessment module.
+model TariffItem {
+  id                    String   @id @default(cuid())
+  technicalRegulationId String
+  hsCode                String
+  productTitleEn        String
+  productTitleAr        String
+  requiredCertificates  String[] @default([])
+  conformityModule      String?
+  /// Soft-retirement — see Standard.active.
+  active                Boolean  @default(true)
+  sortOrder             Int      @default(0)
+
+  technicalRegulation TechnicalRegulation  @relation(fields: [technicalRegulationId], references: [id])
+  /// SPECIFIC standards for this item. Many-to-many because a product can
+  /// carry several (e.g. Aluminium Household Articles → SASO-369 + EN-601 +
+  /// EN-602), each rendered as its own checklist section. GENERAL standards
+  /// are NOT here: they apply to every product under the regulation and are
+  /// read from TechnicalRegulation.standards (kind: GENERAL).
+  specificStandards   TariffItemStandard[]
+  evaluations         TariffEvaluation[]
+
+  @@unique([technicalRegulationId, hsCode])
+  @@index([technicalRegulationId])
+}
+
+/// Join between a tariff item and one of its SPECIFIC standards. Explicit
+/// (not an implicit m2m) so link order is stable and the join is queryable.
+model TariffItemStandard {
+  tariffItemId String
+  standardId   String
+  sortOrder    Int    @default(0)
+
+  tariffItem TariffItem @relation(fields: [tariffItemId], references: [id], onDelete: Cascade)
+  standard   Standard   @relation(fields: [standardId], references: [id], onDelete: Cascade)
+
+  @@id([tariffItemId, standardId])
+  @@index([standardId])
+}
+
+/// Per-request-item runtime record of a tariff-driven evaluation.
+///
+/// `templateSnapshot` pins the exact checklists this evaluation is judged
+/// against, written when the tariff item is selected. Everything at runtime
+/// — panel render, verdict save, completion scoring — reads the snapshot,
+/// never the live catalog, so a later workbook import can never alter an
+/// evaluation that is already under way or finished. Re-selecting a
+/// different regulation/tariff item re-snapshots; "refresh to latest
+/// catalog" is an explicit, separate action.
+///
+/// `sectionVerdicts` is Record<sectionKey, AssessmentState> keyed by
+/// "general" | "labeling" | "documents" | "std:<standardId>". One map per
+/// section rather than one shared map, because an item code is only unique
+/// within its own standard — sharing a map lets one answer satisfy a
+/// same-coded item in another section and be counted twice.
+model TariffEvaluation {
+  id                    String                @id @default(cuid())
+  requestItemId         String                @unique
+  technicalRegulationId String
+  tariffItemId          String
+  sectionVerdicts       Json                  @default("{}")
+  templateSnapshot      Json?
+  snapshotAt            DateTime?
+  finalDecision         AssessmentDecisionDb?
+  completedAt           DateTime?
+  updatedAt             DateTime              @updatedAt
+  updatedByUserId       String?
+
+  requestItem         RequestItem         @relation(fields: [requestItemId], references: [id], onDelete: Cascade)
+  tariffItem          TariffItem          @relation(fields: [tariffItemId], references: [id])
+  technicalRegulation TechnicalRegulation @relation(fields: [technicalRegulationId], references: [id])
+
+  @@index([tariffItemId])
+  @@index([technicalRegulationId])
+}
+
+enum RegulationImportStatus {
+  PENDING
+  APPLIED
+  DISCARDED
+}
+
+/// One uploaded regulation workbook, staged for review before it touches the
+/// catalog. Upload parses + validates + diffs and stores the result here as
+/// PENDING; a separate explicit Apply runs the writes from `payload`. Rows
+/// are retained after apply as the catalog's change history ("what was
+/// updated, by whom, on which date").
+model RegulationImport {
+  id                    String                 @id @default(cuid())
+  serviceItemId         String
+  /// Regulation code declared in the workbook. The regulation row may not
+  /// exist yet — this import may be creating it.
+  regulationCode        String
+  technicalRegulationId String?
+  sourceFilename        String
+  /// The uploaded workbook itself, retained for audit.
+  storageKey            String
+  checksum              String
+  /// Catalog state at preview time; re-checked at apply so a preview built
+  /// against since-changed data is refused rather than applied blindly.
+  catalogFingerprint    String
+  payload               Json
+  diff                  Json
+  warnings              String[]               @default([])
+  status                RegulationImportStatus @default(PENDING)
+  error                 String?
+  uploadedByUserId      String
+  uploadedAt            DateTime               @default(now())
+  appliedByUserId       String?
+  appliedAt             DateTime?
+
+  serviceItem         ServiceItem          @relation(fields: [serviceItemId], references: [id])
+  technicalRegulation TechnicalRegulation? @relation(fields: [technicalRegulationId], references: [id])
+
+  @@index([serviceItemId, uploadedAt])
+  @@index([status])
+}
+
 enum DeliverableType {
   INTERNAL_REPORT
   EXTERNAL_CERTIFICATE
 }
 
 model RequiredDocument {
-  id                 String   @id @default(cuid())
-  serviceItemId      String
-  code               String
-  nameEn             String
-  nameAr             String
-  mandatory          Boolean  @default(true)
-  acceptedMimeTypes  String[]
-  maxSizeMb          Int      @default(50)
-  helpEn             String?
-  helpAr             String?
+  id                     String   @id @default(cuid())
+  serviceItemId          String
+  code                   String
+  nameEn                 String
+  nameAr                 String
+  mandatory              Boolean  @default(true)
+  acceptedMimeTypes      String[]
+  maxSizeMb              Int      @default(50)
+  helpEn                 String?
+  helpAr                 String?
   /// Set once an admin uploads a blank form via catalogue:manage; null means
   /// no downloadable template is available for this document slot yet.
-  templateStorageKey String?
-  templateFileName   String?
-  templateMimeType   String?
+  templateStorageKey     String?
+  templateFileName       String?
+  templateMimeType       String?
   /// Names the productAttrSchema key whose value picks one of `templates`
   /// below — e.g. "technical_regulation" on SAB-001's risk assessment, where
   /// each SABER technical regulation has its own blank form. Null means this
   /// slot has a single template (templateStorageKey) or none at all.
   templateVariantAttrKey String?
-  sortOrder          Int      @default(0)
+  sortOrder              Int      @default(0)
 
-  serviceItem      ServiceItem       @relation(fields: [serviceItemId], references: [id], onDelete: Cascade)
+  serviceItem      ServiceItem                @relation(fields: [serviceItemId], references: [id], onDelete: Cascade)
   requestDocuments RequestDocument[]
   templates        RequiredDocumentTemplate[]
 
@@ -503,20 +700,20 @@ model Request {
 /// one item; multiple items let a client bundle several services (possibly
 /// from different subcategories) into a single request/invoice.
 model RequestItem {
-  id                   String  @id @default(cuid())
+  id                   String            @id @default(cuid())
   requestId            String
   serviceItemId        String
-  productNameEn        String  @default("")
-  productNameAr        String  @default("")
+  productNameEn        String            @default("")
+  productNameAr        String            @default("")
   brand                String?
-  productAttrs         Json    @default("{}")
+  productAttrs         Json              @default("{}")
   /// Technical-review verdicts per check item: { verdicts, notes, updatedAt, updatedByUserId }.
-  assessment           Json    @default("{}")
+  assessment           Json              @default("{}")
   /// Snapshot of the service item's price/VAT at the time it was added, so
   /// later catalogue price changes don't retroactively alter an open draft.
-  basePrice            Decimal @db.Decimal(14, 2)
-  vatRate              Decimal @db.Decimal(5, 4)
-  sortOrder            Int     @default(0)
+  basePrice            Decimal           @db.Decimal(14, 2)
+  vatRate              Decimal           @db.Decimal(5, 4)
+  sortOrder            Int               @default(0)
   /// Reference to the org's stored government-portal login (GHAD/SABER/FASAH)
   /// used for this item's external submission. Kept out of productAttrs so a
   /// loosely-typed JSON blob never carries a secret reference.
@@ -547,6 +744,9 @@ model RequestItem {
   labelAssessments     LabelAssessment[]
   /// Admin-curated Lab Testing "required tests" checklist (LAB-001 only).
   requiredTests        RequestItemRequiredTest[]
+  /// Tariff-driven evaluation run (SAB-001/SFDA-COS-002 only) — see
+  /// TariffEvaluation.
+  tariffEvaluation     TariffEvaluation?
 
   @@index([requestId])
   @@index([platformCredentialId])

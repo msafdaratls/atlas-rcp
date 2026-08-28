@@ -50,6 +50,18 @@ const FINANCE_ADMIN_ROLES: Role[] = ["FINANCE", "SYSTEM_ADMIN"];
 
 const AUDIT_READ_ROLES: Role[] = ["SYSTEM_ADMIN", "QUALITY_MANAGER"];
 
+/** Quality team — owns the general/labeling checklist templates and the
+ * regulation/tariff-item catalog for tariff-driven evaluations (PCOC/SCOC). */
+const EVAL_CATALOG_MANAGE_ROLES: Role[] = ["QUALITY_MANAGER", "SYSTEM_ADMIN"];
+
+/** Certificate of Conformity team (stand-in: EVALUATOR) — owns the
+ * per-standard specific checklist templates, once the standard is adopted. */
+const EVAL_CATALOG_SPECIFIC_ROLES: Role[] = [
+  "EVALUATOR",
+  "QUALITY_MANAGER",
+  "SYSTEM_ADMIN",
+];
+
 export function requirePermission(
   session: SessionUser,
   permission:
@@ -73,6 +85,8 @@ export function requirePermission(
     | "coupons:manage"
     | "quality:read"
     | "audit:read"
+    | "eval-catalog:manage"
+    | "eval-catalog:specific-standard"
     | "settings:admin"
     | "staff:manage"
     | "system:health"
@@ -184,6 +198,16 @@ export function requirePermission(
       return;
     case "audit:read":
       if (!isAtlas || !hasAnyRole(session, AUDIT_READ_ROLES)) {
+        throw new Error("FORBIDDEN");
+      }
+      return;
+    case "eval-catalog:manage":
+      if (!isAtlas || !hasAnyRole(session, EVAL_CATALOG_MANAGE_ROLES)) {
+        throw new Error("FORBIDDEN");
+      }
+      return;
+    case "eval-catalog:specific-standard":
+      if (!isAtlas || !hasAnyRole(session, EVAL_CATALOG_SPECIFIC_ROLES)) {
         throw new Error("FORBIDDEN");
       }
       return;

@@ -196,6 +196,50 @@ export function computeAssessment(
   };
 }
 
+/**
+ * Combine independently-scored sections into one overall summary.
+ *
+ * Each section must be scored with its OWN verdict map (via computeAssessment)
+ * before being combined here — never by merging the verdict maps into one and
+ * scoring the concatenated check sets. Sections are stored separately and an
+ * item code may legitimately repeat across them (e.g. the same code used in a
+ * regulation's general checklist and in a standard's checklist); a merged map
+ * would collapse those into a single answer, so one section's verdict would
+ * silently satisfy the other's item and `complete` could report true while an
+ * item was never actually answered.
+ *
+ * Unlike computeAssessment, a zero-item total counts as complete: a tariff
+ * evaluation whose templates are all still empty has nothing to answer, and
+ * must not be permanently un-completable.
+ */
+export function combineAssessments(summaries: AssessmentSummary[]): AssessmentSummary {
+  let total = 0;
+  let compliant = 0;
+  let nonCompliant = 0;
+  let na = 0;
+  for (const s of summaries) {
+    total += s.total;
+    compliant += s.compliant;
+    nonCompliant += s.nonCompliant;
+    na += s.na;
+  }
+  const assessed = compliant + nonCompliant + na;
+  const complete = total === 0 || assessed === total;
+  const overallRate = rateOf(compliant, nonCompliant);
+  return {
+    sections: summaries.flatMap((s) => s.sections),
+    total,
+    compliant,
+    nonCompliant,
+    na,
+    assessed,
+    pending: total - assessed,
+    complete,
+    overallRate,
+    recommendation: recommendDecision(overallRate, complete),
+  };
+}
+
 /** Normalise unknown JSON into a typed CheckSet[] (defensive against bad data). */
 export function parseCheckSets(raw: unknown): CheckSet[] {
   if (!Array.isArray(raw)) return [];
