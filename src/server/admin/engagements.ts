@@ -20,6 +20,16 @@ export type EngagementListItem = {
 
 export type EngagementDetail = EngagementListItem & {
   notes: string | null;
+  organisation: EngagementListItem["organisation"] & {
+    email: string;
+    phone: string | null;
+    website: string | null;
+    crNumber: string | null;
+    vatNumber: string | null;
+    city: string | null;
+    region: string | null;
+    country: string;
+  };
   requests: Array<{
     id: string;
     requestNo: string;
@@ -66,7 +76,21 @@ export async function getEngagementDetail(
     const r = await prisma.engagement.findUnique({
       where: { id: engagementId },
       include: {
-        organisation: { select: { id: true, nameEn: true, nameAr: true } },
+        organisation: {
+          select: {
+            id: true,
+            nameEn: true,
+            nameAr: true,
+            email: true,
+            phone: true,
+            website: true,
+            crNumber: true,
+            vatNumber: true,
+            city: true,
+            region: true,
+            country: true,
+          },
+        },
         serviceItem: { select: { id: true, nameEn: true, nameAr: true } },
         requests: {
           orderBy: { createdAt: "desc" },

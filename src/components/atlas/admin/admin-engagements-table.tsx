@@ -39,11 +39,18 @@ export function AdminEngagementsTable({
         </thead>
         <tbody className="divide-y divide-line">
           {rows.map((r) => (
-            <tr key={r.id} className="hover:bg-surface-alt/50">
+            <tr
+              key={r.id}
+              className="cursor-pointer hover:bg-surface-alt/50"
+              onClick={() => {
+                window.location.href = `/${locale}/admin/engagements/${r.id}`;
+              }}
+            >
               <td className="px-3 py-2">
                 <Link
                   href={`/${locale}/admin/engagements/${r.id}`}
                   className="font-medium text-atlas-green hover:underline"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   {locale === "ar" ? r.organisation.nameAr : r.organisation.nameEn}
                 </Link>

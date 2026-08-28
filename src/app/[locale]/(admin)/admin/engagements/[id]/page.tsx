@@ -63,6 +63,65 @@ export default async function AdminEngagementDetailPage({ params }: Props) {
         }
       />
 
+      <div className="grid gap-4 rounded-lg border border-line bg-surface p-4 sm:grid-cols-2">
+        <div>
+          <h2 className="mb-2 text-sm font-semibold text-ink-900">{t("organisationDetails")}</h2>
+          <dl className="space-y-1 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-500">{t("fields.email")}</dt>
+              <dd className="text-ink-700">{engagement.organisation.email}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-500">{t("fields.phone")}</dt>
+              <dd className="text-ink-700">{engagement.organisation.phone ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-500">{t("fields.website")}</dt>
+              <dd className="text-ink-700">{engagement.organisation.website ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-500">{t("fields.location")}</dt>
+              <dd className="text-ink-700">
+                {[engagement.organisation.city, engagement.organisation.region, engagement.organisation.country]
+                  .filter(Boolean)
+                  .join(", ") || "—"}
+              </dd>
+            </div>
+          </dl>
+        </div>
+        <div>
+          <h2 className="mb-2 text-sm font-semibold text-ink-900">{t("registrationDetails")}</h2>
+          <dl className="space-y-1 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-500">{t("fields.crNumber")}</dt>
+              <dd className="text-ink-700">{engagement.organisation.crNumber ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-500">{t("fields.vatNumber")}</dt>
+              <dd className="text-ink-700">{engagement.organisation.vatNumber ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-500">{t("fields.startedAt")}</dt>
+              <dd className="text-ink-700" dir="ltr">
+                {new Date(engagement.startedAt).toLocaleDateString(locale, {
+                  timeZone: "Asia/Riyadh",
+                })}
+              </dd>
+            </div>
+            {engagement.closedAt ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-500">{t("fields.closedAt")}</dt>
+                <dd className="text-ink-700" dir="ltr">
+                  {new Date(engagement.closedAt).toLocaleDateString(locale, {
+                    timeZone: "Asia/Riyadh",
+                  })}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+      </div>
+
       {engagement.notes ? (
         <div className="rounded-lg border border-line bg-surface p-4">
           <h2 className="mb-1 text-sm font-semibold text-ink-900">{t("notes")}</h2>

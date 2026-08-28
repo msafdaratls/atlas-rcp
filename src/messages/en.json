@@ -67,7 +67,7 @@
       "catalogue": "Services",
       "laboratories": "Laboratories",
       "evalCatalog": "Technical regulations",
-      "engagements": "Engagements",
+      "engagements": "Account Management",
       "labelEvalSfda": "SFDA Supplement Evaluator",
       "labelEvalCosmetics": "Cosmetics Evaluator",
       "coupons": "Coupons",
@@ -1606,6 +1606,18 @@
       "empty": "No engagements yet.",
       "linkedRequests": "Linked requests",
       "noRequests": "No requests linked yet.",
+      "organisationDetails": "Organisation details",
+      "registrationDetails": "Registration & timeline",
+      "fields": {
+        "email": "Email",
+        "phone": "Phone",
+        "website": "Website",
+        "location": "Location",
+        "crNumber": "CR number",
+        "vatNumber": "VAT number",
+        "startedAt": "Started",
+        "closedAt": "Closed"
+      },
       "status": {
         "ACTIVE": "Active",
         "PAUSED": "Paused",

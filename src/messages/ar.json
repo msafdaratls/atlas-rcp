@@ -67,7 +67,7 @@
       "catalogue": "الخدمات",
       "laboratories": "المختبرات",
       "evalCatalog": "اللوائح الفنية",
-      "engagements": "الارتباطات",
+      "engagements": "إدارة الحسابات",
       "labelEvalSfda": "مقيّم بطاقات المكملات الغذائية (SFDA)",
       "labelEvalCosmetics": "مقيّم بطاقات مستحضرات التجميل",
       "coupons": "القسائم",
@@ -1606,6 +1606,18 @@
       "empty": "لا توجد ارتباطات بعد.",
       "linkedRequests": "الطلبات المرتبطة",
       "noRequests": "لا توجد طلبات مرتبطة بعد.",
+      "organisationDetails": "بيانات المنشأة",
+      "registrationDetails": "بيانات التسجيل والجدول الزمني",
+      "fields": {
+        "email": "البريد الإلكتروني",
+        "phone": "الهاتف",
+        "website": "الموقع الإلكتروني",
+        "location": "الموقع",
+        "crNumber": "رقم السجل التجاري",
+        "vatNumber": "الرقم الضريبي",
+        "startedAt": "تاريخ البدء",
+        "closedAt": "تاريخ الإغلاق"
+      },
       "status": {
         "ACTIVE": "نشط",
         "PAUSED": "متوقف مؤقتاً",
