@@ -671,7 +671,11 @@
     },
     "queues": {
       "pageDescription": "Work by stage. Open a request to advance or return it.",
-      "empty": "No requests in this queue."
+      "empty": "No requests in this queue.",
+      "total": "Total open requests",
+      "atRisk": "{count} at risk",
+      "atRiskNone": "On track",
+      "viewQueue": "View queue"
     },
     "requests": {
       "pageDescription": "All conformity requests across client organisations.",

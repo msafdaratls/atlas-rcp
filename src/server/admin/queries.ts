@@ -214,22 +214,63 @@ function isAdminQueueKey(value: string): value is AdminQueueKey {
 
 export type AdminQueueCounts = Record<AdminQueueKey, number>;
 
+/** Queue keys whose depth includes an SLA clock (used to compute at-risk counts). */
+const SLA_TRACKED_QUEUES: Partial<Record<AdminQueueKey, true>> = {
+  intake: true,
+  assessment: true,
+  technical: true,
+  decision: true,
+};
+
+function isQueueSlaAtRisk(submittedAt: Date, slaDueAt: Date, now: Date): boolean {
+  const window = slaDueAt.getTime() - submittedAt.getTime();
+  if (window <= 0) return now >= slaDueAt;
+  const ratio = (now.getTime() - submittedAt.getTime()) / window;
+  return ratio >= 0.8 || now >= slaDueAt;
+}
+
+export type AdminQueueStat = { depth: number; atRisk: number };
+export type AdminQueueStats = Record<AdminQueueKey, AdminQueueStat>;
+
 export async function getAdminQueueCounts(): Promise<AdminQueueCounts | null> {
+  const stats = await getAdminQueueStats();
+  if (!stats) return null;
+  const keys = Object.keys(stats) as AdminQueueKey[];
+  return keys.reduce((acc, key) => {
+    acc[key] = stats[key].depth;
+    return acc;
+  }, {} as AdminQueueCounts);
+}
+
+export async function getAdminQueueStats(): Promise<AdminQueueStats | null> {
   try {
     const session = await requireSession();
     requirePermission(session, "requests:admin");
 
+    const now = new Date();
     const keys = Object.keys(ADMIN_QUEUE_STATES) as AdminQueueKey[];
-    const counts = await Promise.all(
-      keys.map((key) =>
-        prisma.request.count({ where: { state: { in: ADMIN_QUEUE_STATES[key] } } }),
-      ),
+    const stats = await Promise.all(
+      keys.map(async (key): Promise<AdminQueueStat> => {
+        const states = ADMIN_QUEUE_STATES[key];
+        if (!SLA_TRACKED_QUEUES[key]) {
+          const depth = await prisma.request.count({ where: { state: { in: states } } });
+          return { depth, atRisk: 0 };
+        }
+        const rows = await prisma.request.findMany({
+          where: { state: { in: states } },
+          select: { submittedAt: true, slaDueAt: true },
+        });
+        const atRisk = rows.filter(
+          (r) => r.submittedAt && r.slaDueAt && isQueueSlaAtRisk(r.submittedAt, r.slaDueAt, now),
+        ).length;
+        return { depth: rows.length, atRisk };
+      }),
     );
 
     return keys.reduce((acc, key, index) => {
-      acc[key] = counts[index];
+      acc[key] = stats[index];
       return acc;
-    }, {} as AdminQueueCounts);
+    }, {} as AdminQueueStats);
   } catch {
     return null;
   }

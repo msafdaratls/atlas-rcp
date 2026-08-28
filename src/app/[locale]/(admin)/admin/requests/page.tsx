@@ -8,6 +8,7 @@ import { requirePagePermission } from "@/lib/page-auth";
 import { checkPermission } from "@/lib/rbac";
 import { listAdminRequests } from "@/server/admin/queries";
 import { ClipboardList } from "lucide-react";
+import { ADMIN_QUEUE_STATES } from "@/server/admin/queries";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -38,6 +39,11 @@ export default async function AdminRequestsPage({ params, searchParams }: Props)
   const sp = await searchParams;
   const t = await getTranslations("adminOps.requests");
   const tNav = await getTranslations("nav.admin");
+  const tQueues = await getTranslations("dashboard.admin.queues");
+  const activeQueue =
+    sp.queue && sp.queue in ADMIN_QUEUE_STATES
+      ? (sp.queue as keyof typeof ADMIN_QUEUE_STATES)
+      : null;
   const data = await listAdminRequests({
     q: sp.q ?? null,
     state: sp.state ?? null,
@@ -50,7 +56,14 @@ export default async function AdminRequestsPage({ params, searchParams }: Props)
       <PageHeader
         title={tNav("requests")}
         description={t("pageDescription")}
-        breadcrumbs={[{ label: tNav("requests") }]}
+        breadcrumbs={
+          activeQueue
+            ? [
+                { label: tNav("workQueues"), href: `/${locale}/admin/queues` },
+                { label: tQueues(activeQueue) },
+              ]
+            : [{ label: tNav("requests") }]
+        }
         actions={
           canCreateOnBehalf ? (
             <Button asChild>
