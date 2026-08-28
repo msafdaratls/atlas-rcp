@@ -540,10 +540,12 @@ function VerificationGate({
         <div className="divide-y divide-line">
           {fieldDefs.map((def) => {
             const f = effectiveField(def.key);
+            const blocking = missing.some((m) => m.key === def.key);
             return (
               <FieldRow
                 key={def.key}
                 fieldKey={def.key}
+                blocking={blocking}
                 labelEn={def.labelEn}
                 labelAr={def.labelAr}
                 bilingual={def.bilingual}
@@ -577,6 +579,7 @@ function VerificationGate({
 
 function FieldRow({
   fieldKey,
+  blocking,
   labelEn,
   labelAr,
   bilingual,
@@ -594,6 +597,7 @@ function FieldRow({
   t,
 }: {
   fieldKey: string;
+  blocking: boolean;
   labelEn: string;
   labelAr: string;
   bilingual: boolean;
@@ -615,9 +619,19 @@ function FieldRow({
   const dirty = en !== valueEn || ar !== valueAr;
   const isLong = fieldKey === "full_label_text" || fieldKey === "warnings" || fieldKey === "ingredients_list" || fieldKey === "nutrition_table";
   const Field = isLong ? Textarea : Input;
+  // Unconfirmed mandatory fields are what block "Confirm and continue"; keep
+  // them outlined in red (row + every input) so the remaining work is visible
+  // at a glance instead of having to hunt down the disabled-button reason.
+  const fieldClass = blocking
+    ? "flex-1 border-state-bad ring-1 ring-state-bad/30 focus-visible:border-state-bad"
+    : "flex-1";
 
   return (
-    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-4">
+    <div
+      className={`flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-4 ${
+        blocking ? "border-l-2 border-l-state-bad bg-state-bad/[0.04]" : ""
+      }`}
+    >
       <div className="w-56 shrink-0">
         <p className="text-sm font-medium text-ink-800">
           {isAr ? labelAr : labelEn}
@@ -650,7 +664,7 @@ function FieldRow({
           onChange={(e) => setEn(e.target.value)}
           placeholder={t("englishPlaceholder")}
           dir="ltr"
-          className="flex-1"
+          className={fieldClass}
         />
         {bilingual ? (
           <Field
@@ -658,18 +672,18 @@ function FieldRow({
             onChange={(e) => setAr(e.target.value)}
             placeholder={t("arabicPlaceholder")}
             dir="rtl"
-            className="flex-1"
+            className={fieldClass}
           />
         ) : null}
       </div>
       <Button
         size="sm"
         variant="outline"
-        disabled={!dirty || saving}
+        disabled={(!dirty && !blocking) || saving}
         onClick={() => onSave(en, ar)}
         className="shrink-0"
       >
-        {saving ? <Loader2 className="size-4 animate-spin" /> : t("save")}
+        {saving ? <Loader2 className="size-4 animate-spin" /> : dirty ? t("save") : t("confirm")}
       </Button>
     </div>
   );

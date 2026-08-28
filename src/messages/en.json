@@ -2234,6 +2234,7 @@
       "extractedDataTitle": "Extracted data and text",
       "extractedDataSubtitle": "Data was extracted automatically — review and correct any error before the assessment runs. Editing a field confirms it.",
       "confirmAndContinue": "Data confirmed — continue assessment",
+      "confirm": "Confirm",
       "needsReview": "Needs review",
       "confirmed": "Confirmed",
       "originalAiValueEn": "AI originally extracted: \"{value}\"",
