@@ -21,8 +21,9 @@ import {
   uploadRegulationWorkbook,
   type RegulationImportPreview,
 } from "@/server/admin/eval-catalog-import-actions";
-import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Download, FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -210,6 +211,7 @@ export function RegulationImportPanel({ regulations, history }: Props) {
   }
 
   const diff: RegulationDiff | null = preview?.diff ?? null;
+  const knownRegulationCodes = new Set(regulations.map((r) => r.code));
 
   return (
     <div className="space-y-4">
@@ -385,30 +387,54 @@ export function RegulationImportPanel({ regulations, history }: Props) {
           <p className="text-xs text-ink-500">{t("historyEmpty")}</p>
         ) : (
           <ul className="divide-y divide-line rounded-md border border-line">
-            {history.map((row) => (
-              <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
-                <span className="flex flex-col">
-                  <span className="text-ink-900">
-                    <span className="font-data">{row.regulationCode}</span> · {row.sourceFilename}
+            {history.map((row) => {
+              const linkable = knownRegulationCodes.has(row.regulationCode);
+              const content = (
+                <>
+                  <span className="flex flex-col">
+                    <span className="text-ink-900">
+                      <span className="font-data">{row.regulationCode}</span> · {row.sourceFilename}
+                    </span>
+                    <span className="text-ink-500">
+                      {row.uploadedBy} · {row.uploadedAt}
+                    </span>
                   </span>
-                  <span className="text-ink-500">
-                    {row.uploadedBy} · {row.uploadedAt}
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 font-medium",
+                        row.status === "APPLIED"
+                          ? "border-state-ok/30 bg-state-ok/12 text-state-ok"
+                          : row.status === "PENDING"
+                            ? "border-state-warn/30 bg-state-warn/12 text-state-warn"
+                            : "border-line bg-surface-alt text-ink-500",
+                      )}
+                    >
+                      {t(`status.${row.status}` as "status.APPLIED")}
+                    </span>
+                    {linkable ? (
+                      <ChevronRight className="size-3.5 text-ink-400 rtl:rotate-180" aria-hidden />
+                    ) : null}
                   </span>
-                </span>
-                <span
-                  className={cn(
-                    "rounded-full border px-2 py-0.5 font-medium",
-                    row.status === "APPLIED"
-                      ? "border-state-ok/30 bg-state-ok/12 text-state-ok"
-                      : row.status === "PENDING"
-                        ? "border-state-warn/30 bg-state-warn/12 text-state-warn"
-                        : "border-line bg-surface-alt text-ink-500",
+                </>
+              );
+              return (
+                <li key={row.id}>
+                  {linkable ? (
+                    <Link
+                      href={`/${locale}/admin/eval-catalog?regulation=${encodeURIComponent(row.regulationCode)}`}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-surface-alt"
+                    >
+                      {content}
+                    </Link>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
+                      {content}
+                    </div>
                   )}
-                >
-                  {t(`status.${row.status}` as "status.APPLIED")}
-                </span>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

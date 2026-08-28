@@ -1429,6 +1429,7 @@
       }
     },
     "evalCatalog": {
+      "pageTitle": "Regulation catalog",
       "pageDescription": "Technical regulations, customs tariff items, and the general/labeling/specific-standard checklist templates used by PCOC and Cosmetics SCOC evaluations.",
       "service": {
         "SAB-001": "PCOC (Saber)",

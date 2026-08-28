@@ -37,6 +37,8 @@ export type NavItem = {
   icon: LucideIcon;
   /** Roles allowed to see this item. Omitted = visible to every role in the shell. */
   roles?: Role[];
+  /** Broader path used only to decide "active" highlighting, when it must extend beyond `href` itself (e.g. a nav item that links to a sub-page but should also stay highlighted on a sibling detail route). */
+  matchPrefix?: string;
 };
 
 const CLIENT_NAV: NavItem[] = [
@@ -128,7 +130,8 @@ const ADMIN_NAV: NavItem[] = [
   },
   {
     key: "evalCatalog",
-    href: "/eval-catalog",
+    href: "/eval-catalog/import",
+    matchPrefix: "/eval-catalog",
     icon: ClipboardType,
     roles: ["QUALITY_MANAGER", "EVALUATOR", "SYSTEM_ADMIN"],
   },
@@ -222,10 +225,11 @@ export function AppSidebar({
   const activeKey = items.reduce<{ key: string | null; len: number }>(
     (best, item) => {
       const href = `${basePath}${item.href}`;
+      const matchHref = `${basePath}${item.matchPrefix ?? item.href}`;
       const matches =
         item.href === ""
           ? pathname === href || pathname === `${basePath}/`
-          : pathname === href || pathname.startsWith(`${href}/`);
+          : pathname === matchHref || pathname.startsWith(`${matchHref}/`);
       return matches && href.length > best.len
         ? { key: item.key, len: href.length }
         : best;

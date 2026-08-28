@@ -14,13 +14,17 @@ import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ locale: string }> };
+type Props = {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ regulation?: string }>;
+};
 
-export default async function AdminEvalCatalogPage({ params }: Props) {
+export default async function AdminEvalCatalogPage({ params, searchParams }: Props) {
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
   const locale = raw as Locale;
   setRequestLocale(locale);
+  const { regulation: focusCode } = await searchParams;
 
   const session = await requireSession();
   // Either eval-catalog permission gets in — Quality manages general/
@@ -40,9 +44,12 @@ export default async function AdminEvalCatalogPage({ params }: Props) {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={tNav("evalCatalog")}
+        title={t("pageTitle")}
         description={t("pageDescription")}
-        breadcrumbs={[{ label: tNav("evalCatalog") }]}
+        breadcrumbs={[
+          { label: tNav("evalCatalog"), href: `/${locale}/admin/eval-catalog/import` },
+          { label: t("pageTitle") },
+        ]}
         actions={
           checkPermission(session, "eval-catalog:manage") ? (
             <Button asChild variant="secondary" size="sm">
@@ -59,6 +66,7 @@ export default async function AdminEvalCatalogPage({ params }: Props) {
           regulations={regulations}
           canEditGeneral={checkPermission(session, "eval-catalog:manage")}
           canEditSpecific={checkPermission(session, "eval-catalog:specific-standard")}
+          focusCode={focusCode}
         />
       ) : (
         <EmptyState
