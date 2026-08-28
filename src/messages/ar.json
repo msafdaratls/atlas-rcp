@@ -2256,6 +2256,7 @@
         "requires_review": "يتطلب مراجعة"
       },
       "alreadyPromoted": "تم ترحيله بالفعل إلى قائمة التدقيق الرسمية.",
+      "downloadReportButton": "تنزيل التقرير",
       "promoteButton": "ترحيل إلى قائمة التدقيق الرسمية",
       "promoted": "تم ترحيل {written} تقييماً ({withheld} معلّق بانتظار المراجعة).",
       "promoteConfirmTitle": "ترحيل إلى قائمة التدقيق الرسمية؟",

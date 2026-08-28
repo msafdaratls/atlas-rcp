@@ -797,6 +797,14 @@ function AssessedView({
           {t(`decision.${detail.finalVerdict ?? "incomplete"}` as "decision.accepted")}
         </span>
         <div className="flex items-center gap-2">
+          {(detail.status === "ASSESSED" || detail.status === "BLOCKED_NO_CATEGORY_MATCH") && (
+            <Button
+              variant="outline"
+              onClick={() => window.open(`/api/label-eval/${detail.id}/report?locale=${isAr ? "ar" : "en"}`, "_blank")}
+            >
+              {t("downloadReportButton")}
+            </Button>
+          )}
           {detail.promotedAt ? (
             <span className="text-xs text-ink-500">{t("alreadyPromoted")}</span>
           ) : (

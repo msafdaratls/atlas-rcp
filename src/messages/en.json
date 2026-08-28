@@ -2256,6 +2256,7 @@
         "requires_review": "Requires review"
       },
       "alreadyPromoted": "Already promoted to the official checklist.",
+      "downloadReportButton": "Download report",
       "promoteButton": "Promote to official checklist",
       "promoted": "Promoted {written} verdicts ({withheld} withheld pending review).",
       "promoteConfirmTitle": "Promote to official checklist?",
