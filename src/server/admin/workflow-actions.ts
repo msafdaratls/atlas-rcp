@@ -2636,10 +2636,15 @@ const EVALUATION_REPORT_ACCEPTED = ["application/pdf", "image/png", "image/jpeg"
 const EVALUATION_REPORT_MAX_MB = 50;
 
 /**
- * Every RequestItem on the request has satisfied its Evaluation step: the
- * required Evaluation Report document(s) uploaded (all services, unchanged),
- * plus — for SAB-001/SFDA-COS-002, see isTariffEvalServiceCode — a completed
- * tariff evaluation via TariffEvaluationPanel.
+ * Every RequestItem on the request has satisfied its Evaluation step.
+ *
+ * Most services satisfy it by uploading the required Evaluation Report
+ * document(s). For SAB-001/SFDA-COS-002 (see isTariffEvalServiceCode) a
+ * completed tariff evaluation via TariffEvaluationPanel takes its place: the
+ * technical-regulation assessment is the evaluation evidence, so those
+ * services are not asked for the report file as well. They fall back to the
+ * report upload only when no such assessment is possible (empty pinned
+ * template, or no usable regulation in the catalog).
  *
  * The tariff-evaluation requirement is conditional on the service actually
  * having a USABLE catalog — at least one active regulation that has checklist
@@ -2700,12 +2705,20 @@ async function hasEvaluationReportForAllItems(requestId: string): Promise<boolea
   );
 
   return items.every((item) => {
-    const required = evaluationReportLabelsFor(item.serviceItem.code);
-    const uploadedLabels = new Set(item.documents.map((d) => d.label));
-    if (!required.every((label) => uploadedLabels.has(label))) return false;
+    const reportUploaded = () => {
+      const required = evaluationReportLabelsFor(item.serviceItem.code);
+      const uploadedLabels = new Set(item.documents.map((d) => d.label));
+      return required.every((label) => uploadedLabels.has(label));
+    };
 
-    if (!isTariffEvalServiceCode(item.serviceItem.code)) return true;
+    if (!isTariffEvalServiceCode(item.serviceItem.code)) return reportUploaded();
 
+    // PCOC/Cosmetic SCOC: a completed technical-regulation assessment IS the
+    // evaluation evidence, so it stands in for the uploaded Evaluation Report
+    // rather than being demanded on top of it. The upload is only asked for
+    // when no such assessment can exist — an empty pinned template, or a
+    // service whose catalog has no usable regulation at all.
+    //
     // Once an evaluation exists, its own pinned snapshot decides whether there
     // was anything to assess — not whether some OTHER regulation under the same
     // service happens to be configured. Asking the service-wide question would
@@ -2714,13 +2727,15 @@ async function hasEvaluationReportForAllItems(requestId: string): Promise<boolea
     const evaluation = item.tariffEvaluation;
     if (evaluation) {
       const snapshot = parseSnapshot(evaluation.templateSnapshot);
-      if (snapshot && snapshotItemCount(snapshot) === 0) return true;
+      if (snapshot && snapshotItemCount(snapshot) === 0) return reportUploaded();
       return evaluation.finalDecision != null;
     }
 
     // Nothing selected yet: fall back to the catalog, so a service with no
-    // configured regulation at all never blocks the request.
-    return !configured.has(item.serviceItemId);
+    // configured regulation at all never blocks the request — it just falls
+    // back to the plain Evaluation Report upload.
+    if (configured.has(item.serviceItemId)) return false;
+    return reportUploaded();
   });
 }
 

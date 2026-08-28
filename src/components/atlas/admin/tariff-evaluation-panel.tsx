@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/select";
 import { computeAssessment, type AssessmentDecision, type Verdict } from "@/lib/assessment";
 import {
-  SECTION_DOCUMENTS,
   scoreSnapshot,
   snapshotItemCount,
   type EvaluationSection,
@@ -442,7 +441,21 @@ export function TariffEvaluationPanel({
         </div>
       ) : null}
 
-      {/* Steps 4-7: one section per checklist, then the document uploads */}
+      {/* The Evaluation Report upload is NOT required alongside a technical-
+          regulation assessment — the assessment is the evidence. It only
+          appears in the fallback the server gate uses (see
+          hasEvaluationReportForAllItems): no regulation/tariff item selected
+          yet, or a pinned template with nothing to answer. */}
+      {!hasItems ? (
+        <EvaluationReportPanel
+          requestItemId={requestItemId}
+          serviceCode={serviceCode}
+          documents={documents}
+          editable={editable}
+        />
+      ) : null}
+
+      {/* Steps 4-7: one section per checklist */}
       {snapshot ? (
         <div className="space-y-4">
           {snapshot.sections.map((section) => (
@@ -463,14 +476,6 @@ export function TariffEvaluationPanel({
                     {t("save")}
                   </Button>
                 </div>
-              ) : null}
-              {section.key === SECTION_DOCUMENTS ? (
-                <EvaluationReportPanel
-                  requestItemId={requestItemId}
-                  serviceCode={serviceCode}
-                  documents={documents}
-                  editable={editable}
-                />
               ) : null}
             </div>
           ))}
