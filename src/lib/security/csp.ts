@@ -19,11 +19,22 @@
  * style={{}} attributes (SLA meter, wizard progress bar, analytics charts),
  * and nonces don't cover the style="" attribute in any browser — only
  * 'unsafe-inline' or a matching hash does.
+ *
+ * script-src needs 'unsafe-eval' too, but ONLY outside production: Next's
+ * dev-mode Fast Refresh runtime evaluates strings as JS to apply hot
+ * updates, which this policy otherwise blocks outright — every click
+ * handler silently fails to attach on `next dev` (nothing throws visibly;
+ * the page just stops responding to input). Production never does this, so
+ * production's policy is unaffected.
  */
 export function buildCsp(): string {
+  const scriptSrc =
+    process.env.NODE_ENV === "production"
+      ? "script-src 'self' 'unsafe-inline'"
+      : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
   return [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    scriptSrc,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
