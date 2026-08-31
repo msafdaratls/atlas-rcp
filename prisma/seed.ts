@@ -1388,7 +1388,7 @@ async function main() {
     // optional saber_request_number for clients who already started on SABER.
     productAttrSchema: {
       type: "object",
-      required: ["country_of_origin"],
+      required: ["country_of_origin", "saber_request_number"],
       properties: {
         hs_code: { type: "string", titleEn: "HS code", titleAr: "الرمز الجمركي" },
         manufacturer: { type: "string", titleEn: "Manufacturer", titleAr: "الشركة المصنعة" },
@@ -1419,7 +1419,10 @@ async function main() {
     // panel (and the certificate-attachment requirement to close) no longer
     // applies to PCOC.
     deliverableType: DeliverableType.INTERNAL_REPORT,
-    requiredCredentialPlatform: PlatformType.SABER,
+    // Reconciled per migration 20260831: PCOC no longer requires the client
+    // to link a SABER platform account — saber_request_number (now
+    // mandatory above) is enough for clients already on SABER.
+    requiredCredentialPlatform: null,
     defaultEvaluatorId: evaluator.id,
   });
 
