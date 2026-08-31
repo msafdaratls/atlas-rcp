@@ -255,6 +255,23 @@ export async function transitionAdminRequest(
           return { ok: false, error: "CERTIFICATE_REQUIRED" };
         }
       }
+
+      // PCOC (SAB-001) has no EXTERNAL_CERTIFICATE deliverable of its own —
+      // the certificate is issued directly on the SABER system, not uploaded
+      // through ExternalDeliverable. Require the Evaluator to confirm it was
+      // uploaded to the request before closing.
+      const pcocItemCount = await prisma.requestItem.count({
+        where: { requestId: request.id, serviceItem: { code: "SAB-001" } },
+      });
+      if (pcocItemCount > 0) {
+        const current = await prisma.request.findUnique({
+          where: { id: request.id },
+          select: { saberCertificateUploaded: true },
+        });
+        if (!current?.saberCertificateUploaded) {
+          return { ok: false, error: "SABER_CERTIFICATE_UPLOAD_REQUIRED" };
+        }
+      }
     }
 
     if (request.state === "TECHNICAL_REVIEW" && toState === "DECISION") {
@@ -3026,6 +3043,61 @@ export async function markExternalDeliverableIssued(
       `/[locale]/admin/requests/${deliverable.requestItem.request.id}`,
       "page",
     );
+    return { ok: true, data: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN";
+    if (message === "UNAUTHORIZED" || message === "FORBIDDEN") {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: "SAVE_FAILED" };
+  }
+}
+
+const setSaberCertificateUploadedSchema = z.object({
+  requestId: z.string().min(1),
+  uploaded: z.boolean(),
+});
+
+/**
+ * PCOC (SAB-001) has no ExternalDeliverable of its own — the certificate is
+ * issued directly on the SABER system, not routed through the
+ * submit/issue/reject ExternalDeliverable flow above. This is the Evaluator's
+ * simple Done/Not done confirmation that it was uploaded, gating REPORT_ISSUED
+ * -> CLOSED (see checkTransitionGuards' PCOC block).
+ */
+export async function setSaberCertificateUploaded(
+  input: z.infer<typeof setSaberCertificateUploadedSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    requirePermission(session, "requests:admin");
+    const parsed = setSaberCertificateUploadedSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "VALIDATION" };
+
+    const request = await prisma.request.findUnique({
+      where: { id: parsed.data.requestId },
+      select: { id: true, state: true, organisationId: true },
+    });
+    if (!request) return { ok: false, error: "NOT_FOUND" };
+    if (request.state !== "REPORT_ISSUED") {
+      return { ok: false, error: "INVALID_STATE" };
+    }
+
+    await prisma.request.update({
+      where: { id: request.id },
+      data: { saberCertificateUploaded: parsed.data.uploaded },
+    });
+
+    await writeAuditLog({
+      session,
+      organisationId: request.organisationId,
+      action: "request.saberCertificateUploaded.set",
+      entityType: "Request",
+      entityId: request.id,
+      after: { uploaded: parsed.data.uploaded },
+    });
+
+    revalidatePath(`/[locale]/admin/requests/${request.id}`, "page");
     return { ok: true, data: undefined };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN";

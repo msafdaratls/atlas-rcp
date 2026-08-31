@@ -42,6 +42,7 @@ import {
   markAdminRequestCommentsRead,
   reopenRequestByAdmin,
   setItemAssessmentMethod,
+  setSaberCertificateUploaded,
   transitionAdminRequest,
 } from "@/server/admin/actions";
 import { hasCheckItems } from "@/lib/assessment";
@@ -354,6 +355,27 @@ export function AdminRequestDetailPanel({
     );
   const canCompleteLabTesting =
     isLabTestingOnly && data.state === "ASSESSMENT_RUNNING";
+
+  // PCOC (SAB-001) has no ExternalDeliverable of its own — the certificate is
+  // issued directly on the SABER system. Before the Evaluator can complete
+  // certificate issuance (REPORT_ISSUED -> CLOSED), require an explicit
+  // Done/Not done confirmation that it was uploaded to this request.
+  const hasPcocItem = data.items.some((item) => item.serviceItem.code === "SAB-001");
+  const pcocCertificateGateActive = hasPcocItem && data.state === "REPORT_ISSUED";
+  const [saberUploaded, setSaberUploaded] = useState(data.saberCertificateUploaded);
+  const [saberPending, startSaberTransition] = useTransition();
+
+  function setSaberCertificateUploadedFlag(uploaded: boolean) {
+    const previous = saberUploaded;
+    setSaberUploaded(uploaded);
+    startSaberTransition(async () => {
+      const result = await setSaberCertificateUploaded({ requestId: data.id, uploaded });
+      if (!result.ok) {
+        setSaberUploaded(previous);
+        toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
+      }
+    });
+  }
 
   const canReturn = data.allowedTransitions.includes("RETURNED_TO_CLIENT");
   const canCancel = data.allowedTransitions.includes("CANCELLED");
@@ -843,29 +865,65 @@ export function AdminRequestDetailPanel({
             </div>
           ) : null}
 
+          {pcocCertificateGateActive ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-line p-3">
+              <span className="text-sm font-medium text-ink-900">
+                {t("saberCertificateUploadedQuestion")}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={saberUploaded ? "default" : "outline"}
+                  disabled={saberPending}
+                  onClick={() => setSaberCertificateUploadedFlag(true)}
+                >
+                  {t("done")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={!saberUploaded ? "default" : "outline"}
+                  disabled={saberPending}
+                  onClick={() => setSaberCertificateUploadedFlag(false)}
+                >
+                  {t("notDone")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           {otherTransitions.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {otherTransitions.map((target) => {
                 const Icon = transitionIcon(target);
                 const gate = coiGateFor(target);
+                const pcocBlocked =
+                  target === "CLOSED" && pcocCertificateGateActive && !saberUploaded;
                 return (
-                  <Button
-                    key={target}
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={pending}
-                    onClick={() =>
-                      gate ? openCoiGate(gate) : runTransition(target)
-                    }
-                  >
-                    {pending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Icon className="size-4" />
-                    )}
-                    {transitionLabel(target)}
-                  </Button>
+                  <div key={target} className="flex flex-col gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={pending || pcocBlocked}
+                      onClick={() =>
+                        gate ? openCoiGate(gate) : runTransition(target)
+                      }
+                    >
+                      {pending ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Icon className="size-4" />
+                      )}
+                      {transitionLabel(target)}
+                    </Button>
+                    {pcocBlocked ? (
+                      <span className="text-xs text-ink-500">
+                        {t("saberCertificateUploadedHint")}
+                      </span>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>

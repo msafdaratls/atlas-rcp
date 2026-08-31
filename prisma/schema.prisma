@@ -676,6 +676,12 @@ model Request {
   /// scored against the single global TechnicalReviewChecklist definition.
   /// Same AssessmentState JSON shape as RequestItem.assessment.
   technicalReviewChecklist Json?         @default("{}")
+  /// Evaluator confirmation that the certificate issued on the SABER system
+  /// has been uploaded to this request (e.g. PCOC/SAB-001, which has no
+  /// EXTERNAL_CERTIFICATE deliverable of its own). Gates REPORT_ISSUED ->
+  /// CLOSED for such requests, alongside the existing EXTERNAL_CERTIFICATE
+  /// document check.
+  saberCertificateUploaded Boolean       @default(false)
 
   organisation   Organisation           @relation(fields: [organisationId], references: [id])
   createdBy      User                   @relation("RequestCreatedBy", fields: [createdByUserId], references: [id])

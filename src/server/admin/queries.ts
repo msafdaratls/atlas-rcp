@@ -631,6 +631,7 @@ export type AdminRequestDetail = {
   createdAt: string;
   updatedAt: string;
   heldFromState: RequestState | null;
+  saberCertificateUploaded: boolean;
   allowedTransitions: RequestState[];
   canReopen: boolean;
   reopenTargetStates: RequestState[];
@@ -916,6 +917,7 @@ export async function getAdminRequestDetail(
       createdAt: request.createdAt.toISOString(),
       updatedAt: request.updatedAt.toISOString(),
       heldFromState: request.heldFromState,
+      saberCertificateUploaded: request.saberCertificateUploaded,
       allowedTransitions: allowedTransitionsFor({
         state: request.state,
         heldFromState: request.heldFromState,
