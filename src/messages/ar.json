@@ -1025,7 +1025,19 @@
         },
         "refresh": "تحديث إلى أحدث كتالوج",
         "refreshed": "تم تحديث قوائم التحقق إلى أحدث كتالوج",
-        "refreshedWithDropped": "تم التحديث — {count, plural, zero{لم تسقط أي إجابة} one{سقطت إجابة واحدة ويجب الإجابة عنها من جديد} two{سقطت إجابتان ويجب الإجابة عنهما من جديد} few{سقطت # إجابات ويجب الإجابة عنها من جديد} many{سقطت # إجابة ويجب الإجابة عنها من جديد} other{سقطت # إجابة ويجب الإجابة عنها من جديد}}"
+        "refreshedWithDropped": "تم التحديث — {count, plural, zero{لم تسقط أي إجابة} one{سقطت إجابة واحدة ويجب الإجابة عنها من جديد} two{سقطت إجابتان ويجب الإجابة عنهما من جديد} few{سقطت # إجابات ويجب الإجابة عنها من جديد} many{سقطت # إجابة ويجب الإجابة عنها من جديد} other{سقطت # إجابة ويجب الإجابة عنها من جديد}}",
+        "manual": "يدوي",
+        "addManualItem": "إضافة بند يدوي",
+        "manualItemCode": "رمز البند",
+        "manualItemReference": "المرجع",
+        "manualItemDescription": "الوصف",
+        "manualItemDescriptionPlaceholder": "صف بند القائمة…",
+        "notes": "ملاحظات",
+        "notesPlaceholder": "أضف ملاحظة…",
+        "addItem": "إضافة البند",
+        "cancel": "إلغاء",
+        "removeManualItem": "حذف البند",
+        "manualItemDuplicateCode": "رمز البند هذا مستخدم بالفعل في هذا القسم."
       },
       "externalDeliverable": {
         "title": "التقديم الخارجي",

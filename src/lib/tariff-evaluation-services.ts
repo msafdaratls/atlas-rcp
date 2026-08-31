@@ -73,7 +73,41 @@ export type TariffEvaluationSnapshot = {
   hash: string;
 };
 
-export type SectionVerdicts = Record<string, { verdicts: Record<string, Verdict> }>;
+/** An evaluator-added checklist row that has no counterpart in the pinned template. */
+export type ManualChecklistItem = {
+  code: string;
+  reference?: string;
+  descriptionEn: string;
+  descriptionAr: string;
+};
+
+export type SectionVerdicts = Record<
+  string,
+  {
+    verdicts: Record<string, Verdict>;
+    manualItems?: ManualChecklistItem[];
+    notes?: Record<string, string>;
+  }
+>;
+
+/** Folds manual items into a synthetic trailing check set, so scoring and progress treat them exactly like template items. */
+export function withManualItems(checkSets: CheckSet[], manualItems: ManualChecklistItem[] = []): CheckSet[] {
+  if (manualItems.length === 0) return checkSets;
+  return [
+    ...checkSets,
+    {
+      code: "manual",
+      titleEn: "Manual items",
+      titleAr: "بنود يدوية",
+      items: manualItems.map((m) => ({
+        code: m.code,
+        titleEn: m.descriptionEn,
+        titleAr: m.descriptionAr,
+        applicability: m.reference,
+      })),
+    },
+  ];
+}
 
 /** Deterministic across key insertion order, so an unchanged template hashes the same. */
 function stableStringify(value: unknown): string {
@@ -184,7 +218,7 @@ export function scoreSnapshot(
 ): AssessmentSummary {
   const summary = combineAssessments(
     snapshot.sections.map((section) =>
-      computeAssessment(section.checkSets, {
+      computeAssessment(withManualItems(section.checkSets, sectionVerdicts[section.key]?.manualItems), {
         verdicts: sectionVerdicts[section.key]?.verdicts ?? {},
       }),
     ),
@@ -211,15 +245,36 @@ export function parseSectionVerdicts(raw: unknown): SectionVerdicts {
   if (!raw || typeof raw !== "object") return out;
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!value || typeof value !== "object") continue;
-    const verdicts = (value as { verdicts?: unknown }).verdicts;
-    if (!verdicts || typeof verdicts !== "object") continue;
+    const entry = value as { verdicts?: unknown; manualItems?: unknown; notes?: unknown };
+    if (!entry.verdicts || typeof entry.verdicts !== "object") continue;
     const clean: Record<string, Verdict> = {};
-    for (const [code, verdict] of Object.entries(verdicts as Record<string, unknown>)) {
+    for (const [code, verdict] of Object.entries(entry.verdicts as Record<string, unknown>)) {
       if (verdict === "COMPLIANT" || verdict === "NON_COMPLIANT" || verdict === "NA") {
         clean[code] = verdict;
       }
     }
-    out[key] = { verdicts: clean };
+    const manualItems: ManualChecklistItem[] = Array.isArray(entry.manualItems)
+      ? (entry.manualItems as unknown[])
+          .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
+          .filter((i) => typeof i.code === "string" && typeof i.descriptionEn === "string")
+          .map((i) => ({
+            code: i.code as string,
+            reference: typeof i.reference === "string" ? i.reference : undefined,
+            descriptionEn: i.descriptionEn as string,
+            descriptionAr: typeof i.descriptionAr === "string" ? i.descriptionAr : (i.descriptionEn as string),
+          }))
+      : [];
+    const notes: Record<string, string> = {};
+    if (entry.notes && typeof entry.notes === "object") {
+      for (const [code, note] of Object.entries(entry.notes as Record<string, unknown>)) {
+        if (typeof note === "string" && note.trim()) notes[code] = note;
+      }
+    }
+    out[key] = {
+      verdicts: clean,
+      ...(manualItems.length ? { manualItems } : {}),
+      ...(Object.keys(notes).length ? { notes } : {}),
+    };
   }
   return out;
 }

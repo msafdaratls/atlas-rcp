@@ -1025,7 +1025,19 @@
         },
         "refresh": "Refresh to latest catalog",
         "refreshed": "Checklists refreshed to the latest catalog",
-        "refreshedWithDropped": "Refreshed — {count, plural, =0 {no answers were dropped} one {# answer no longer applies and must be answered again} other {# answers no longer apply and must be answered again}}"
+        "refreshedWithDropped": "Refreshed — {count, plural, =0 {no answers were dropped} one {# answer no longer applies and must be answered again} other {# answers no longer apply and must be answered again}}",
+        "manual": "Manual",
+        "addManualItem": "Add manual item",
+        "manualItemCode": "Item code",
+        "manualItemReference": "Reference",
+        "manualItemDescription": "Description",
+        "manualItemDescriptionPlaceholder": "Describe the checklist item…",
+        "notes": "Notes",
+        "notesPlaceholder": "Add a note…",
+        "addItem": "Add item",
+        "cancel": "Cancel",
+        "removeManualItem": "Remove item",
+        "manualItemDuplicateCode": "This item code is already used in this section."
       },
       "externalDeliverable": {
         "title": "External submission",

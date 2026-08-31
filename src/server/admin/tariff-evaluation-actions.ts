@@ -16,6 +16,7 @@ import {
   parseSnapshot,
   scoreSnapshot,
   snapshotItemCount,
+  type ManualChecklistItem,
   type SectionVerdicts,
   type TariffEvaluationSnapshot,
 } from "@/lib/tariff-evaluation-services";
@@ -367,14 +368,25 @@ export async function refreshTariffEvaluationTemplate(
 
     for (const section of snapshot.sections) {
       const known = new Set(section.checkSets.flatMap((set) => set.items.map((i) => i.code)));
+      const prevState = previous[section.key];
+      // Manual rows are evaluator data, not template data, so a catalog refresh
+      // never drops them — only their answers are re-validated against `known`.
+      const manualItems = prevState?.manualItems ?? [];
+      const manualCodes = new Set(manualItems.map((m) => m.code));
       const carried: Record<string, (typeof previous)[string]["verdicts"][string]> = {};
-      for (const [code, verdict] of Object.entries(previous[section.key]?.verdicts ?? {})) {
-        if (known.has(code)) {
+      for (const [code, verdict] of Object.entries(prevState?.verdicts ?? {})) {
+        if (known.has(code) || manualCodes.has(code)) {
           carried[code] = verdict;
           kept += 1;
         }
       }
-      if (Object.keys(carried).length > 0) next[section.key] = { verdicts: carried };
+      if (Object.keys(carried).length > 0 || manualItems.length > 0) {
+        next[section.key] = {
+          verdicts: carried,
+          ...(manualItems.length ? { manualItems } : {}),
+          ...(prevState?.notes ? { notes: prevState.notes } : {}),
+        };
+      }
     }
 
     await prisma.tariffEvaluation.update({
@@ -408,12 +420,22 @@ export async function refreshTariffEvaluationTemplate(
 
 // ─── Save verdicts ──────────────────────────────────────────────────────────
 
+const manualItemSchema = z.object({
+  code: z.string().trim().min(1).max(40),
+  reference: z.string().trim().max(200).optional(),
+  descriptionEn: z.string().trim().min(1).max(2000),
+  descriptionAr: z.string().trim().max(2000).optional(),
+});
+
 const saveVerdictsSchema = z.object({
   requestItemId: z.string().min(1),
   sectionKey: z.string().min(1).max(80),
   /** Echoed back from the loaded snapshot so a stale panel is detected, not silently truncated. */
   templateHash: z.string().min(1).max(64),
   verdicts: z.record(z.string(), z.enum(["COMPLIANT", "NON_COMPLIANT", "NA"])),
+  /** Evaluator-added rows with no counterpart in the pinned template. */
+  manualItems: z.array(manualItemSchema).max(50).optional(),
+  notes: z.record(z.string(), z.string().trim().max(2000)).optional(),
 });
 
 export async function saveTariffEvaluationVerdicts(
@@ -443,13 +465,38 @@ export async function saveTariffEvaluationVerdicts(
     if (!section) return { ok: false, error: "UNKNOWN_SECTION" };
 
     const known = new Set(section.checkSets.flatMap((set) => set.items.map((i) => i.code)));
+
+    // Manual rows must not collide with the pinned template's own codes, and a
+    // duplicate manual code (e.g. two rapid Adds) keeps only the first.
+    const manualItems: ManualChecklistItem[] = [];
+    const manualCodes = new Set<string>();
+    for (const item of parsed.data.manualItems ?? []) {
+      if (known.has(item.code) || manualCodes.has(item.code)) continue;
+      manualCodes.add(item.code);
+      manualItems.push({
+        code: item.code,
+        reference: item.reference,
+        descriptionEn: item.descriptionEn,
+        descriptionAr: item.descriptionAr?.trim() || item.descriptionEn,
+      });
+    }
+
     const verdicts: Record<string, "COMPLIANT" | "NON_COMPLIANT" | "NA"> = {};
     for (const [code, verdict] of Object.entries(parsed.data.verdicts)) {
-      if (known.has(code)) verdicts[code] = verdict;
+      if (known.has(code) || manualCodes.has(code)) verdicts[code] = verdict;
+    }
+
+    const notes: Record<string, string> = {};
+    for (const [code, note] of Object.entries(parsed.data.notes ?? {})) {
+      if ((known.has(code) || manualCodes.has(code)) && note.trim()) notes[code] = note.trim();
     }
 
     const next = parseSectionVerdicts(row.sectionVerdicts);
-    next[parsed.data.sectionKey] = { verdicts };
+    next[parsed.data.sectionKey] = {
+      verdicts,
+      ...(manualItems.length ? { manualItems } : {}),
+      ...(Object.keys(notes).length ? { notes } : {}),
+    };
 
     await prisma.tariffEvaluation.update({
       where: { id: row.id },

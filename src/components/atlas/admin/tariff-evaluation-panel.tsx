@@ -10,11 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { computeAssessment, type AssessmentDecision, type Verdict } from "@/lib/assessment";
 import {
   scoreSnapshot,
   snapshotItemCount,
+  withManualItems,
   type EvaluationSection,
+  type ManualChecklistItem,
   type SectionVerdicts,
 } from "@/lib/tariff-evaluation-services";
 import { cn } from "@/lib/utils";
@@ -32,9 +35,11 @@ import {
   CircleSlash,
   FileText,
   Loader2,
+  Plus,
   RefreshCw,
   Save,
   Search,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -79,30 +84,69 @@ const DECISION_TONE: Record<AssessmentDecision, string> = {
   INCOMPLETE: "bg-surface-alt text-ink-500 border-line",
 };
 
-/** One snapshot section: toggle-verdict rows plus its own progress readout. */
+type ManualDraft = { code: string; reference: string; descriptionEn: string; descriptionAr: string };
+
+const EMPTY_DRAFT: ManualDraft = { code: "", reference: "", descriptionEn: "", descriptionAr: "" };
+
+/** One snapshot section: toggle-verdict rows (template + evaluator-added manual rows) plus its own progress readout. */
 function ChecklistSection({
   section,
   verdicts,
+  manualItems,
+  notes,
   onToggle,
+  onNoteChange,
+  onAddManualItem,
+  onRemoveManualItem,
   editable,
   isAr,
   t,
 }: {
   section: EvaluationSection;
   verdicts: Record<string, Verdict>;
+  manualItems: ManualChecklistItem[];
+  notes: Record<string, string>;
   onToggle: (code: string, v: Verdict) => void;
+  onNoteChange: (code: string, note: string) => void;
+  onAddManualItem: (item: ManualChecklistItem) => boolean;
+  onRemoveManualItem: (code: string) => void;
   editable: boolean;
   isAr: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState<ManualDraft>(EMPTY_DRAFT);
+
+  const checkSetsWithManual = useMemo(
+    () => withManualItems(section.checkSets, manualItems),
+    [section.checkSets, manualItems],
+  );
   const items = section.checkSets.flatMap((s) => s.items);
   const summary = useMemo(
-    () => computeAssessment(section.checkSets, { verdicts }),
-    [section.checkSets, verdicts],
+    () => computeAssessment(checkSetsWithManual, { verdicts }),
+    [checkSetsWithManual, verdicts],
   );
   const title = isAr ? section.titleAr : section.titleEn;
 
-  if (items.length === 0) {
+  function submitDraft() {
+    const code = draft.code.trim();
+    const descriptionEn = draft.descriptionEn.trim();
+    if (!code || !descriptionEn) return;
+    const added = onAddManualItem({
+      code,
+      reference: draft.reference.trim() || undefined,
+      descriptionEn,
+      descriptionAr: draft.descriptionAr.trim() || descriptionEn,
+    });
+    if (!added) {
+      toast.error(t("manualItemDuplicateCode"));
+      return;
+    }
+    setDraft(EMPTY_DRAFT);
+    setAdding(false);
+  }
+
+  if (items.length === 0 && manualItems.length === 0 && !editable) {
     return (
       <div className="rounded-lg border border-dashed border-line-strong bg-surface-alt/40 p-3 text-xs text-ink-500">
         {title} — {t("emptyTemplate")}
@@ -118,42 +162,142 @@ function ChecklistSection({
           {t("progress", { done: summary.assessed, total: summary.total })}
         </span>
       </div>
-      <ul className="divide-y divide-line rounded-md border border-line">
-        {items.map((item, idx) => (
-          <li key={item.code} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
-            <p className="min-w-0 flex-1 text-sm text-ink-900">
-              <span className="font-data text-xs text-ink-400">{idx + 1}.</span>{" "}
-              {isAr ? item.titleAr : item.titleEn}
-              {item.applicability ? (
-                <span className="block text-xs text-ink-500">{item.applicability}</span>
-              ) : null}
-            </p>
-            <div className="flex shrink-0 gap-1">
-              {(["COMPLIANT", "NON_COMPLIANT", "NA"] as Verdict[]).map((v) => {
-                const meta = VERDICT_META[v];
-                const Icon = meta.icon;
-                const active = verdicts[item.code] === v;
-                return (
+      {items.length === 0 && manualItems.length === 0 ? (
+        <p className="text-xs text-ink-500">{t("emptyTemplate")}</p>
+      ) : (
+        <ul className="divide-y divide-line rounded-md border border-line">
+          {items.map((item, idx) => (
+            <li key={item.code} className="flex flex-wrap items-start justify-between gap-3 px-3 py-2.5">
+              <p className="min-w-0 flex-1 text-sm text-ink-900">
+                <span className="font-data text-xs text-ink-400">{idx + 1}.</span>{" "}
+                {isAr ? item.titleAr : item.titleEn}
+                {item.applicability ? (
+                  <span className="block text-xs text-ink-500">{item.applicability}</span>
+                ) : null}
+              </p>
+              <VerdictButtons value={verdicts[item.code]} onChange={(v) => onToggle(item.code, v)} editable={editable} t={t} />
+            </li>
+          ))}
+          {manualItems.map((item) => (
+            <li key={item.code} className="flex flex-wrap items-start justify-between gap-3 px-3 py-2.5 bg-surface-alt/30">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <p className="text-sm text-ink-900">
+                  <span className="me-1.5 inline-flex items-center rounded-full border border-line-strong px-1.5 py-0.5 font-data text-[10px] text-ink-500">
+                    {item.code}
+                  </span>
+                  <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 me-1.5">
+                    {t("manual")}
+                  </span>
+                  {isAr ? item.descriptionAr : item.descriptionEn}
+                  {item.reference ? <span className="block text-xs text-ink-500">{item.reference}</span> : null}
+                </p>
+                <Textarea
+                  value={notes[item.code] ?? ""}
+                  onChange={(e) => onNoteChange(item.code, e.target.value)}
+                  placeholder={t("notesPlaceholder")}
+                  disabled={!editable}
+                  rows={1}
+                  className="min-h-8 text-xs"
+                />
+              </div>
+              <div className="flex shrink-0 items-start gap-1">
+                <VerdictButtons value={verdicts[item.code]} onChange={(v) => onToggle(item.code, v)} editable={editable} t={t} />
+                {editable ? (
                   <button
-                    key={v}
                     type="button"
-                    disabled={!editable}
-                    onClick={() => onToggle(item.code, v)}
-                    title={t(`verdict.${v}`)}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                      active ? meta.on : meta.off,
-                    )}
+                    title={t("removeManualItem")}
+                    onClick={() => onRemoveManualItem(item.code)}
+                    className="inline-flex items-center rounded-md border border-line px-2 py-1 text-state-bad hover:bg-state-bad/10"
                   >
-                    <Icon className="size-3.5" />
-                    <span className="hidden sm:inline">{t(`verdict.${v}`)}</span>
+                    <Trash2 className="size-3.5" />
                   </button>
-                );
-              })}
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {editable ? (
+        adding ? (
+          <div className="space-y-2 rounded-md border border-dashed border-line-strong p-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                value={draft.code}
+                onChange={(e) => setDraft((d) => ({ ...d, code: e.target.value }))}
+                placeholder={t("manualItemCode")}
+                className="font-data"
+              />
+              <Input
+                value={draft.reference}
+                onChange={(e) => setDraft((d) => ({ ...d, reference: e.target.value }))}
+                placeholder={t("manualItemReference")}
+              />
             </div>
-          </li>
-        ))}
-      </ul>
+            <Textarea
+              value={isAr ? draft.descriptionAr : draft.descriptionEn}
+              onChange={(e) =>
+                setDraft((d) =>
+                  isAr ? { ...d, descriptionAr: e.target.value } : { ...d, descriptionEn: e.target.value },
+                )
+              }
+              placeholder={t("manualItemDescriptionPlaceholder")}
+              rows={2}
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" size="sm" variant="secondary" onClick={() => { setAdding(false); setDraft(EMPTY_DRAFT); }}>
+                {t("cancel")}
+              </Button>
+              <Button type="button" size="sm" onClick={submitDraft}>
+                {t("addItem")}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button type="button" size="sm" variant="secondary" onClick={() => setAdding(true)}>
+            <Plus className="size-4" />
+            {t("addManualItem")}
+          </Button>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+function VerdictButtons({
+  value,
+  onChange,
+  editable,
+  t,
+}: {
+  value: Verdict | undefined;
+  onChange: (v: Verdict) => void;
+  editable: boolean;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  return (
+    <div className="flex shrink-0 gap-1">
+      {(["COMPLIANT", "NON_COMPLIANT", "NA"] as Verdict[]).map((v) => {
+        const meta = VERDICT_META[v];
+        const Icon = meta.icon;
+        const active = value === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            disabled={!editable}
+            onClick={() => onChange(v)}
+            title={t(`verdict.${v}`)}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              active ? meta.on : meta.off,
+            )}
+          >
+            <Icon className="size-3.5" />
+            <span className="hidden sm:inline">{t(`verdict.${v}`)}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -245,7 +389,58 @@ export function TariffEvaluationPanel({
         const current = { ...(prev[sectionKey]?.verdicts ?? {}) };
         if (current[code] === v) delete current[code];
         else current[code] = v;
-        return { ...prev, [sectionKey]: { verdicts: current } };
+        return { ...prev, [sectionKey]: { ...prev[sectionKey], verdicts: current } };
+      });
+      setDirty((prev) => ({ ...prev, [sectionKey]: true }));
+    };
+  }
+
+  function changeNote(sectionKey: string) {
+    return (code: string, note: string) => {
+      if (!editable) return;
+      setVerdicts((prev) => {
+        const notes = { ...(prev[sectionKey]?.notes ?? {}) };
+        if (note.trim()) notes[code] = note;
+        else delete notes[code];
+        return { ...prev, [sectionKey]: { ...prev[sectionKey], verdicts: prev[sectionKey]?.verdicts ?? {}, notes } };
+      });
+      setDirty((prev) => ({ ...prev, [sectionKey]: true }));
+    };
+  }
+
+  function addManualItem(sectionKey: string) {
+    return (item: ManualChecklistItem): boolean => {
+      let added = true;
+      setVerdicts((prev) => {
+        const existing = prev[sectionKey]?.manualItems ?? [];
+        if (existing.some((m) => m.code === item.code)) {
+          added = false;
+          return prev;
+        }
+        return {
+          ...prev,
+          [sectionKey]: {
+            ...prev[sectionKey],
+            verdicts: prev[sectionKey]?.verdicts ?? {},
+            manualItems: [...existing, item],
+          },
+        };
+      });
+      if (added) setDirty((prev) => ({ ...prev, [sectionKey]: true }));
+      return added;
+    };
+  }
+
+  function removeManualItem(sectionKey: string) {
+    return (code: string) => {
+      if (!editable) return;
+      setVerdicts((prev) => {
+        const manualItems = (prev[sectionKey]?.manualItems ?? []).filter((m) => m.code !== code);
+        const verdictsMap = { ...(prev[sectionKey]?.verdicts ?? {}) };
+        delete verdictsMap[code];
+        const notes = { ...(prev[sectionKey]?.notes ?? {}) };
+        delete notes[code];
+        return { ...prev, [sectionKey]: { verdicts: verdictsMap, manualItems, notes } };
       });
       setDirty((prev) => ({ ...prev, [sectionKey]: true }));
     };
@@ -259,6 +454,8 @@ export function TariffEvaluationPanel({
         sectionKey,
         templateHash: snapshot.hash,
         verdicts: verdicts[sectionKey]?.verdicts ?? {},
+        manualItems: verdicts[sectionKey]?.manualItems ?? [],
+        notes: verdicts[sectionKey]?.notes ?? {},
       });
       if (!result.ok) {
         toast.error(tErrors(result.error as "SAVE_FAILED"));
@@ -463,7 +660,12 @@ export function TariffEvaluationPanel({
               <ChecklistSection
                 section={section}
                 verdicts={verdicts[section.key]?.verdicts ?? {}}
+                manualItems={verdicts[section.key]?.manualItems ?? []}
+                notes={verdicts[section.key]?.notes ?? {}}
                 onToggle={toggle(section.key)}
+                onNoteChange={changeNote(section.key)}
+                onAddManualItem={addManualItem(section.key)}
+                onRemoveManualItem={removeManualItem(section.key)}
                 editable={editable}
                 isAr={isAr}
                 t={t}
