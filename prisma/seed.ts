@@ -1320,7 +1320,7 @@ async function main() {
         code: "IMPORTER_DECLARATION",
         nameEn: "Supplier declaration",
         nameAr: "إقرار المورّد",
-        mandatory: true,
+        mandatory: false,
         acceptedMimeTypes: ["application/pdf"],
         helpEn:
           "Download the template, fill it out on your Importer Header Letter, then upload the signed file. The same declaration may be reused for every product on this request.",
@@ -1332,7 +1332,7 @@ async function main() {
         code: "MANUFACTURER_DECLARATION",
         nameEn: "Manufacturer declaration",
         nameAr: "إقرار الصانع",
-        mandatory: true,
+        mandatory: false,
         acceptedMimeTypes: ["application/pdf"],
         helpEn:
           "Download the template, fill it out on the manufacturer's letterhead, then upload the signed file. The same declaration may be reused for every product on this request.",
@@ -1344,7 +1344,7 @@ async function main() {
         code: "TEST_REPORT",
         nameEn: "Test report",
         nameAr: "تقرير الاختبار",
-        mandatory: true,
+        mandatory: false,
         acceptedMimeTypes: ["application/pdf"],
         sortOrder: 3,
       },
@@ -1368,7 +1368,7 @@ async function main() {
         code: "RISK_ASSESSMENT",
         nameEn: "Risk assessment form",
         nameAr: "نموذج تقييم المخاطر",
-        mandatory: true,
+        mandatory: false,
         acceptedMimeTypes: ["application/pdf"],
         // The blank form differs per technical regulation, so this slot uses
         // the variant templates installed by install-document-templates.ts
@@ -1386,6 +1386,9 @@ async function main() {
     // mandatory PRODUCT_IMAGES doc above already covers it); hs_code,
     // manufacturer and technical_regulation relaxed to optional; added the
     // optional saber_request_number for clients who already started on SABER.
+    // Reconciled per migration 20260831000000: only PRODUCT_IMAGES and
+    // PRODUCT_LABEL remain mandatory; supplier/manufacturer declarations,
+    // test report, and risk assessment form relaxed to optional.
     productAttrSchema: {
       type: "object",
       required: ["country_of_origin", "saber_request_number"],
