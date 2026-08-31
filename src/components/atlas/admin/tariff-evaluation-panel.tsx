@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { computeAssessment, type AssessmentDecision, type Verdict } from "@/lib/assessment";
 import {
   scoreSnapshot,
+  SECTION_DOCUMENTS,
   snapshotItemCount,
   withManualItems,
   type EvaluationSection,
@@ -21,7 +22,7 @@ import {
   type SectionVerdicts,
 } from "@/lib/tariff-evaluation-services";
 import { cn } from "@/lib/utils";
-import type { AdminRequestDetailItem } from "@/server/admin/queries";
+import type { AdminRequestDetail, AdminRequestDetailItem } from "@/server/admin/queries";
 import {
   completeTariffEvaluation,
   listTariffItemsForRegulation,
@@ -48,6 +49,7 @@ import { toast } from "sonner";
 
 type Regulation = AdminRequestDetailItem["tariffRegulations"][number];
 type Document = AdminRequestDetailItem["documents"][number];
+type RequestEventEntry = AdminRequestDetail["events"][number];
 
 type Props = {
   requestItemId: string;
@@ -57,7 +59,13 @@ type Props = {
   tariffEvaluation: AdminRequestDetailItem["tariffEvaluation"];
   documents: Document[];
   editable: boolean;
+  events?: RequestEventEntry[];
 };
+
+/** First event that moved the request into `toState`, if any — used to name who ran each stage. */
+function findEventActor(events: RequestEventEntry[], toState: string): RequestEventEntry | undefined {
+  return events.find((e) => e.toState === toState);
+}
 
 const VERDICT_META: Record<Verdict, { icon: typeof CheckCircle2; on: string; off: string }> = {
   COMPLIANT: {
@@ -101,6 +109,7 @@ function ChecklistSection({
   editable,
   isAr,
   t,
+  labelKey = "verdict",
 }: {
   section: EvaluationSection;
   verdicts: Record<string, Verdict>;
@@ -113,6 +122,7 @@ function ChecklistSection({
   editable: boolean;
   isAr: boolean;
   t: ReturnType<typeof useTranslations>;
+  labelKey?: "verdict" | "verdictDocuments";
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<ManualDraft>(EMPTY_DRAFT);
@@ -175,7 +185,7 @@ function ChecklistSection({
                   <span className="block text-xs text-ink-500">{item.applicability}</span>
                 ) : null}
               </p>
-              <VerdictButtons value={verdicts[item.code]} onChange={(v) => onToggle(item.code, v)} editable={editable} t={t} />
+              <VerdictButtons value={verdicts[item.code]} onChange={(v) => onToggle(item.code, v)} editable={editable} t={t} labelKey={labelKey} />
             </li>
           ))}
           {manualItems.map((item) => (
@@ -201,7 +211,7 @@ function ChecklistSection({
                 />
               </div>
               <div className="flex shrink-0 items-start gap-1">
-                <VerdictButtons value={verdicts[item.code]} onChange={(v) => onToggle(item.code, v)} editable={editable} t={t} />
+                <VerdictButtons value={verdicts[item.code]} onChange={(v) => onToggle(item.code, v)} editable={editable} t={t} labelKey={labelKey} />
                 {editable ? (
                   <button
                     type="button"
@@ -269,11 +279,13 @@ function VerdictButtons({
   onChange,
   editable,
   t,
+  labelKey = "verdict",
 }: {
   value: Verdict | undefined;
   onChange: (v: Verdict) => void;
   editable: boolean;
   t: ReturnType<typeof useTranslations>;
+  labelKey?: "verdict" | "verdictDocuments";
 }) {
   return (
     <div className="flex shrink-0 gap-1">
@@ -287,14 +299,14 @@ function VerdictButtons({
             type="button"
             disabled={!editable}
             onClick={() => onChange(v)}
-            title={t(`verdict.${v}`)}
+            title={t(`${labelKey}.${v}`)}
             className={cn(
               "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
               active ? meta.on : meta.off,
             )}
           >
             <Icon className="size-3.5" />
-            <span className="hidden sm:inline">{t(`verdict.${v}`)}</span>
+            <span className="hidden sm:inline">{t(`${labelKey}.${v}`)}</span>
           </button>
         );
       })}
@@ -320,6 +332,7 @@ export function TariffEvaluationPanel({
   tariffEvaluation,
   documents,
   editable,
+  events = [],
 }: Props) {
   const t = useTranslations("adminOps.requestDetail.tariffEvaluation");
   const tErrors = useTranslations("adminOps.requestDetail.tariffEvaluation.errors");
@@ -505,6 +518,15 @@ export function TariffEvaluationPanel({
   );
   const hasItems = snapshot ? snapshotItemCount(snapshot) > 0 : false;
 
+  const stageActors = useMemo(() => {
+    const evaluatorEvent = findEventActor(events, "TECHNICAL_REVIEW");
+    const reviewerEvent = findEventActor(events, "DECISION");
+    const decisionMakerEvent = findEventActor(events, "REPORT_ISSUED");
+    return { evaluatorEvent, reviewerEvent, decisionMakerEvent };
+  }, [events]);
+
+  const actorName = (e: RequestEventEntry) => (isAr ? e.actorNameAr : e.actorNameEn) || e.actorNameEn;
+
   const resolvedInfo: Array<{ label: string; node: React.ReactNode }> = snapshot
     ? [
         {
@@ -573,6 +595,29 @@ export function TariffEvaluationPanel({
           </span>
         ) : null}
       </div>
+
+      {bundle?.completedAt ? (
+        <dl className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg border border-line bg-surface-alt/40 p-3 text-xs">
+          {stageActors.evaluatorEvent ? (
+            <div className="flex items-center gap-1.5">
+              <dt className="font-medium text-ink-500">{t("evaluatorLabel")}:</dt>
+              <dd className="text-ink-900">{actorName(stageActors.evaluatorEvent)}</dd>
+            </div>
+          ) : null}
+          {stageActors.reviewerEvent ? (
+            <div className="flex items-center gap-1.5">
+              <dt className="font-medium text-ink-500">{t("reviewerLabel")}:</dt>
+              <dd className="text-ink-900">{actorName(stageActors.reviewerEvent)}</dd>
+            </div>
+          ) : null}
+          {stageActors.decisionMakerEvent ? (
+            <div className="flex items-center gap-1.5">
+              <dt className="font-medium text-ink-500">{t("decisionMakerLabel")}:</dt>
+              <dd className="text-ink-900">{actorName(stageActors.decisionMakerEvent)}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
 
       {/* Step 1: technical regulation */}
       <div className="space-y-1">
@@ -669,6 +714,7 @@ export function TariffEvaluationPanel({
                 editable={editable}
                 isAr={isAr}
                 t={t}
+                labelKey={section.key === SECTION_DOCUMENTS ? "verdictDocuments" : "verdict"}
               />
               {editable && dirty[section.key] ? (
                 <div className="flex items-center justify-end gap-3">

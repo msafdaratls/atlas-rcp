@@ -1509,6 +1509,7 @@ export function AdminRequestDetailPanel({
                 tariffEvaluation={item.tariffEvaluation}
                 documents={item.documents}
                 editable={data.state === "ASSESSMENT_RUNNING"}
+                events={data.events}
               />
             ) : (
               <EvaluationReportPanel

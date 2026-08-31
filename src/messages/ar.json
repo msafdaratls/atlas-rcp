@@ -1002,6 +1002,14 @@
           "NON_COMPLIANT": "غير مطابق",
           "NA": "لا ينطبق"
         },
+        "verdictDocuments": {
+          "COMPLIANT": "متوفر",
+          "NON_COMPLIANT": "غير متوفر",
+          "NA": "لا ينطبق"
+        },
+        "evaluatorLabel": "المقيّم",
+        "reviewerLabel": "المراجع الفني",
+        "decisionMakerLabel": "متخذ القرار",
         "status": {
           "ACCEPTED": "مقبول",
           "ACCEPTED_WITH_REMARKS": "مقبول مع ملاحظات",

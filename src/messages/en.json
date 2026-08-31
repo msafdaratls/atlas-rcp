@@ -1002,6 +1002,14 @@
           "NON_COMPLIANT": "Non-compliant",
           "NA": "N/A"
         },
+        "verdictDocuments": {
+          "COMPLIANT": "Available",
+          "NON_COMPLIANT": "Not Available",
+          "NA": "N/A"
+        },
+        "evaluatorLabel": "Evaluator",
+        "reviewerLabel": "Reviewer",
+        "decisionMakerLabel": "Decision Maker",
         "status": {
           "ACCEPTED": "Accepted",
           "ACCEPTED_WITH_REMARKS": "Accepted, with remarks",
