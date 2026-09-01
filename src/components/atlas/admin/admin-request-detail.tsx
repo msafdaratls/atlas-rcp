@@ -311,6 +311,7 @@ export function AdminRequestDetailPanel({
   const [commentPending, startCommentTransition] = useTransition();
 
   const [clientMessageBody, setClientMessageBody] = useState("");
+  const [clientMessageFile, setClientMessageFile] = useState<File | null>(null);
   const [clientMessagePending, startClientMessageTransition] = useTransition();
   const [clientMessageConfirmOpen, setClientMessageConfirmOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -642,13 +643,18 @@ export function AdminRequestDetailPanel({
     const body = clientMessageBody.trim();
     if (!body) return;
     startClientMessageTransition(async () => {
-      const result = await addAtlasClientComment({ requestId: data.id, body });
+      const formData = new FormData();
+      formData.set("requestId", data.id);
+      formData.set("body", body);
+      if (clientMessageFile) formData.set("file", clientMessageFile);
+      const result = await addAtlasClientComment(formData);
       if (!result.ok) {
         toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
         return;
       }
       toast.success(t("messageSent"));
       setClientMessageBody("");
+      setClientMessageFile(null);
       setClientMessageConfirmOpen(false);
       router.refresh();
     });
@@ -778,6 +784,21 @@ export function AdminRequestDetailPanel({
                         ? (c.bodyAr ?? c.bodyEn)
                         : (c.bodyEn ?? c.bodyAr)}
                     </p>
+                    {c.attachments.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {c.attachments.map((a) => (
+                          <button
+                            key={a.storageKey}
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink-700 hover:bg-atlas-green-tint/40"
+                            onClick={() => openStorage(a.storageKey)}
+                          >
+                            <Paperclip className="size-3.5" />
+                            {a.fileName}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -795,21 +816,51 @@ export function AdminRequestDetailPanel({
                 maxLength={2000}
                 rows={2}
               />
+              {clientMessageFile ? (
+                <div className="flex items-center gap-1.5 text-xs text-ink-600">
+                  <Paperclip className="size-3.5" />
+                  {clientMessageFile.name}
+                  <button
+                    type="button"
+                    className="text-ink-500 hover:text-ink-800"
+                    onClick={() => setClientMessageFile(null)}
+                    aria-label={t("commentAttachmentRemove")}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between gap-2">
                 <p className="font-data text-xs text-ink-500" dir="ltr">
                   {t("messageCharCount", { count: clientMessageBody.length })}
                 </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={
-                    clientMessagePending || clientMessageBody.trim().length === 0
-                  }
-                  onClick={() => setClientMessageConfirmOpen(true)}
-                >
-                  <Send className="size-4" />
-                  {t("sendToClient")}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Label
+                    htmlFor="chat-message-file"
+                    className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-medium text-ink-700 hover:bg-atlas-green-tint/40"
+                  >
+                    <Paperclip className="size-3.5" />
+                    {t("commentAttach")}
+                  </Label>
+                  <input
+                    id="chat-message-file"
+                    type="file"
+                    accept="application/pdf,image/png,image/jpeg"
+                    className="hidden"
+                    onChange={(e) => setClientMessageFile(e.target.files?.[0] ?? null)}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={
+                      clientMessagePending || clientMessageBody.trim().length === 0
+                    }
+                    onClick={() => setClientMessageConfirmOpen(true)}
+                  >
+                    <Send className="size-4" />
+                    {t("sendToClient")}
+                  </Button>
+                </div>
               </div>
             </div>
           ) : null}
@@ -1700,6 +1751,21 @@ export function AdminRequestDetailPanel({
                 <p className="mt-2 text-sm text-ink-800">
                   {locale === "ar" ? (c.bodyAr ?? c.bodyEn) : (c.bodyEn ?? c.bodyAr)}
                 </p>
+                {c.attachments.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {c.attachments.map((a) => (
+                      <button
+                        key={a.storageKey}
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink-700 hover:bg-atlas-green-tint/40"
+                        onClick={() => openStorage(a.storageKey)}
+                      >
+                        <Paperclip className="size-3.5" />
+                        {a.fileName}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -1715,21 +1781,51 @@ export function AdminRequestDetailPanel({
               maxLength={2000}
               rows={3}
             />
+            {clientMessageFile ? (
+              <div className="flex items-center gap-1.5 text-xs text-ink-600">
+                <Paperclip className="size-3.5" />
+                {clientMessageFile.name}
+                <button
+                  type="button"
+                  className="text-ink-500 hover:text-ink-800"
+                  onClick={() => setClientMessageFile(null)}
+                  aria-label={t("commentAttachmentRemove")}
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-2">
               <p className="font-data text-xs text-ink-500" dir="ltr">
                 {t("messageCharCount", { count: clientMessageBody.length })}
               </p>
-              <Button
-                type="button"
-                size="sm"
-                disabled={
-                  clientMessagePending || clientMessageBody.trim().length === 0
-                }
-                onClick={() => setClientMessageConfirmOpen(true)}
-              >
-                <Send className="size-4" />
-                {t("sendToClient")}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Label
+                  htmlFor="client-message-file"
+                  className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-medium text-ink-700 hover:bg-atlas-green-tint/40"
+                >
+                  <Paperclip className="size-3.5" />
+                  {t("commentAttach")}
+                </Label>
+                <input
+                  id="client-message-file"
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg"
+                  className="hidden"
+                  onChange={(e) => setClientMessageFile(e.target.files?.[0] ?? null)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    clientMessagePending || clientMessageBody.trim().length === 0
+                  }
+                  onClick={() => setClientMessageConfirmOpen(true)}
+                >
+                  <Send className="size-4" />
+                  {t("sendToClient")}
+                </Button>
+              </div>
             </div>
           </div>
         ) : null}

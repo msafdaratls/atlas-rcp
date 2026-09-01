@@ -1515,10 +1515,6 @@ function extractMentionedUserIds(body: string): string[] {
   return [...ids];
 }
 
-/** Log Notes attachments: same accept-list as generic document uploads, capped smaller since these are incidental evidence, not required submission documents. */
-const COMMENT_ATTACHMENT_ACCEPTED = ["application/pdf", "image/png", "image/jpeg"];
-const COMMENT_ATTACHMENT_MAX_MB = 20;
-
 export async function addAdminInternalComment(
   formData: FormData,
 ): Promise<ActionResult<{ commentId: string }>> {
@@ -1540,44 +1536,19 @@ export async function addAdminInternalComment(
       return { ok: false, error: "INVALID_STATE" };
     }
 
-    let attachment: {
-      fileName: string;
-      storageKey: string;
-      sizeBytes: number;
-      mimeType: string;
-    } | null = null;
+    const { storeCommentAttachment, attachmentToJson } = await import(
+      "@/server/comments/attachment"
+    );
+    let attachment: import("@/server/comments/attachment").CommentAttachment | null =
+      null;
     const file = formData.get("file");
     if (file instanceof File && file.size > 0) {
-      if (!COMMENT_ATTACHMENT_ACCEPTED.includes(file.type)) {
-        return { ok: false, error: "MIME_REJECTED" };
-      }
-      if (file.size > COMMENT_ATTACHMENT_MAX_MB * 1024 * 1024) {
-        return { ok: false, error: "FILE_TOO_LARGE" };
-      }
-      const { mimeAllowed, sniffMime } = await import("@/lib/mime-sniff");
-      const { storage } = await import("@/lib/storage");
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const sniffed = sniffMime(buffer);
-      if (!mimeAllowed(sniffed, COMMENT_ATTACHMENT_ACCEPTED)) {
-        return { ok: false, error: "MIME_REJECTED" };
-      }
-      const { getAvScanner } = await import("@/lib/av");
-      const verdict = await getAvScanner().scan(buffer);
-      if (verdict === "INFECTED") {
-        return { ok: false, error: "INFECTED_FILE" };
-      }
-      const stored = await storage.put({
-        keyPrefix: `orgs/${request.organisationId}/requests/${request.id}/notes`,
-        fileName: file.name,
-        mimeType: sniffed,
-        body: buffer,
-      });
-      attachment = {
-        fileName: file.name,
-        storageKey: stored.key,
-        sizeBytes: buffer.byteLength,
-        mimeType: sniffed,
-      };
+      const stored = await storeCommentAttachment(
+        file,
+        `orgs/${request.organisationId}/requests/${request.id}/notes`,
+      );
+      if (!stored.ok) return { ok: false, error: stored.error };
+      attachment = stored.attachment;
     }
 
     const candidateIds = extractMentionedUserIds(parsed.data.body).filter(
@@ -1602,7 +1573,7 @@ export async function addAdminInternalComment(
           direction: "INTERNAL",
           bodyEn: parsed.data.body,
           bodyAr: parsed.data.body,
-          attachments: attachment ? [attachment as Prisma.InputJsonObject] : [],
+          attachments: attachmentToJson(attachment),
         },
       });
 
@@ -3300,12 +3271,15 @@ function canMessageOnRequestState(state: RequestState): boolean {
 }
 
 export async function addAtlasClientComment(
-  input: z.infer<typeof clientFacingCommentSchema>,
+  formData: FormData,
 ): Promise<ActionResult<{ commentId: string }>> {
   try {
     const session = await requireSession();
     requirePermission(session, "requests:admin");
-    const parsed = clientFacingCommentSchema.safeParse(input);
+    const parsed = clientFacingCommentSchema.safeParse({
+      requestId: String(formData.get("requestId") ?? ""),
+      body: String(formData.get("body") ?? ""),
+    });
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
     const request = await prisma.request.findUnique({
@@ -3323,6 +3297,21 @@ export async function addAtlasClientComment(
       return { ok: false, error: "INVALID_STATE" };
     }
 
+    const { storeCommentAttachment, attachmentToJson } = await import(
+      "@/server/comments/attachment"
+    );
+    let attachment: import("@/server/comments/attachment").CommentAttachment | null =
+      null;
+    const file = formData.get("file");
+    if (file instanceof File && file.size > 0) {
+      const stored = await storeCommentAttachment(
+        file,
+        `orgs/${request.organisationId}/requests/${request.id}/messages`,
+      );
+      if (!stored.ok) return { ok: false, error: stored.error };
+      attachment = stored.attachment;
+    }
+
     const comment = await prisma.$transaction(async (tx) => {
       const created = await tx.requestComment.create({
         data: {
@@ -3331,6 +3320,7 @@ export async function addAtlasClientComment(
           direction: "ATLAS_TO_CLIENT",
           bodyEn: parsed.data.body,
           bodyAr: parsed.data.body,
+          attachments: attachmentToJson(attachment),
         },
       });
 

@@ -1982,6 +1982,8 @@
     "sendMessage": "إرسال الرسالة",
     "messagePlaceholder": "اكتب رسالة إلى أطلس...",
     "messageSent": "تم إرسال الرسالة",
+    "messageAttach": "إرفاق ملف",
+    "messageAttachmentRemove": "إزالة المرفق",
     "downloadReport": "تحميل تقرير PDF",
     "downloadCertificate": "تحميل الشهادة PDF",
     "verify": "تحقق علناً",

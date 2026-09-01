@@ -8,6 +8,7 @@ import { scopedDb } from "@/lib/scoped-db";
 import { storage } from "@/lib/storage";
 import { invoiceOpenBalance } from "@/server/finance/queries";
 import { exceedsMaxResubmissions } from "@/lib/billing-helpers";
+import { parseCommentAttachments } from "@/server/admin/queries";
 
 /** Null when no template has been uploaded for this document slot yet. */
 function templateUrlFor(storageKey: string | null): string | null {
@@ -676,6 +677,7 @@ export type ClientRequestDetail = {
     authorNameEn: string;
     authorNameAr: string;
     createdAt: string;
+    attachments: import("@/server/admin/queries").CommentAttachment[];
   }>;
 };
 
@@ -870,6 +872,7 @@ export async function getClientRequestDetail(
         authorNameEn: c.author.fullNameEn,
         authorNameAr: c.author.fullNameAr,
         createdAt: c.createdAt.toISOString(),
+        attachments: parseCommentAttachments(c.attachments),
       })),
     };
   } catch {

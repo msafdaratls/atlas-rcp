@@ -186,6 +186,61 @@ export async function GET(_request: NextRequest, { params }: Params) {
             requirePermission(session, "requests:admin");
             downloadName = labelDoc.fileName;
           } else {
+            // Comment/message attachments (internal notes, client<->Atlas
+            // chat). Stored inline in RequestComment.attachments (a JSON
+            // array), so it isn't a queryable FK column like the branches
+            // above — look it up by scanning attachment elements for a
+            // matching storageKey.
+            const [commentAttachment] = await prisma.$queryRaw<
+              {
+                requestId: string;
+                direction: string;
+                organisationId: string;
+                fileName: string | null;
+              }[]
+            >`
+              SELECT rc."requestId", rc.direction, r."organisationId", (elem->>'fileName') AS "fileName"
+              FROM "RequestComment" rc
+              JOIN "Request" r ON r.id = rc."requestId"
+              CROSS JOIN LATERAL jsonb_array_elements(rc.attachments) AS elem
+              WHERE elem->>'storageKey' = ${key}
+              LIMIT 1
+            `;
+
+            if (commentAttachment) {
+              if (isClient) {
+                if (commentAttachment.direction === "INTERNAL") {
+                  throw new Error("FORBIDDEN");
+                }
+                assertClientOwns(
+                  session,
+                  commentAttachment.organisationId,
+                  "requests:read",
+                );
+              } else if (isAtlas) {
+                requirePermission(session, "requests:admin");
+              } else {
+                throw new Error("FORBIDDEN");
+              }
+              downloadName = commentAttachment.fileName ?? downloadName;
+              const object = await storage.get(key);
+              if (!object) {
+                return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+              }
+              const disposition = isInlineSafe(object.mimeType)
+                ? "inline"
+                : "attachment";
+              const fileName = downloadName ?? key.split("/").pop() ?? "download";
+              return new NextResponse(new Uint8Array(object.body), {
+                headers: {
+                  "Content-Type": object.mimeType,
+                  "Content-Disposition": contentDisposition(disposition, fileName),
+                  "X-Content-Type-Options": "nosniff",
+                  "Cache-Control": "private, max-age=3600",
+                },
+              });
+            }
+
             const org = await prisma.organisation.findFirst({
               where: { logoKey: key },
               select: { id: true },

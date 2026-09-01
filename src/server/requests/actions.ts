@@ -1856,6 +1856,7 @@ const clientCommentSchema = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 
+
 /**
  * A request with no lifecycle history (DRAFT) or a dead one (CANCELLED) has
  * no thread to message on. CLOSED requests are locked against further
@@ -1866,12 +1867,15 @@ function canMessageOnRequestState(state: string): boolean {
 }
 
 export async function addClientRequestComment(
-  input: z.infer<typeof clientCommentSchema>,
+  formData: FormData,
 ): Promise<ActionResult<{ commentId: string }>> {
   try {
     const session = await requireSession();
     requirePermission(session, "requests:create");
-    const parsed = clientCommentSchema.safeParse(input);
+    const parsed = clientCommentSchema.safeParse({
+      requestId: String(formData.get("requestId") ?? ""),
+      body: String(formData.get("body") ?? ""),
+    });
     if (!parsed.success) return { ok: false, error: "VALIDATION" };
 
     const { organisationId: orgId } = scopedDb(session);
@@ -1893,6 +1897,21 @@ export async function addClientRequestComment(
       return { ok: false, error: "INVALID_STATE" };
     }
 
+    const { storeCommentAttachment, attachmentToJson } = await import(
+      "@/server/comments/attachment"
+    );
+    let attachment: import("@/server/comments/attachment").CommentAttachment | null =
+      null;
+    const file = formData.get("file");
+    if (file instanceof File && file.size > 0) {
+      const stored = await storeCommentAttachment(
+        file,
+        `orgs/${request.organisationId}/requests/${request.id}/messages`,
+      );
+      if (!stored.ok) return { ok: false, error: stored.error };
+      attachment = stored.attachment;
+    }
+
     const comment = await prisma.$transaction(async (tx) => {
       const created = await tx.requestComment.create({
         data: {
@@ -1901,6 +1920,7 @@ export async function addClientRequestComment(
           direction: "CLIENT_TO_ATLAS",
           bodyEn: parsed.data.body,
           bodyAr: parsed.data.body,
+          attachments: attachmentToJson(attachment),
         },
       });
 

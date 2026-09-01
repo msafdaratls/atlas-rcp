@@ -1982,6 +1982,8 @@
     "sendMessage": "Send message",
     "messagePlaceholder": "Write a message to Atlas...",
     "messageSent": "Message sent",
+    "messageAttach": "Attach file",
+    "messageAttachmentRemove": "Remove attachment",
     "downloadReport": "Download report PDF",
     "downloadCertificate": "Download certificate PDF",
     "verify": "Verify publicly",

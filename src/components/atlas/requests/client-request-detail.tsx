@@ -38,6 +38,7 @@ import {
   Loader2,
   Lock,
   MessageSquare,
+  Paperclip,
   Receipt,
   RotateCcw,
   Send,
@@ -80,6 +81,7 @@ export function ClientRequestDetailPanel({ data }: Props) {
   const [discarding, setDiscarding] = useState(false);
 
   const [messageBody, setMessageBody] = useState("");
+  const [messageFile, setMessageFile] = useState<File | null>(null);
   const [messagePending, startMessageTransition] = useTransition();
   const [chatOpen, setChatOpen] = useState(false);
 
@@ -212,16 +214,18 @@ export function ClientRequestDetailPanel({ data }: Props) {
     const body = messageBody.trim();
     if (!body) return;
     startMessageTransition(async () => {
-      const result = await addClientRequestComment({
-        requestId: data.id,
-        body,
-      });
+      const formData = new FormData();
+      formData.set("requestId", data.id);
+      formData.set("body", body);
+      if (messageFile) formData.set("file", messageFile);
+      const result = await addClientRequestComment(formData);
       if (!result.ok) {
         toast.error(t(`errors.${result.error}` as "errors.SAVE_FAILED"));
         return;
       }
       toast.success(t("messageSent"));
       setMessageBody("");
+      setMessageFile(null);
       router.refresh();
     });
   };
@@ -336,6 +340,21 @@ export function ClientRequestDetailPanel({ data }: Props) {
                         ? (c.bodyAr ?? c.bodyEn)
                         : (c.bodyEn ?? c.bodyAr)}
                     </p>
+                    {c.attachments.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {c.attachments.map((a) => (
+                          <button
+                            key={a.storageKey}
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink-700 hover:bg-atlas-green-tint/40"
+                            onClick={() => openStorage(a.storageKey)}
+                          >
+                            <Paperclip className="size-3.5" />
+                            {a.fileName}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -349,19 +368,49 @@ export function ClientRequestDetailPanel({ data }: Props) {
               placeholder={t("messagePlaceholder")}
               rows={2}
             />
-            <Button
-              type="button"
-              size="sm"
-              disabled={messagePending || messageBody.trim().length === 0}
-              onClick={handleSendMessage}
-            >
-              {messagePending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
-              {t("sendMessage")}
-            </Button>
+            {messageFile ? (
+              <div className="flex items-center gap-1.5 text-xs text-ink-600">
+                <Paperclip className="size-3.5" />
+                {messageFile.name}
+                <button
+                  type="button"
+                  className="text-ink-500 hover:text-ink-800"
+                  onClick={() => setMessageFile(null)}
+                  aria-label={t("messageAttachmentRemove")}
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={messagePending || messageBody.trim().length === 0}
+                onClick={handleSendMessage}
+              >
+                {messagePending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+                {t("sendMessage")}
+              </Button>
+              <Label
+                htmlFor="chat-message-file"
+                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-medium text-ink-700 hover:bg-atlas-green-tint/40"
+              >
+                <Paperclip className="size-3.5" />
+                {t("messageAttach")}
+              </Label>
+              <input
+                id="chat-message-file"
+                type="file"
+                accept="application/pdf,image/png,image/jpeg"
+                className="hidden"
+                onChange={(e) => setMessageFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -853,6 +902,21 @@ export function ClientRequestDetailPanel({ data }: Props) {
                     ? (c.bodyAr ?? c.bodyEn)
                     : (c.bodyEn ?? c.bodyAr)}
                 </p>
+                {c.attachments.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {c.attachments.map((a) => (
+                      <button
+                        key={a.storageKey}
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink-700 hover:bg-atlas-green-tint/40"
+                        onClick={() => openStorage(a.storageKey)}
+                      >
+                        <Paperclip className="size-3.5" />
+                        {a.fileName}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -867,19 +931,49 @@ export function ClientRequestDetailPanel({ data }: Props) {
               placeholder={t("messagePlaceholder")}
               rows={3}
             />
-            <Button
-              type="button"
-              size="sm"
-              disabled={messagePending || messageBody.trim().length === 0}
-              onClick={handleSendMessage}
-            >
-              {messagePending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
-              {t("sendMessage")}
-            </Button>
+            {messageFile ? (
+              <div className="flex items-center gap-1.5 text-xs text-ink-600">
+                <Paperclip className="size-3.5" />
+                {messageFile.name}
+                <button
+                  type="button"
+                  className="text-ink-500 hover:text-ink-800"
+                  onClick={() => setMessageFile(null)}
+                  aria-label={t("messageAttachmentRemove")}
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={messagePending || messageBody.trim().length === 0}
+                onClick={handleSendMessage}
+              >
+                {messagePending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+                {t("sendMessage")}
+              </Button>
+              <Label
+                htmlFor="client-message-file"
+                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-medium text-ink-700 hover:bg-atlas-green-tint/40"
+              >
+                <Paperclip className="size-3.5" />
+                {t("messageAttach")}
+              </Label>
+              <input
+                id="client-message-file"
+                type="file"
+                accept="application/pdf,image/png,image/jpeg"
+                className="hidden"
+                onChange={(e) => setMessageFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
           </div>
         ) : null}
       </section>
