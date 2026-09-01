@@ -363,6 +363,22 @@ export function AdminRequestDetailPanel({
   // Done/Not done confirmation that it was uploaded to this request.
   const hasPcocItem = data.items.some((item) => item.serviceItem.code === "SAB-001");
   const pcocCertificateGateActive = hasPcocItem && data.state === "REPORT_ISSUED";
+
+  // Any EXTERNAL_CERTIFICATE item (SCOC and friends): REPORT_ISSUED -> CLOSED
+  // is gated server-side (CERTIFICATE_REQUIRED, workflow-actions.ts) on at
+  // least one file attached to ANY of the request's certificate deliverables
+  // — not on every item's deliverable being individually ISSUED. The gate
+  // used to fail silently on click other than a toast easy to miss — mirror
+  // the server's exact condition so the hint only shows when the click would
+  // actually be rejected, and surface the same disabled+hint pattern PCOC
+  // gets above.
+  const certificateItems = data.items.filter(
+    (item) => item.serviceItem.deliverableType === "EXTERNAL_CERTIFICATE",
+  );
+  const scocMissingCertificate =
+    data.state === "REPORT_ISSUED" &&
+    certificateItems.length > 0 &&
+    certificateItems.every((item) => (item.externalDeliverable?.files.length ?? 0) === 0);
   const [saberUploaded, setSaberUploaded] = useState(data.saberCertificateUploaded);
   const [saberPending, startSaberTransition] = useTransition();
 
@@ -951,13 +967,14 @@ export function AdminRequestDetailPanel({
                 const gate = coiGateFor(target);
                 const pcocBlocked =
                   target === "CLOSED" && pcocCertificateGateActive && !saberUploaded;
+                const scocBlocked = target === "CLOSED" && scocMissingCertificate;
                 return (
                   <div key={target} className="flex flex-col gap-1">
                     <Button
                       type="button"
                       size="sm"
                       variant="secondary"
-                      disabled={pending || pcocBlocked}
+                      disabled={pending || pcocBlocked || scocBlocked}
                       onClick={() =>
                         gate ? openCoiGate(gate) : runTransition(target)
                       }
@@ -972,6 +989,11 @@ export function AdminRequestDetailPanel({
                     {pcocBlocked ? (
                       <span className="text-xs text-ink-500">
                         {t("saberCertificateUploadedHint")}
+                      </span>
+                    ) : null}
+                    {scocBlocked ? (
+                      <span className="text-xs text-ink-500">
+                        {t("scocCertificateRequiredHint")}
                       </span>
                     ) : null}
                   </div>
@@ -1619,6 +1641,11 @@ export function AdminRequestDetailPanel({
                 documents={item.documents}
                 editable={data.state === "ASSESSMENT_RUNNING"}
                 events={data.events}
+                clientRegulationCode={
+                  typeof item.productAttrs?.technical_regulation === "string"
+                    ? item.productAttrs.technical_regulation
+                    : null
+                }
               />
             ) : (
               <EvaluationReportPanel
@@ -1670,6 +1697,20 @@ export function AdminRequestDetailPanel({
             />
           ))
         : null}
+
+      {data.state === "REPORT_ISSUED" || data.state === "CLOSED" ? (
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <a
+              href={`/api/reports/${data.id}/pdf?locale=${locale}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("downloadReport")}
+            </a>
+          </Button>
+        </div>
+      ) : null}
 
       <StatusRail
         events={data.events.map((e) => ({

@@ -399,29 +399,111 @@ body{font-family:${fontStack};color:#1C2229;margin:0;font-size:11px;background:#
   return htmlToPdf(html);
 }
 
+export type ReportPdfDecision =
+  | "ACCEPTED"
+  | "ACCEPTED_WITH_REMARKS"
+  | "REJECTED"
+  | "INCOMPLETE"
+  | null;
+
+export type ReportPdfItem = {
+  productName: string;
+  serviceName: string;
+  technicalRegulation: string | null;
+  checklistCompliant: number | null;
+  checklistTotal: number | null;
+  decision: ReportPdfDecision;
+};
+
 export type ReportPdfInput = {
   locale: "ar" | "en";
   requestNo: string;
   organisationName: string;
-  productName: string;
-  serviceName: string;
   issuedAt: string;
   state: string;
+  items: ReportPdfItem[];
+  technicalReviewSummary: {
+    compliant: number;
+    total: number;
+    decision: ReportPdfDecision;
+  } | null;
+  evaluatorName: string | null;
+  reviewerName: string | null;
+  decisionMakerName: string | null;
+  generatedAt: string;
 };
+
+const DECISION_LABELS: Record<
+  NonNullable<ReportPdfDecision>,
+  { en: string; ar: string }
+> = {
+  ACCEPTED: { en: "Accepted", ar: "مقبول" },
+  ACCEPTED_WITH_REMARKS: {
+    en: "Accepted with remarks",
+    ar: "مقبول مع ملاحظات",
+  },
+  REJECTED: { en: "Rejected", ar: "مرفوض" },
+  INCOMPLETE: { en: "Incomplete", ar: "غير مكتمل" },
+};
+
+function decisionLabel(
+  decision: ReportPdfDecision,
+  locale: "ar" | "en",
+): string {
+  if (!decision) return locale === "ar" ? "غير متاح" : "Not available";
+  const entry = DECISION_LABELS[decision];
+  return locale === "ar" ? entry.ar : entry.en;
+}
 
 export async function renderReportPdf(
   input: ReportPdfInput,
 ): Promise<Buffer> {
   const dir = input.locale === "ar" ? "rtl" : "ltr";
-  const fontStack =
-    input.locale === "ar"
-      ? "'Atlas Arabic', Montserrat, Arial, sans-serif"
-      : "Montserrat, Arial, sans-serif";
-  const title =
-    input.locale === "ar"
-      ? "شهادة / تقرير المطابقة"
-      : "Certificate of Conformity report";
+  const isAr = input.locale === "ar";
+  const fontStack = isAr
+    ? "'Atlas Arabic', Montserrat, Arial, sans-serif"
+    : "Montserrat, Arial, sans-serif";
+  const title = isAr
+    ? "شهادة / تقرير المطابقة"
+    : "Certificate of Conformity report";
   const fonts = await embeddedFontCss();
+
+  const itemRows = input.items
+    .map((item) => {
+      const checklistLine =
+        item.checklistTotal !== null
+          ? `${esc(String(item.checklistCompliant ?? 0))} / ${esc(
+              String(item.checklistTotal),
+            )} ${isAr ? "بند مطابق" : "items compliant"}`
+          : isAr
+            ? "لا يوجد قائمة تحقق"
+            : "No checklist recorded";
+      return `<div class="card">
+        <div class="value">${esc(item.productName)} <span class="muted">· ${esc(item.serviceName)}</span></div>
+        ${
+          item.technicalRegulation
+            ? `<div class="row"><span class="label">${isAr ? "اللائحة الفنية" : "Technical regulation"}</span><span>${esc(item.technicalRegulation)}</span></div>`
+            : ""
+        }
+        <div class="row"><span class="label">${isAr ? "نتيجة قائمة التحقق" : "Checklist result"}</span><span>${checklistLine}</span></div>
+        <div class="row"><span class="label">${isAr ? "نتيجة المطابقة" : "Conformity conclusion"}</span><span class="decision decision-${(item.decision ?? "none").toLowerCase()}">${esc(decisionLabel(item.decision, input.locale))}</span></div>
+      </div>`;
+    })
+    .join("\n");
+
+  const technicalReviewBlock = input.technicalReviewSummary
+    ? `<div class="card">
+        <div class="label">${isAr ? "المراجعة الفنية" : "Technical review"}</div>
+        <div class="row"><span>${isAr ? "قائمة المراجعة" : "Review checklist"}</span><span>${esc(String(input.technicalReviewSummary.compliant))} / ${esc(String(input.technicalReviewSummary.total))}</span></div>
+        <div class="row"><span>${isAr ? "التوصية" : "Recommendation"}</span><span class="decision decision-${(input.technicalReviewSummary.decision ?? "none").toLowerCase()}">${esc(decisionLabel(input.technicalReviewSummary.decision, input.locale))}</span></div>
+      </div>`
+    : "";
+
+  const signOff = [
+    { role: isAr ? "المقيّم" : "Evaluator", name: input.evaluatorName },
+    { role: isAr ? "المراجع الفني" : "Technical reviewer", name: input.reviewerName },
+    { role: isAr ? "متخذ القرار" : "Decision maker", name: input.decisionMakerName },
+  ];
 
   const html = `<!DOCTYPE html>
 <html lang="${input.locale}" dir="${dir}">
@@ -429,45 +511,58 @@ export async function renderReportPdf(
 <meta charset="utf-8" />
 <style>
 ${fonts}
-body{font-family:${fontStack};color:#1C2229;margin:0}
+body{font-family:${fontStack};color:#1C2229;margin:0;padding:32px}
 h1{color:#519E53;font-size:22px;margin:0 0 8px}
 .mono{font-family:'IBM Plex Mono',monospace;direction:ltr}
-.card{border:1px solid #DDDDDD;border-radius:8px;padding:16px;margin-top:20px}
+.card{border:1px solid #DDDDDD;border-radius:8px;padding:16px;margin-top:16px}
 .label{font-size:12px;color:#4D4D4D;margin-bottom:4px}
 .value{font-size:15px;font-weight:600}
+.muted{font-size:12px;color:#4D4D4D;font-weight:400}
+.row{display:flex;justify-content:space-between;font-size:13px;margin-top:6px}
+.decision{font-weight:600}
+.decision-accepted{color:#2E7048}
+.decision-accepted_with_remarks{color:#96601A}
+.decision-rejected{color:#A83A2C}
+.decision-incomplete,.decision-none{color:#6B756B}
+.section-title{font-size:14px;font-weight:700;margin-top:24px}
 .footer{margin-top:28px;font-size:12px;color:#4D4D4D}
+.signoff{display:flex;gap:16px;margin-top:16px}
+.signoff .box{flex:1;border-top:1px solid #999;padding-top:6px;font-size:12px}
+.timestamp{margin-top:12px;font-size:11px;color:#8A8A8A}
 </style>
 </head>
 <body>
   <h1>Atlas COC · ${esc(title)}</h1>
   <p class="mono">${esc(input.requestNo)}</p>
   <div class="card">
-    <div class="label">${input.locale === "ar" ? "الشركة" : "Organisation"}</div>
-    <div class="value">${esc(input.organisationName)}</div>
+    <div class="row"><span class="label">${isAr ? "الشركة" : "Organisation"}</span><span class="value">${esc(input.organisationName)}</span></div>
+    <div class="row"><span class="label">${isAr ? "تاريخ الإصدار" : "Issued"}</span><span class="value mono">${esc(input.issuedAt)}</span></div>
+    <div class="row"><span class="label">${isAr ? "الحالة" : "Status"}</span><span class="value">${esc(input.state)}</span></div>
   </div>
-  <div class="card">
-    <div class="label">${input.locale === "ar" ? "المنتج" : "Product"}</div>
-    <div class="value">${esc(input.productName)}</div>
+
+  <div class="section-title">${isAr ? "المنتجات والخدمات" : "Products and services assessed"}</div>
+  ${itemRows}
+
+  ${technicalReviewBlock}
+
+  <div class="section-title">${isAr ? "الاعتماد" : "Sign-off"}</div>
+  <div class="signoff">
+    ${signOff
+      .map(
+        (s) =>
+          `<div class="box"><div class="label">${esc(s.role)}</div><div>${esc(s.name ?? (isAr ? "غير مسجل" : "Not recorded"))}</div></div>`,
+      )
+      .join("\n")}
   </div>
-  <div class="card">
-    <div class="label">${input.locale === "ar" ? "الخدمة" : "Service"}</div>
-    <div class="value">${esc(input.serviceName)}</div>
-  </div>
-  <div class="card">
-    <div class="label">${input.locale === "ar" ? "تاريخ الإصدار" : "Issued"}</div>
-    <div class="value mono">${esc(input.issuedAt)}</div>
-  </div>
-  <div class="card">
-    <div class="label">${input.locale === "ar" ? "الحالة" : "Status"}</div>
-    <div class="value">${esc(input.state)}</div>
-  </div>
+
   <p class="footer">
     ${
-      input.locale === "ar"
-        ? "مستند توضيحي للمرحلة الأولى — تحقق من الرقم عبر بوابة التحقق العامة."
-        : "Phase-1 summary report — verify the request number on the public verify portal."
+      isAr
+        ? "للتحقق من صحة هذا التقرير، يرجى إدخال رقم الطلب في بوابة التحقق العامة."
+        : "To verify this report, enter the request number on the public verify portal."
     }
   </p>
+  <div class="timestamp">${esc(input.generatedAt)}</div>
 </body>
 </html>`;
 

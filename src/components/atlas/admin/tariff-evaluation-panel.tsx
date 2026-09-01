@@ -44,7 +44,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 type Regulation = AdminRequestDetailItem["tariffRegulations"][number];
@@ -60,6 +60,8 @@ type Props = {
   documents: Document[];
   editable: boolean;
   events?: RequestEventEntry[];
+  /** Technical regulation the client declared at intake (raw enum value from productAttrs), if any. */
+  clientRegulationCode?: string | null;
 };
 
 /** First event that moved the request into `toState`, if any — used to name who ran each stage. */
@@ -333,6 +335,7 @@ export function TariffEvaluationPanel({
   documents,
   editable,
   events = [],
+  clientRegulationCode = null,
 }: Props) {
   const t = useTranslations("adminOps.requestDetail.tariffEvaluation");
   const tErrors = useTranslations("adminOps.requestDetail.tariffEvaluation.errors");
@@ -352,6 +355,37 @@ export function TariffEvaluationPanel({
 
   const snapshot = bundle?.snapshot ?? null;
   const anyDirty = Object.values(dirty).some(Boolean);
+
+  const normalizeCode = (v: string) => v.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const clientRegulation = clientRegulationCode
+    ? regulations.find((r) => normalizeCode(r.code) === normalizeCode(clientRegulationCode))
+    : undefined;
+
+  // Client declares a technical regulation at intake, but nothing carried it
+  // into this panel before — the evaluator re-picked from scratch with no
+  // visibility into what was declared. Pre-select it (once, before any
+  // evaluation exists) when the catalog has a matching regulation, and flag
+  // a mismatch if the evaluator's live selection disagrees.
+  useEffect(() => {
+    if (tariffEvaluation || regulationId || !clientRegulation) return;
+    onRegulationChange(clientRegulation.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientRegulation?.id, tariffEvaluation, regulationId]);
+
+  // Each section saves independently; a refresh/navigation while one is
+  // still dirty used to discard it with no warning at all (a lost 19-item
+  // checklist during QA on 2026-09-01). Warn on the browser-level exits a
+  // client-side router push can't intercept; in-app navigation away from
+  // this panel is a separate, smaller risk left as-is.
+  useEffect(() => {
+    if (!anyDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [anyDirty]);
 
   function adopt(next: TariffEvaluationBundle) {
     setBundle(next);
@@ -635,6 +669,15 @@ export function TariffEvaluationPanel({
           </SelectContent>
         </Select>
         {regulations.length === 0 ? <p className="text-xs text-ink-500">{t("noRegulations")}</p> : null}
+        {clientRegulationCode ? (
+          <p className="text-xs text-ink-500">
+            {t("clientDeclaredRegulation")}:{" "}
+            {clientRegulation ? (isAr ? clientRegulation.titleAr : clientRegulation.titleEn) : clientRegulationCode}
+            {regulationId && clientRegulation && regulationId !== clientRegulation.id ? (
+              <span className="ms-1 font-medium text-state-warn">{t("clientRegulationMismatch")}</span>
+            ) : null}
+          </p>
+        ) : null}
       </div>
 
       {/* Step 2: customs tariff item */}
