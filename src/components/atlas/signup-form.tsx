@@ -2,6 +2,7 @@
 
 import { Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import type { FormEvent } from "react";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,9 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
   const [isInternational, setIsInternational] = useState(false);
   const [phoneCountry, setPhoneCountry] = useState<string>(DEFAULT_DIAL_CODE);
 
-  function onSubmit(formData: FormData) {
+  function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
     setError(null);
     formData.set("accountType", accountType);
     formData.set("isInternational", isInternational ? "true" : "false");
@@ -113,7 +116,7 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
   const requiresSaudiFields = isCompany && !isInternational;
 
   return (
-    <form action={onSubmit} className="space-y-5" noValidate>
+    <form onSubmit={onSubmit} className="space-y-5" noValidate>
       <input type="hidden" name="locale" value={locale} />
 
       <fieldset className="space-y-3" disabled={pending}>
