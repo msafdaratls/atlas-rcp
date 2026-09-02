@@ -26,7 +26,6 @@ import {
 import { parseAttrSchema, validateProductAttrs } from "@/lib/attr-schema";
 import { AttrScalarInput } from "@/components/atlas/requests/attr-field-input";
 import { DocumentTemplateLinks } from "@/components/atlas/requests/document-template-links";
-import { computeOrderBreakdown } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import {
   applyCouponToDraft,
@@ -282,7 +281,6 @@ export function NewRequestWizard({
       ) ?? [],
   );
 
-  const selectedMain = catalogue.mains.find((m) => m.id === mainId) ?? null;
   const subs = catalogue.subs.filter((s) => s.mainCategoryId === mainId);
   const browsableItems = useMemo(
     () => catalogue.items.filter((i) => subIds.includes(i.subCategoryId)),
@@ -392,39 +390,6 @@ export function NewRequestWizard({
     discount,
     infoCorrect,
   ]);
-
-  // On step 1 the server draft (`items`) hasn't been created/updated yet, so
-  // the summary must reflect the live cart selection instead or it looks
-  // stuck while the user is still picking service items.
-  const summaryCatalogueItems = useMemo(() => {
-    if (step === 1) {
-      return cartIds
-        .map((id) => catalogueItemById.get(id))
-        .filter((i): i is CatalogueServiceItem => Boolean(i));
-    }
-    return items
-      .map((i) => catalogueItemById.get(i.serviceItemId))
-      .filter((i): i is CatalogueServiceItem => Boolean(i));
-  }, [step, cartIds, items, catalogueItemById]);
-
-  const breakdown = useMemo(() => {
-    if (summaryCatalogueItems.length === 0) {
-      return { subtotal: 0, discount: 0, vatAmount: 0, total: 0 };
-    }
-    const b = computeOrderBreakdown(
-      summaryCatalogueItems.map((catalogueItem) => ({
-        basePrice: catalogueItem.basePrice ?? 0,
-        vatRate: catalogueItem.vatRate ?? 0.15,
-      })),
-      discount,
-    );
-    return {
-      subtotal: Number(b.subtotal),
-      discount: Number(b.discount),
-      vatAmount: Number(b.vatAmount),
-      total: Number(b.total),
-    };
-  }, [summaryCatalogueItems, discount]);
 
   const mandatoryTotal = items.reduce(
     (sum, i) => sum + i.slots.filter((s) => s.mandatory).length,
@@ -1535,71 +1500,6 @@ export function NewRequestWizard({
           </section>
         ) : null}
       </div>
-
-      <aside className="h-fit w-full shrink-0 rounded-lg border border-line bg-surface p-4 shadow-elevation lg:sticky lg:top-20 lg:w-80">
-        <h3 className="mb-3 text-sm font-semibold text-ink-900">
-          {t("summary.title")}
-        </h3>
-        <dl className="space-y-2 text-sm">
-          <div className="flex justify-between gap-3">
-            <dt className="text-ink-500">{t("summary.category")}</dt>
-            <dd className="text-end text-ink-800">
-              {selectedMain
-                ? locale === "ar"
-                  ? selectedMain.nameAr
-                  : selectedMain.nameEn
-                : "—"}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-ink-500">{t("summary.service")}</dt>
-            <dd className="text-end text-ink-800">
-              {summaryCatalogueItems.length > 0
-                ? summaryCatalogueItems
-                    .map((catalogueItem) =>
-                      locale === "ar" ? catalogueItem.nameAr : catalogueItem.nameEn,
-                    )
-                    .filter(Boolean)
-                    .join(", ")
-                : "—"}
-            </dd>
-          </div>
-          {requestNo ? (
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-500">{t("summary.draft")}</dt>
-              <dd className="font-data text-end" dir="ltr">
-                {requestNo}
-              </dd>
-            </div>
-          ) : null}
-          <div className="border-t border-line pt-2">
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-500">{t("summary.subtotal")}</dt>
-              <dd>
-                <MoneyValue amount={breakdown.subtotal} />
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-500">{t("summary.discount")}</dt>
-              <dd>
-                <MoneyValue amount={breakdown.discount} />
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-500">{t("summary.vat")}</dt>
-              <dd>
-                <MoneyValue amount={breakdown.vatAmount} />
-              </dd>
-            </div>
-            <div className="mt-1 flex justify-between gap-3 font-semibold">
-              <dt className="text-ink-900">{t("summary.total")}</dt>
-              <dd>
-                <MoneyValue amount={breakdown.total} />
-              </dd>
-            </div>
-          </div>
-        </dl>
-      </aside>
 
       <Dialog
         open={credentialDialogPlatform !== null}
