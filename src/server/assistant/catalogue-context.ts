@@ -50,14 +50,12 @@ async function queryCatalogueContext(): Promise<string> {
       lines.push(`### ${sub.nameEn} / ${sub.nameAr}`);
       for (const item of sub.serviceItems) {
         const deliverable = item.deliverableEn || item.nameEn;
-        const vat = Number(item.basePrice) * Number(item.vatRate);
-        const total = Number(item.basePrice) + vat;
         lines.push(
           `- SERVICE "${item.nameEn}" / "${item.nameAr}" (code ${item.code})\n` +
             `  Produces: ${deliverable}${item.deliverableAr ? ` / ${item.deliverableAr}` : ""}\n` +
             `  Description: ${item.descEn ?? "—"}\n` +
-            `  Price: ${Number(item.basePrice).toFixed(2)} SAR + VAT = ${total.toFixed(2)} SAR total. SLA: ${item.slaHours} hours.\n` +
-            `  Resubmissions: ${item.freeResubmissions} free, up to ${item.maxResubmissions} total (each extra resubmission billed at ${(Number(item.resubmissionPricePct) * 100).toFixed(0)}% of the base price).\n` +
+            `  SLA: ${item.slaHours} hours.\n` +
+            `  Resubmissions: ${item.freeResubmissions} free, up to ${item.maxResubmissions} total.\n` +
             `  Evaluation activities involved: ${describeActivities(item)}\n` +
             `  Required documents: ${describeDocuments(item.requiredDocuments)}\n` +
             `  What we check: ${describeCheckSets(item.checkSets)}`,

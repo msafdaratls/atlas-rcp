@@ -8,11 +8,8 @@ function esc(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-function money(n: number): string {
-  return new Intl.NumberFormat("en-SA", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+function money(_n: number): string {
+  return "—";
 }
 
 export type StatementPdfInput = {

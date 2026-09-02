@@ -71,14 +71,14 @@ describe("matchService", () => {
 });
 
 describe("formatServiceForClient", () => {
-  it("includes price incl. VAT, SLA, and documents, in English", () => {
+  it("includes SLA and documents, in English, without price", () => {
     const svc = service({
       requiredDocuments: [
         { id: "d1", serviceItemId: "s1", nameEn: "Product label", nameAr: "ملصق المنتج", mandatory: true, helpEn: null, helpAr: null, sortOrder: 0 } as RequiredDocument,
       ],
     });
     const text = formatServiceForClient(svc, "en");
-    assert.match(text, /575\.00 SAR total/); // 500 + 15% VAT
+    assert.doesNotMatch(text, /SAR/);
     assert.match(text, /48 hours/);
     assert.match(text, /Product label/);
   });

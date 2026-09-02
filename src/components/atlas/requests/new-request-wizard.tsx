@@ -4,7 +4,6 @@ import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { MoneyValue } from "@/components/atlas/money-value";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -927,7 +926,6 @@ export function NewRequestWizard({
             {subIds.length > 0 && browsableItems.length > 0 ? (
               <ul className="space-y-2">
                 {browsableItems.map((item) => {
-                  const vat = item.basePrice * item.vatRate;
                   const inCart = cartIds.includes(item.id);
                   return (
                     <li key={item.id}>
@@ -951,15 +949,6 @@ export function NewRequestWizard({
                             </p>
                           </div>
                           <div className="text-end">
-                            <MoneyValue amount={item.basePrice} />
-                            <p className="text-xs text-ink-500">
-                              {t("step1.vatLine", {
-                                vat: new Intl.NumberFormat(
-                                  locale === "ar" ? "ar-SA" : "en-GB",
-                                  { style: "currency", currency: "SAR" },
-                                ).format(vat),
-                              })}
-                            </p>
                             <p className="text-xs text-ink-500">
                               {t("step1.slaLine", { hours: item.slaHours })}
                             </p>

@@ -61,8 +61,6 @@ async function loadActiveServices(): Promise<ServiceWithDocuments[]> {
  * can't confidently resolve to one service.
  */
 export function formatServiceForClient(item: ServiceWithDocuments, locale: string): string {
-  const vat = Number(item.basePrice) * Number(item.vatRate);
-  const total = Number(item.basePrice) + vat;
   const deliverable = item.deliverableEn || item.nameEn;
   const deliverableAr = item.deliverableAr || item.nameAr;
 
@@ -70,21 +68,17 @@ export function formatServiceForClient(item: ServiceWithDocuments, locale: strin
     return (
       `**${item.nameAr}** (${item.code})\n` +
       `المخرج: ${deliverableAr}\n` +
-      `السعر: ${Number(item.basePrice).toFixed(2)} ريال + الضريبة = ${total.toFixed(2)} ريال شامل الضريبة\n` +
       `مدة الإنجاز: ${item.slaHours} ساعة\n` +
       `أنشطة التقييم: ${describeActivities(item)}\n` +
-      `المستندات المطلوبة: ${describeDocuments(item.requiredDocuments)}\n\n` +
-      `هذه الأرقام تُعرض وتُؤكد مجددًا في معالج الطلب الجديد قبل التقديم.`
+      `المستندات المطلوبة: ${describeDocuments(item.requiredDocuments)}`
     );
   }
   return (
     `**${item.nameEn}** (${item.code})\n` +
     `Produces: ${deliverable}\n` +
-    `Price: ${Number(item.basePrice).toFixed(2)} SAR + VAT = ${total.toFixed(2)} SAR total\n` +
     `SLA: ${item.slaHours} hours\n` +
     `Evaluation activities: ${describeActivities(item)}\n` +
-    `Required documents: ${describeDocuments(item.requiredDocuments)}\n\n` +
-    `These figures are shown again in the New Request wizard before you submit.`
+    `Required documents: ${describeDocuments(item.requiredDocuments)}`
   );
 }
 
