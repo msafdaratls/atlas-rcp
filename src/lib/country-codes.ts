@@ -14,6 +14,7 @@ export const COUNTRY_CODES = [
   { iso: "GB", dialCode: "+44", nameEn: "United Kingdom", nameAr: "المملكة المتحدة", nsnLength: 10 },
   { iso: "PK", dialCode: "+92", nameEn: "Pakistan", nameAr: "باكستان", nsnLength: 10 },
   { iso: "IN", dialCode: "+91", nameEn: "India", nameAr: "الهند", nsnLength: 10 },
+  { iso: "KR", dialCode: "+82", nameEn: "South Korea", nameAr: "كوريا الجنوبية", nsnLength: 10 },
 ] as const;
 
 export type CountryCode = (typeof COUNTRY_CODES)[number];
