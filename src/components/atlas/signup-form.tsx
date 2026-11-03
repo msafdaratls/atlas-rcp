@@ -16,7 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { COUNTRY_CODES, DEFAULT_DIAL_CODE, countryLabel } from "@/lib/country-codes";
+import {
+  COUNTRY_CODES,
+  DEFAULT_DIAL_CODE,
+  countryLabel,
+  phonePlaceholder,
+} from "@/lib/country-codes";
 import { signupAction, resendVerificationAction } from "@/server/auth/signup";
 
 const ERROR_CODES = new Set([
@@ -273,7 +278,7 @@ export function SignupForm({ locale }: { locale: "ar" | "en" }) {
               required
               dir="ltr"
               className="flex-1"
-              placeholder="5XXXXXXXX"
+              placeholder={phonePlaceholder(phoneCountry)}
               aria-invalid={hasError}
               aria-describedby="phone-hint"
             />
