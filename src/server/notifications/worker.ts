@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { render } from "@react-email/render";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -51,10 +52,12 @@ export async function processOutboxBatch(limit = 20): Promise<number> {
   await prisma.notificationOutbox.updateMany({
     where: {
       status: "PROCESSING",
-      updatedAt: { lt: staleBefore },
+      OR: [{ leaseExpiresAt: { lt: now } }, { leaseExpiresAt: null, updatedAt: { lt: staleBefore } }],
     },
     data: {
       status: "PENDING",
+      leaseToken: null,
+      leaseExpiresAt: null,
       nextAttemptAt: now,
     },
   });
@@ -73,9 +76,10 @@ export async function processOutboxBatch(limit = 20): Promise<number> {
   const adapter = getEmailAdapter();
 
   for (const row of pending) {
+    const leaseToken = randomUUID();
     const claimed = await prisma.notificationOutbox.updateMany({
       where: { id: row.id, status: "PENDING" },
-      data: { status: "PROCESSING", updatedAt: new Date() },
+      data: { status: "PROCESSING", leaseToken, leaseExpiresAt: new Date(Date.now() + 300_000), updatedAt: new Date() },
     });
     if (claimed.count === 0) continue;
 
@@ -85,12 +89,19 @@ export async function processOutboxBatch(limit = 20): Promise<number> {
       : "REQUEST_SUBMITTED";
     const payload = asPayload(row.payload);
 
+    const heartbeat = setInterval(() => {
+      void prisma.notificationOutbox.updateMany({
+        where: { id: row.id, status: "PROCESSING", leaseToken },
+        data: { leaseExpiresAt: new Date(Date.now() + 300_000) },
+      }).catch(() => { /* A lost lease prevents completion below. */ });
+    }, 60_000);
     try {
       const element = renderEventEmailElement(event, locale, payload);
       const html = await render(element);
       const text = renderPlainText(locale, payload);
       const subject = emailSubject(event, locale, payload);
       const { messageId } = await adapter.send({
+        messageId: `<atlas-outbox-${row.id}@notifications.atlas.invalid>`,
         to: row.recipient,
         subject,
         html,
@@ -99,9 +110,11 @@ export async function processOutboxBatch(limit = 20): Promise<number> {
 
       await prisma.$transaction([
         prisma.notificationOutbox.update({
-          where: { id: row.id },
+          where: { id: row.id, status: "PROCESSING", leaseToken },
           data: {
             status: "SENT",
+            leaseToken: null,
+            leaseExpiresAt: null,
             providerMessageId: messageId,
             lastError: null,
             attempts: { increment: 1 },
@@ -127,9 +140,11 @@ export async function processOutboxBatch(limit = 20): Promise<number> {
 
       await prisma.$transaction([
         prisma.notificationOutbox.update({
-          where: { id: row.id },
+          where: { id: row.id, status: "PROCESSING", leaseToken },
           data: {
             status: dead ? "FAILED" : "PENDING",
+            leaseToken: null,
+            leaseExpiresAt: null,
             attempts,
             lastError: message.slice(0, 500),
             nextAttemptAt: dead ? new Date() : new Date(Date.now() + delay),
@@ -145,6 +160,8 @@ export async function processOutboxBatch(limit = 20): Promise<number> {
           },
         }),
       ]);
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 

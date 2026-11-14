@@ -40,6 +40,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atlas_rcp}?schema=public
     env_file:
       - .env
+    volumes:
+      - atlas_uploads:/app/storage/uploads
     # No host port: only Caddy talks to the app over the internal network.
     expose:
       - "3000"
@@ -70,5 +72,6 @@ services:
 
 volumes:
   atlas_pgdata:
+  atlas_uploads:
   caddy_data:
   caddy_config:

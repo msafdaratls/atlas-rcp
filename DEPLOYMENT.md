@@ -140,3 +140,19 @@ whole section stops mattering.
 
 Security headers (CSP, HSTS, X-Frame-Options, …) are already applied in
 `next.config.ts`. CI (`.github/workflows/ci.yml`) runs typecheck + lint + test.
+
+### Session and notification reliability update
+
+Deploy the included Prisma migrations before starting the updated application.
+Existing sessions without a session version will require a fresh login. Password
+resets increment that version and revoke previously issued sessions.
+
+The production Compose stack mounts atlas_uploads at /app/storage/uploads,
+preserving local uploads across container replacement. Keep off-droplet backups;
+the volume does not protect against host loss. Spaces remains recommended.
+
+Notification workers use renewable five-minute leases and ownership-checked
+completion updates. SMTP messages use a stable Message-ID for each outbox row.
+Delivery remains at least once: SMTP does not provide an idempotency guarantee,
+so a crash after server acceptance and before recording success can still cause
+a duplicate. A stable Message-ID is not a guarantee of recipient deduplication.

@@ -19,6 +19,7 @@ const LOCKOUT_MS = 15 * 60 * 1000;
 function applyUserToToken(
   token: JWT,
   user: {
+    sessionVersion: number;
     id: string;
     organisationId: string;
     roles: JWT["roles"];
@@ -32,6 +33,7 @@ function applyUserToToken(
     email?: string | null;
   },
 ): JWT {
+  token.sessionVersion = user.sessionVersion;
   token.id = user.id;
   token.organisationId = user.organisationId;
   token.roles = user.roles;
@@ -63,7 +65,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const user = await prisma.user.findUnique({
+        return prisma.$transaction(async (tx) => {
+        const identity = await tx.user.findUnique({ where: { email: parsed.data.email.toLowerCase() }, select: { id: true } });
+        if (!identity) return null;
+        await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${identity.id} FOR UPDATE`;
+        const user = await tx.user.findUnique({
           where: { email: parsed.data.email.toLowerCase() },
           include: {
             roles: true,
@@ -102,7 +108,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!valid) {
           const attempts = user.failedLoginAttempts + 1;
           const locked = attempts >= MAX_FAILED_LOGINS;
-          await prisma.user.update({
+          await tx.user.update({
             where: { id: user.id },
             data: {
               failedLoginAttempts: locked ? 0 : attempts,
@@ -112,7 +118,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        await prisma.user.update({
+        await tx.user.update({
           where: { id: user.id },
           data: {
             lastLoginAt: new Date(),
@@ -122,6 +128,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         return {
+          sessionVersion: user.sessionVersion,
           id: user.id,
           email: user.email,
           organisationId: user.organisationId,
@@ -134,6 +141,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           orgLogoKey: user.organisation.logoKey,
           locale: user.locale,
         };
+        });
       },
     }),
   ],
@@ -146,6 +154,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         return applyUserToToken(token, {
+          sessionVersion: user.sessionVersion,
           id: user.id!,
           organisationId: user.organisationId,
           roles: user.roles,
@@ -184,6 +193,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       if (
         !dbUser ||
+        token.sessionVersion !== dbUser.sessionVersion ||
         dbUser.status !== "ACTIVE" ||
         dbUser.organisation.status !== "ACTIVE"
       ) {
@@ -191,6 +201,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       return applyUserToToken(token, {
+        sessionVersion: dbUser.sessionVersion,
         id: dbUser.id,
         email: dbUser.email,
         organisationId: dbUser.organisationId,

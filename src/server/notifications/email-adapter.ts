@@ -1,4 +1,5 @@
 export type EmailMessage = {
+  messageId?: string;
   to: string;
   subject: string;
   html: string;
@@ -42,6 +43,7 @@ export class SmtpAdapter implements EmailAdapter {
     });
 
     const info = await transport.sendMail({
+      messageId: msg.messageId,
       from: this.options.from,
       to: msg.to,
       subject: msg.subject,

@@ -41,10 +41,11 @@ export async function issueVerificationToken(
 export async function consumeVerificationToken(
   raw: string,
   type: VerificationTokenType,
+  transaction?: Prisma.TransactionClient,
 ): Promise<string | null> {
   const tokenHash = hashToken(raw);
 
-  return prisma.$transaction(async (tx) => {
+  const consume = async (tx: Prisma.TransactionClient) => {
     const token = await tx.verificationToken.findUnique({
       where: { tokenHash },
     });
@@ -63,7 +64,8 @@ export async function consumeVerificationToken(
     });
     if (claimed.count === 0) return null;
     return token.userId;
-  });
+  };
+  return transaction ? consume(transaction) : prisma.$transaction(consume);
 }
 
 /**

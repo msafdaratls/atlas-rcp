@@ -99,25 +99,17 @@ export async function resetPasswordAction(
   });
   if (!limited.ok) return { ok: false, error: "RATE_LIMITED" };
 
-  const userId = await consumeVerificationToken(
-    parsed.data.token,
-    "PASSWORD_RESET",
-  );
-  if (!userId) return { ok: false, error: "INVALID_TOKEN" };
-
   const passwordHash = await hash(parsed.data.password, 12);
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { organisationId: true },
-  });
-  if (!user) return { ok: false, error: "INVALID_TOKEN" };
-
-  await prisma.$transaction(async (tx) => {
+  const reset = await prisma.$transaction(async (tx) => {
+    const userId = await consumeVerificationToken(parsed.data.token, "PASSWORD_RESET", tx);
+    if (!userId) return false;
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { organisationId: true } });
+    if (!user) throw new Error("INVALID_TOKEN");
     await tx.user.update({
       where: { id: userId },
       data: {
         passwordHash,
+        sessionVersion: { increment: 1 },
         // A successful reset also clears any lockout and re-verifies the email
         // (the reset link proved control of the inbox).
         failedLoginAttempts: 0,
@@ -136,7 +128,8 @@ export async function resetPasswordAction(
         after: { reset: true },
       },
     });
+    return true;
   });
 
-  return { ok: true };
+  return reset ? { ok: true } : { ok: false, error: "INVALID_TOKEN" };
 }
