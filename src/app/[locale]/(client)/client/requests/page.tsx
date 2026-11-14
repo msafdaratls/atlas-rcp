@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ q?: string; state?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; state?: string; pageSize?: string; page?: string }>;
 };
 
 export default async function MyRequestsPage({ params, searchParams }: Props) {
@@ -34,6 +34,7 @@ export default async function MyRequestsPage({ params, searchParams }: Props) {
   const data = await listClientRequests({
     q: sp.q ?? null,
     state: sp.state ?? null,
+    pageSize: [10, 20, 50, 100].includes(Number(sp.pageSize)) ? Number(sp.pageSize) : undefined,
     page: sp.page ? Number(sp.page) : 1,
   });
 

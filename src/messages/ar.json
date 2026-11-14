@@ -26,6 +26,7 @@
     "noResults": "لا توجد نتائج",
     "retry": "حاول مرة أخرى",
     "rowsSelected": "{count, plural, zero {لا صفوف محددة} one {صف واحد محدد} two {صفان محددان} few {# صفوف محددة} many {# صف محدد} other {# صف محدد}}",
+    "rowsPerPage": "عدد الصفوف في الصفحة",
     "pageOf": "صفحة {page} من {pageCount}",
     "previous": "السابق",
     "next": "التالي",

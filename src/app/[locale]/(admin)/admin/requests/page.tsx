@@ -22,7 +22,7 @@ type Props = {
     q?: string;
     state?: string;
     queue?: string;
-    page?: string;
+    pageSize?: string; page?: string;
   }>;
 };
 
@@ -48,6 +48,7 @@ export default async function AdminRequestsPage({ params, searchParams }: Props)
     q: sp.q ?? null,
     state: sp.state ?? null,
     queue: sp.queue ?? null,
+    pageSize: [10, 20, 50, 100].includes(Number(sp.pageSize)) ? Number(sp.pageSize) : undefined,
     page: sp.page ? Number(sp.page) : 1,
   });
 

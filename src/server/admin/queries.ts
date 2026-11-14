@@ -401,7 +401,7 @@ export async function listAdminRequests(input: {
     requirePermission(session, "requests:admin");
 
     const page = Math.max(1, input.page ?? 1);
-    const pageSize = Math.min(50, Math.max(5, input.pageSize ?? 20));
+    const pageSize = Math.min(100, Math.max(5, input.pageSize ?? 20));
     const q = input.q?.trim() || "";
 
     const where: Prisma.RequestWhereInput = {};

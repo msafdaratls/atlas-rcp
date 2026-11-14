@@ -431,7 +431,7 @@ export async function listClientRequests(input: {
     requirePermission(session, "requests:read");
     const { organisationId } = scopedDb(session);
     const page = Math.max(1, input.page ?? 1);
-    const pageSize = Math.min(50, Math.max(5, input.pageSize ?? 10));
+    const pageSize = Math.min(100, Math.max(5, input.pageSize ?? 10));
     const q = input.q?.trim() || "";
     const state =
       input.state && input.state !== "ALL"

@@ -154,6 +154,7 @@ export function ClientRequestsTable({
       data={rows}
       pageCount={pageCount}
       pagination={pagination}
+      pageSizeOptions={[10, 20, 50, 100]}
       loading={pending}
       globalFilter={q}
       onGlobalFilterChange={(value) =>
@@ -181,7 +182,7 @@ export function ClientRequestsTable({
       onPaginationChange={(updater) => {
         const next =
           typeof updater === "function" ? updater(pagination) : updater;
-        pushParams({ page: String(next.pageIndex + 1) });
+        pushParams({ page: String(next.pageIndex + 1), pageSize: String(next.pageSize) });
       }}
       emptyState={
         <p className="py-8 text-center text-sm text-ink-500">{t("empty")}</p>

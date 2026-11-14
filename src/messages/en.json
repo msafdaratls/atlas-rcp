@@ -26,6 +26,7 @@
     "noResults": "No results",
     "retry": "Try again",
     "rowsSelected": "{count} row(s) selected",
+    "rowsPerPage": "Rows per page",
     "pageOf": "Page {page} of {pageCount}",
     "previous": "Previous",
     "next": "Next",

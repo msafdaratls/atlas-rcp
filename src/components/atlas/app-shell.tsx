@@ -141,7 +141,7 @@ export function AppShell({
 
         <main
           className={cn(
-            "min-w-0 flex-1 px-4 py-6 sm:px-6",
+            "min-w-0 flex-1 px-4 pt-6 pb-28 sm:px-6",
             collapsed
               ? "lg:max-w-[calc(100%-4.5rem)]"
               : "lg:max-w-[calc(100%-15rem)]",

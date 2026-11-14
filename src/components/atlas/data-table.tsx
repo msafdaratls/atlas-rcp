@@ -43,6 +43,7 @@ type DataTableProps<TData> = {
   className?: string;
   /** Loading skeleton rows */
   loading?: boolean;
+  pageSizeOptions?: number[];
   /** Replaces default empty copy; include a primary action when useful */
   emptyState?: React.ReactNode;
   /** Error banner above the table — never pass raw server strings */
@@ -64,6 +65,7 @@ export function DataTable<TData>({
   onExportCsv,
   className,
   loading = false,
+  pageSizeOptions,
   emptyState,
   errorMessage,
   onRetry,
@@ -236,14 +238,32 @@ export function DataTable<TData>({
         </table>
       </div>
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 pe-20">
         <p className="text-xs text-ink-500">
           {t("pageOf", {
             page: pagination.pageIndex + 1,
             pageCount: Math.max(pageCount, 1),
           })}
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {pageSizeOptions ? (
+            <label className="flex items-center gap-2 text-xs text-ink-500">
+              {t("rowsPerPage")}
+              <select
+                className="h-9 rounded-md border border-line bg-surface px-2 text-sm text-ink-800"
+                value={pagination.pageSize}
+                onChange={(event) => onPaginationChange({
+                  pageIndex: 0,
+                  pageSize: Number(event.target.value),
+                })}
+                disabled={loading}
+              >
+                {pageSizeOptions.map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <Button
             type="button"
             variant="outline"
